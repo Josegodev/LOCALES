@@ -1,0 +1,70 @@
+[
+  {
+    "id": "proposal_valid_mock",
+    "kind": "proposal",
+    "input": {
+      "task": "Generate a structured proposal for validating JSON output.",
+      "context": {
+        "scope": "lab"
+      },
+      "model_id": "mock:proposal"
+    },
+    "expect": {
+      "fallback_used": false,
+      "suggested_action": "draft_proposal"
+    }
+  },
+  {
+    "id": "proposal_invalid_json_uses_fallback",
+    "kind": "proposal",
+    "input": {
+      "task": "Generate a proposal that will be invalid.",
+      "context": {},
+      "model_id": "mock:invalid_json"
+    },
+    "expect": {
+      "fallback_used": true,
+      "fallback_reason": "validation_failed",
+      "suggested_action": "none"
+    }
+  },
+  {
+    "id": "answer_invalid_schema_uses_fallback",
+    "kind": "answer",
+    "input": {
+      "question": "What happens when schema validation fails?",
+      "context": {},
+      "model_id": "mock:invalid_schema"
+    },
+    "expect": {
+      "fallback_used": true,
+      "fallback_reason": "validation_failed",
+      "answer": ""
+    }
+  },
+  {
+    "id": "proposal_adapter_error_uses_fallback",
+    "kind": "proposal",
+    "input": {
+      "task": "Generate a proposal when the provider fails.",
+      "context": {},
+      "model_id": "mock:adapter_error"
+    },
+    "expect": {
+      "fallback_used": true,
+      "fallback_reason": "validation_failed",
+      "suggested_action": "none"
+    }
+  },
+  {
+    "id": "rag_finds_local_validation_notes",
+    "kind": "rag",
+    "input": {
+      "query": "validation fallback trace",
+      "top_k": 3
+    },
+    "expect": {
+      "min_hits": 1
+    }
+  }
+]

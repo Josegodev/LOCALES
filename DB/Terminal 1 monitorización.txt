@@ -1,0 +1,10 @@
+Terminal 1: monitorización
+htop
+
+Para GPU NVIDIA:
+
+watch -n 1 nvidia-smi
+
+Para disco/RAM/CPU resumido:
+
+watch -n 1 "free -h && echo && df -h / && echo && iostat -xz 1 1"

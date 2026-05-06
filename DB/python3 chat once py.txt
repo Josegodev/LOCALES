@@ -1,0 +1,8 @@
+
+
+
+
+
+python3 chat_once.py \
+  --slug lmstudio_granite32_8b_temp00 \
+  --prompt "Responde solo: OK"

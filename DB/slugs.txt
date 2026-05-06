@@ -1,0 +1,2 @@
+slug qwen: lmstudio_qwen35_9b_q4km_temp07
+slug granite: lmstudio_granite32_8b_temp00

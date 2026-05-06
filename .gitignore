@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# Environment
+.env
+
+# SQLite / local DB
+*.sqlite
+*.db
+
+# Logs
+*.log
+
+# VSCode
+.vscode/
+
+# OS
+.DS_Store
+
+# Build
+dist/
+build/
+
+# Runtime generated docs
+TELEGRAM_DOCS/
+
+# Model/cache
+models/
+cache/
+
+# pytest
+.pytest_cache/
+
+# coverage
+.coverage
+htmlcov/
+
+# local artifacts
+artifacts/

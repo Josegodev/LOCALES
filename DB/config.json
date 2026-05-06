@@ -1,0 +1,6 @@
+{
+    "lmstudio_base_url": "http://127.0.0.1:1234/v1",
+    "lmstudio_api_token": null,
+    "request_timeout_seconds": 120,
+    "default_memory_limit": 20
+}

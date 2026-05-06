@@ -1,0 +1,19 @@
+python3 -m venv .venv
+source .venv/bin/activate
+
+python3 -m uvicorn api_server:app \
+  --host 127.0.0.1 \
+  --port 8000 \
+  --reload
+
+python3 chat_once.py \
+  --slug lmstudio_qwen35_9b_q4km_temp07 \
+  --prompt "Según tu memoria aprobada, ¿qué regla tiene este sistema?"
+  
+  
+python3 prune.py \
+  --slug lmstudio_qwen35_9b_q4km_temp02 \
+  --stats
+  
+  
+ 
