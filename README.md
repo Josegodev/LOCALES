@@ -1,0 +1,2 @@
+# LOCALES
+Pruebas en local
