@@ -1,0 +1,14 @@
+model = "gpt-5-codex"
+
+approval_mode = "manual"
+
+sandbox = true
+
+context_files = [
+  "AGENTS.md",
+  ".codex/prompts/contracts.md",
+  ".codex/prompts/hardening.md",
+  ".codex/prompts/rag_rules.md",
+  "docs_map/architecture/system_overview.md",
+  "docs_map/runtime/runtime_entrypoints.md"
+]

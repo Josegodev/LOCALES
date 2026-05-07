@@ -9,7 +9,7 @@
 
 ## Telegram
 
-- Script: `run_telegram.py`.
+- Script: `scripts/run_telegram.py`.
 - Requiere `.env` con `TELEGRAM_BOT_TOKEN`.
 - Bucle infinito con `getUpdates` y `sendMessage`.
 
