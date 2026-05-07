@@ -14,7 +14,7 @@ from pydantic import ValidationError
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test-token")
 os.environ["TELEGRAM_ALLOWED_USER_IDS"] = "123"
 
-import run_telegram
+import scripts.run_telegram as run_telegram
 from app import llm_client
 from app import document_writer
 from app.document_writer import DocumentWriteError, create_document
