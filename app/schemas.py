@@ -11,12 +11,41 @@ class ChatRequest(BaseModel):
     max_tokens: int | None = Field(default=None, ge=1, le=2048)
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
     top_k: int | None = Field(default=3, ge=1, le=10)
+    trace_id: str | None = Field(default=None, min_length=32, max_length=36)
+    user_id: int | None = None
+    chat_id: int | None = None
+
+    @field_validator("trace_id")
+    @classmethod
+    def validate_trace_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+
+        trace_id = value.strip()
+        try:
+            parsed = uuid.UUID(trace_id)
+        except ValueError as exc:
+            raise ValueError("trace_id_invalid") from exc
+
+        if trace_id not in {parsed.hex, str(parsed)}:
+            raise ValueError("trace_id_invalid")
+
+        return trace_id
 
 class ChatResponse(BaseModel):
     status: str
     model: str
     answer: str
     latency_ms: int
+    retrieval_status: str | None = None
+    chunks: list[str] = Field(default_factory=list)
+    chunk_ids: list[int] = Field(default_factory=list)
+    prompt_eval_count: int | None = None
+    eval_count: int | None = None
+    prompt_eval_duration: int | None = None
+    eval_duration: int | None = None
+    total_duration: int | None = None
+    load_duration: int | None = None
 
 class ErrorResponse(BaseModel):
     status: str

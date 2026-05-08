@@ -1,0 +1,31 @@
+from app.services.bot_service import (
+    DOC_AI_COMMAND,
+    DOC_AI_USAGE_TEXT,
+    DOC_COMMAND,
+    DOC_USAGE_TEXT,
+    DocCommandParseError,
+    LLMOutputValidationError,
+    build_llm_prompt,
+    handle_doc_ai_command,
+    handle_doc_command,
+    handle_message,
+    main_loop,
+    parse_doc_ai_command,
+    parse_doc_command,
+)
+
+__all__ = [
+    "DOC_AI_COMMAND",
+    "DOC_AI_USAGE_TEXT",
+    "DOC_COMMAND",
+    "DOC_USAGE_TEXT",
+    "DocCommandParseError",
+    "LLMOutputValidationError",
+    "build_llm_prompt",
+    "handle_doc_ai_command",
+    "handle_doc_command",
+    "handle_message",
+    "main_loop",
+    "parse_doc_ai_command",
+    "parse_doc_command",
+]

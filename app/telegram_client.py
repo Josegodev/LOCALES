@@ -1,16 +1,8 @@
-import requests
+from app.adapters.telegram_api import send_message
 
 
 def send_telegram_message(bot_token: str, chat_id: int, text: str) -> None:
-    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    send_message(chat_id, text, bot_token=bot_token)
 
-    response = requests.post(
-        url,
-        json={
-            "chat_id": chat_id,
-            "text": text[:4000],
-        },
-        timeout=15,
-    )
 
-    response.raise_for_status()
+__all__ = ["send_telegram_message"]

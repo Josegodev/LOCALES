@@ -1,7 +1,8 @@
-import json
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+
+from app.observability import log_event
 
 SAFE_ROOT = Path.home() / "LOCALES" / "TELEGRAM_DOCS"
 BASE_DIR = SAFE_ROOT
@@ -96,14 +97,13 @@ def create_document(
         reason = exc.__class__.__name__
         raise
     finally:
-        event = {
-            "component": "document_writer",
-            "request_id": request_id,
-            "filename": logged_filename,
-            "status": status,
-            "reason": reason,
-            "duration_ms": int((time.perf_counter() - started_at) * 1000),
-        }
-        if output_path:
-            event["path"] = output_path
-        print(json.dumps(event, ensure_ascii=False, sort_keys=True), flush=True)
+        log_event(
+            component="document_writer",
+            trace_id=request_id,
+            request_id=request_id,
+            filename=logged_filename,
+            status=status,
+            reason=reason,
+            duration_ms=int((time.perf_counter() - started_at) * 1000),
+            path=output_path or None,
+        )

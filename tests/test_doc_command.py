@@ -305,16 +305,16 @@ class DocCommandTests(unittest.TestCase):
             {"choices": [{"message": {"content": "# Markdown"}}]},
         )
 
-        with patch.object(llm_client.settings, "lmstudio_base_url", "http://127.0.0.1:1234"):
-            with patch.object(llm_client.settings, "lmstudio_model", "modelo-local"):
-                with patch.object(llm_client.settings, "llm_timeout_seconds", 12):
+        with patch.object(llm_client.settings, "ollama_base_url", "http://127.0.0.1:11434"):
+            with patch.object(llm_client.settings, "ollama_model", "modelo-local"):
+                with patch.object(llm_client.settings, "ollama_timeout_seconds", 12):
                     with patch.object(llm_client.requests, "post", return_value=fake_response) as post:
                         result = llm_client.generate_markdown("Haz un documento", REQUEST_ID)
 
         self.assertEqual(result, "# Markdown")
         self.assertEqual(
             post.call_args.args[0],
-            "http://127.0.0.1:1234/v1/chat/completions",
+            "http://127.0.0.1:11434/v1/chat/completions",
         )
         self.assertFalse(post.call_args.kwargs["json"]["stream"])
         self.assertEqual(post.call_args.kwargs["json"]["model"], "modelo-local")

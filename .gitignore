@@ -42,3 +42,10 @@ htmlcov/
 
 # local artifacts
 artifacts/
+
+# Runtime logs
+logs/telegram_runs/*.jsonl
+
+# Eval artifacts
+evals/runs/*.json
+
