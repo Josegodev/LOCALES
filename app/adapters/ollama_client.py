@@ -1,6 +1,7 @@
 import requests
 
 from app.config import settings
+from app.llm_errors import LLMClientError
 
 
 SYSTEM_PROMPT = """Responde solo con Markdown.
@@ -12,11 +13,8 @@ No devuelvas JSON salvo que el usuario lo pida como contenido documental.
 """
 
 
-class OllamaClientError(Exception):
-    def __init__(self, code: str, message: str):
-        self.code = code
-        self.message = message
-        super().__init__(message)
+class OllamaClientError(LLMClientError):
+    pass
 
 
 def _api_chat_url(settings_obj=settings) -> str:
@@ -127,6 +125,7 @@ def ask_chat(
         raise OllamaClientError("llm_generation_failed", "message_required")
 
     selected_model = model or _selected_model(settings_obj)
+    selected_temperature = temperature if temperature is not None else settings_obj.temperature
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
@@ -137,7 +136,7 @@ def ask_chat(
         "messages": messages,
         "stream": False,
         "options": {
-            "temperature": temperature if temperature is not None else 0.2,
+            "temperature": selected_temperature,
             "num_predict": num_predict if num_predict is not None else 300,
         },
     }
@@ -187,7 +186,10 @@ def ask_chat(
 
     return {
         "status": "ok",
+        "provider": "ollama",
         "model": response_model,
+        "temperature": selected_temperature,
+        "temperature_ignored": False,
         "answer": content.strip(),
         **metrics,
     }

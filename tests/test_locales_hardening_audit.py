@@ -5,6 +5,7 @@ import os
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -14,10 +15,12 @@ os.environ.setdefault("TELEGRAM_ALLOWED_USER_IDS", "123")
 
 from app import llm_client
 from app.adapters.backend_client import BackendClientError
+from app.adapters import openai_client
 from app.main import app
 from app.observability import log_event, new_trace_id
 from app.schemas import ChatResponse
 from app.services import bot_service
+from scripts import run_telegram
 
 REQUEST_ID = "12345678123456781234567812345678"
 
@@ -93,6 +96,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
                         "/chat",
                         json={
                             "message": "hola",
+                            "temperature": 0.7,
                             "trace_id": REQUEST_ID,
                             "user_id": 123,
                             "chat_id": 456,
@@ -100,17 +104,192 @@ class LocalesHardeningAuditTests(unittest.TestCase):
                     )
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["provider"], "ollama")
+        self.assertEqual(response.json()["temperature"], 0.7)
         ask_chat_mock.assert_called_once_with(
             message="context prompt",
-            model=None,
+            provider="ollama",
+            model="granite4.1:8b",
             max_tokens=None,
-            temperature=None,
+            temperature=0.7,
         )
+
+    def test_chat_endpoint_passes_openai_provider_to_llm(self):
+        client = TestClient(app)
+
+        with patch(
+            "app.main.build_document_prompt",
+            return_value={
+                "status": "EVIDENCE_FOUND",
+                "prompt": "context prompt",
+                "chunks": [{"id": "chunk-1"}],
+            },
+        ):
+            with patch(
+                "app.main.ask_chat",
+                return_value={
+                    "status": "ok",
+                    "provider": "openai",
+                    "model": "gpt-5.5",
+                    "answer": "OK",
+                },
+            ) as ask_chat_mock:
+                response = client.post(
+                    "/chat",
+                    json={
+                        "message": "hola",
+                        "provider": "openai",
+                        "model": "gpt-5.5",
+                        "temperature": 0.4,
+                        "trace_id": REQUEST_ID,
+                        "user_id": 123,
+                        "chat_id": 456,
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["provider"], "openai")
+        self.assertEqual(response.json()["temperature"], 0.4)
+        ask_chat_mock.assert_called_once_with(
+            message="context prompt",
+            provider="openai",
+            model="gpt-5.5",
+            max_tokens=None,
+            temperature=0.4,
+        )
+
+    def test_resolve_provider_model_accepts_openai_gpt_55(self):
+        provider, model = llm_client.resolve_provider_model("openai", "gpt-5.5")
+
+        self.assertEqual(provider, "openai")
+        self.assertEqual(model, "gpt-5.5")
+
+    def test_resolve_provider_model_rejects_ollama_gpt_model(self):
+        with self.assertRaises(llm_client.LLMClientError) as ctx:
+            llm_client.resolve_provider_model("ollama", "gpt-5.5")
+
+        self.assertEqual(ctx.exception.code, "invalid_provider_model_pair")
+
+    def test_resolve_provider_model_accepts_ollama_granite(self):
+        provider, model = llm_client.resolve_provider_model("ollama", "granite4.1:8b")
+
+        self.assertEqual(provider, "ollama")
+        self.assertEqual(model, "granite4.1:8b")
+
+    def test_resolve_provider_model_rejects_openai_ollama_model(self):
+        with self.assertRaises(llm_client.LLMClientError) as ctx:
+            llm_client.resolve_provider_model("openai", "granite4.1:8b")
+
+        self.assertEqual(ctx.exception.code, "invalid_provider_model_pair")
+
+    def test_openai_client_accepts_supported_model(self):
+        fake_response = SimpleNamespace(output_text="OK")
+
+        class FakeResponses:
+            def __init__(self):
+                self.calls = []
+
+            def create(self, **kwargs):
+                self.calls.append(kwargs)
+                return fake_response
+
+        fake_responses = FakeResponses()
+        fake_client = SimpleNamespace(responses=fake_responses)
+        fake_settings = SimpleNamespace(
+            openai_api_key="sk-test",
+            llm_timeout_seconds=30,
+            max_tokens=16,
+            temperature=0.2,
+        )
+
+        with patch.object(openai_client, "OpenAI", return_value=fake_client) as openai_ctor:
+            result = openai_client.ask_chat(
+                "Responde solo: OK",
+                model="gpt-5.5",
+                settings_obj=fake_settings,
+            )
+
+        self.assertEqual(result["provider"], "openai")
+        self.assertEqual(result["model"], "gpt-5.5")
+        self.assertEqual(result["temperature"], 0.2)
+        self.assertFalse(result["temperature_ignored"])
+        self.assertEqual(result["answer"], "OK")
+        self.assertEqual(fake_responses.calls[0]["model"], "gpt-5.5")
+        self.assertEqual(fake_responses.calls[0]["temperature"], 0.2)
+        openai_ctor.assert_called_once()
+
+    def test_openai_client_rejects_unknown_model(self):
+        fake_settings = SimpleNamespace(
+            openai_api_key="sk-test",
+            llm_timeout_seconds=30,
+            max_tokens=16,
+        )
+
+        with patch.object(openai_client, "OpenAI") as openai_ctor:
+            with self.assertRaises(openai_client.OpenAIClientError) as ctx:
+                openai_client.ask_chat(
+                    "Responde solo: OK",
+                    model="modelo-inventado",
+                    settings_obj=fake_settings,
+                )
+
+        self.assertEqual(ctx.exception.code, "llm_model_not_available")
+        openai_ctor.assert_not_called()
+
+    def test_openai_client_retries_without_temperature_when_rejected(self):
+        fake_response = SimpleNamespace(output_text="OK")
+
+        class FakeResponses:
+            def __init__(self):
+                self.calls = []
+
+            def create(self, **kwargs):
+                self.calls.append(kwargs)
+                if len(self.calls) == 1:
+                    raise RuntimeError("temperature not supported for this model")
+                return fake_response
+
+        fake_responses = FakeResponses()
+        fake_client = SimpleNamespace(responses=fake_responses)
+        fake_settings = SimpleNamespace(
+            openai_api_key="sk-test",
+            llm_timeout_seconds=30,
+            max_tokens=16,
+            temperature=0.2,
+        )
+
+        with patch.object(openai_client, "OpenAI", return_value=fake_client):
+            result = openai_client.ask_chat(
+                "Responde solo: OK",
+                model="gpt-5.5",
+                temperature=0.2,
+                settings_obj=fake_settings,
+            )
+
+        self.assertEqual(result["temperature"], 0.2)
+        self.assertTrue(result["temperature_ignored"])
+        self.assertEqual(len(fake_responses.calls), 2)
+        self.assertIn("temperature", fake_responses.calls[0])
+        self.assertNotIn("temperature", fake_responses.calls[1])
+
+    def test_select_temperature_accepts_valid_values(self):
+        for raw_value, expected in [("0", 0.0), ("0.2", 0.2), ("1", 1.0)]:
+            with self.subTest(raw_value=raw_value):
+                with patch("builtins.input", return_value=raw_value):
+                    self.assertEqual(run_telegram.select_temperature(), expected)
+
+    def test_select_temperature_falls_back_on_invalid_values(self):
+        for raw_value in ["texto", "-0.1", "1.1", "nan", "inf"]:
+            with self.subTest(raw_value=raw_value):
+                with patch("builtins.input", return_value=raw_value):
+                    self.assertEqual(run_telegram.select_temperature(), 0.2)
 
     def test_chat_response_accepts_chunk_ids_separately_from_chunks(self):
         response = ChatResponse(
             status="ok",
+            provider="ollama",
             model="granite4.1:8b",
+            temperature=0.2,
             answer="OK",
             latency_ms=12,
             retrieval_status="EVIDENCE_FOUND",
@@ -140,7 +319,9 @@ class LocalesHardeningAuditTests(unittest.TestCase):
                 "app.main.ask_chat",
                 return_value={
                     "status": "ok",
+                    "provider": "ollama",
                     "model": "granite4.1:8b",
+                    "temperature": 0.2,
                     "answer": "NUCLEO es un runtime local con política explícita.",
                 },
             ):
@@ -158,6 +339,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         body = response.json()
         self.assertEqual(body["retrieval_status"], "EVIDENCE_FOUND")
         self.assertEqual(body["chunk_ids"], [346, 206, 262])
+        self.assertEqual(body["temperature"], 0.2)
         self.assertEqual(
             body["chunks"],
             [
@@ -221,11 +403,13 @@ class LocalesHardeningAuditTests(unittest.TestCase):
             ):
                 with patch(
                     "app.main.ask_chat",
-                    return_value={
-                        "status": "ok",
-                        "model": "granite4.1:8b",
-                        "answer": "OK",
-                    },
+                return_value={
+                    "status": "ok",
+                    "provider": "ollama",
+                    "model": "granite4.1:8b",
+                    "temperature": 0.2,
+                    "answer": "OK",
+                },
                 ):
                     response = client.post(
                         "/chat",
@@ -248,6 +432,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         self.assertEqual(chat_event["chat_id"], 456)
         self.assertEqual(chat_event["user_id"], 123)
         self.assertEqual(chat_event["model"], "granite4.1:8b")
+        self.assertEqual(chat_event["temperature"], 0.2)
         self.assertEqual(chat_event["status"], "ok")
         self.assertIn("latency_ms", chat_event)
 

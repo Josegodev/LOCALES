@@ -176,13 +176,21 @@ def _chat_trace_metadata(result: dict | None) -> dict:
         load_duration = None
     if not isinstance(chunk_ids, list) or not all(isinstance(item, int) for item in chunk_ids):
         chunk_ids = []
+    temperature = result.get("temperature")
+    if not isinstance(temperature, (int, float)):
+        temperature = None
+    temperature_ignored = result.get("temperature_ignored")
+    if not isinstance(temperature_ignored, bool):
+        temperature_ignored = None
 
     tokens_total = None
     if prompt_eval_count is not None and eval_count is not None:
         tokens_total = prompt_eval_count + eval_count
 
     return {
-        "provider": result.get("provider") if isinstance(result.get("provider"), str) else "ollama",
+        "provider": result.get("provider") if isinstance(result.get("provider"), str) else None,
+        "temperature": temperature,
+        "temperature_ignored": temperature_ignored,
         "tokens_input": prompt_eval_count,
         "tokens_output": eval_count,
         "tokens_total": tokens_total,
@@ -571,6 +579,18 @@ def handle_message(
                     chat_id=message.chat_id,
                 )
             except backend_client.BackendClientError as exc:
+                trace_provider = getattr(exc, "provider", None)
+                trace_model = getattr(exc, "model", None)
+                trace_temperature = getattr(exc, "temperature", None)
+                trace_temperature_ignored = getattr(exc, "temperature_ignored", None)
+                if isinstance(trace_model, str) and trace_model.strip():
+                    model = trace_model
+                if isinstance(trace_provider, str) and trace_provider.strip():
+                    trace_metadata["provider"] = trace_provider
+                if isinstance(trace_temperature, (int, float)):
+                    trace_metadata["temperature"] = trace_temperature
+                if isinstance(trace_temperature_ignored, bool):
+                    trace_metadata["temperature_ignored"] = trace_temperature_ignored
                 log_event(
                     component="telegram.chat",
                     event="telegram.chat.failed",

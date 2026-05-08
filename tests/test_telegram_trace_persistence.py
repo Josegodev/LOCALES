@@ -72,7 +72,9 @@ class TelegramTracePersistenceTests(unittest.TestCase):
                         send_message_fn=fake_send,
                         ask_chat_fn=lambda *args, **kwargs: {
                             "answer": "respuesta",
+                            "provider": "ollama",
                             "model": "granite4.1:8b",
+                            "temperature": 0.2,
                             "status": "ok",
                             "latency_ms": 12,
                         },
@@ -92,7 +94,9 @@ class TelegramTracePersistenceTests(unittest.TestCase):
         self.assertEqual(payload["command"], "chat")
         self.assertEqual(payload["text_chars"], 4)
         self.assertEqual(payload["response_chars"], len("respuesta"))
+        self.assertEqual(payload["provider"], "ollama")
         self.assertEqual(payload["model"], "granite4.1:8b")
+        self.assertEqual(payload["temperature"], 0.2)
         self.assertEqual(payload["status"], "ok")
         self.assertIsNone(payload["error_code"])
         self.assertIn("created_at", payload)
@@ -105,6 +109,7 @@ class TelegramTracePersistenceTests(unittest.TestCase):
                 "answer": "respuesta",
                 "provider": "ollama",
                 "model": "granite4.1:8b",
+                "temperature": 0.2,
                 "status": "ok",
                 "latency_ms": 12,
                 "prompt_eval_count": 1404,
@@ -119,6 +124,7 @@ class TelegramTracePersistenceTests(unittest.TestCase):
         )
 
         self.assertEqual(payload["provider"], "ollama")
+        self.assertEqual(payload["temperature"], 0.2)
         self.assertEqual(payload["tokens_input"], 1404)
         self.assertEqual(payload["tokens_output"], 77)
         self.assertEqual(payload["tokens_total"], 1481)
@@ -151,13 +157,16 @@ class TelegramTracePersistenceTests(unittest.TestCase):
             text="hola",
             ask_chat_fn=lambda *args, **kwargs: {
                 "answer": "respuesta",
+                "provider": "ollama",
                 "model": "granite4.1:8b",
+                "temperature": 0.2,
                 "status": "ok",
                 "latency_ms": 12,
             },
         )
 
         self.assertEqual(payload["provider"], "ollama")
+        self.assertEqual(payload["temperature"], 0.2)
         self.assertIsNone(payload["tokens_input"])
         self.assertIsNone(payload["tokens_output"])
         self.assertIsNone(payload["tokens_total"])
@@ -185,7 +194,9 @@ class TelegramTracePersistenceTests(unittest.TestCase):
                         send_message_fn=fake_send,
                         ask_chat_fn=lambda *args, **kwargs: {
                             "answer": "ok",
+                            "provider": "ollama",
                             "model": "granite4.1:8b",
+                            "temperature": 0.2,
                             "status": "ok",
                             "latency_ms": 7,
                         },
@@ -214,7 +225,9 @@ class TelegramTracePersistenceTests(unittest.TestCase):
                 send_message_fn=fake_send,
                 ask_chat_fn=lambda *args, **kwargs: {
                     "answer": "ok",
+                    "provider": "ollama",
                     "model": "granite4.1:8b",
+                    "temperature": 0.2,
                     "status": "ok",
                     "latency_ms": 4,
                 },

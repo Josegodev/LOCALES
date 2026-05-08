@@ -3,10 +3,9 @@ import time
 
 from fastapi import FastAPI, HTTPException
 from DB.chunks.document_context import build_document_prompt
-from app.config import settings
 from app.observability import new_trace_id
 from app.observability import log_event
-from app.llm_client import ask_chat, LLMClientError
+from app.llm_client import LLMClientError, ask_chat, resolve_provider_model
 from app.schemas import ChatRequest, ChatResponse
 from app.schemas import CreateDocumentRequest, DocumentCreateResponse
 from app.document_writer import create_document, DocumentWriteError
@@ -165,9 +164,13 @@ def chat(request: ChatRequest) -> ChatResponse:
     status = "error"
     error_code: str | None = None
     retrieval_status = "unknown"
-    model = request.model or settings.effective_ollama_model()
+    provider = (request.provider or "ollama").strip().lower()
+    model = request.model or ""
+    temperature = request.temperature
+    temperature_ignored = False
 
     try:
+        provider, model = resolve_provider_model(provider, request.model)
         context = build_document_prompt(request.message, limit=request.top_k or 3)
         retrieval_status = str(context["status"])
         if context["status"] == "EVIDENCE_FOUND" and _should_force_no_evidence(
@@ -180,7 +183,10 @@ def chat(request: ChatRequest) -> ChatResponse:
             status = "ok"
             return ChatResponse(
                 status="ok",
+                provider=provider,
                 model=model,
+                temperature=temperature,
+                temperature_ignored=False,
                 answer=_no_evidence_answer(),
                 latency_ms=0,
                 retrieval_status=retrieval_status,
@@ -191,17 +197,32 @@ def chat(request: ChatRequest) -> ChatResponse:
         llm_started_at = time.perf_counter()
         result = ask_chat(
             message=context["prompt"],
-            model=request.model,
+            provider=provider,
+            model=model,
             max_tokens=request.max_tokens,
             temperature=request.temperature,
         )
         result["latency_ms"] = int((time.perf_counter() - llm_started_at) * 1000)
+        response_provider = result.get("provider")
+        if isinstance(response_provider, str) and response_provider.strip():
+            provider = response_provider.strip().lower()
         model = result["model"]
+        if isinstance(result.get("temperature"), (int, float)):
+            temperature = float(result["temperature"])
+        if isinstance(result.get("temperature_ignored"), bool):
+            temperature_ignored = result["temperature_ignored"]
         status = "ok"
         chunk_texts, chunk_ids = _extract_chunk_response_data(context.get("chunks", []))
+        response_payload = dict(result)
+        if not isinstance(response_payload.get("provider"), str) or not response_payload["provider"].strip():
+            response_payload["provider"] = provider
+        if not isinstance(response_payload.get("temperature"), (int, float)):
+            response_payload["temperature"] = temperature
+        if not isinstance(response_payload.get("temperature_ignored"), bool):
+            response_payload["temperature_ignored"] = temperature_ignored
 
         return ChatResponse(
-            **result,
+            **response_payload,
             retrieval_status=retrieval_status,
             chunks=chunk_texts,
             chunk_ids=chunk_ids,
@@ -210,12 +231,18 @@ def chat(request: ChatRequest) -> ChatResponse:
     except LLMClientError as exc:
         error_code = exc.code
         http_status = 502
-        if exc.code == "llm_unavailable":
+        if exc.code == "invalid_provider_model_pair":
+            http_status = 400
+        elif exc.code in {"llm_unavailable", "llm_network_error"}:
             http_status = 503
-        elif exc.code == "llm_timeout":
+        elif exc.code in {"llm_timeout"}:
             http_status = 504
         elif exc.code == "llm_model_not_available":
             http_status = 404
+        elif exc.code == "llm_auth_error":
+            http_status = 401
+        elif exc.code == "llm_rate_limited":
+            http_status = 429
         raise HTTPException(
             status_code=http_status,
             detail={
@@ -232,7 +259,10 @@ def chat(request: ChatRequest) -> ChatResponse:
             trace_id=trace_id,
             chat_id=request.chat_id,
             user_id=request.user_id,
+            provider=provider,
             model=model,
+            temperature=temperature,
+            temperature_ignored=temperature_ignored,
             status=status,
             latency_ms=int((time.perf_counter() - started_at) * 1000),
             error_code=error_code,

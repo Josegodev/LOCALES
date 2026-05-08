@@ -1,3 +1,4 @@
+import math
 import uuid
 from pathlib import Path
 from typing import Literal
@@ -7,9 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
+    provider: str | None = None
     model: str | None = None
     max_tokens: int | None = Field(default=None, ge=1, le=2048)
-    temperature: float | None = Field(default=None, ge=0.0, le=2.0)
+    temperature: float = Field(default=0.2, ge=0.0, le=1.0)
     top_k: int | None = Field(default=3, ge=1, le=10)
     trace_id: str | None = Field(default=None, min_length=32, max_length=36)
     user_id: int | None = None
@@ -32,9 +34,19 @@ class ChatRequest(BaseModel):
 
         return trace_id
 
+    @field_validator("temperature")
+    @classmethod
+    def validate_temperature(cls, value: float) -> float:
+        if not math.isfinite(value):
+            raise ValueError("temperature_invalid")
+        return value
+
 class ChatResponse(BaseModel):
     status: str
+    provider: str
     model: str
+    temperature: float = 0.2
+    temperature_ignored: bool = False
     answer: str
     latency_ms: int
     retrieval_status: str | None = None

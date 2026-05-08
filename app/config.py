@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+
 class Settings(BaseSettings):
     lmstudio_base_url: str = "http://127.0.0.1:1234"
     lmstudio_timeout_seconds: float = 60.0
@@ -20,10 +21,12 @@ class Settings(BaseSettings):
     telegram_allowed_chat_ids: str | None = None
     telegram_allowed_user_ids: str | None = None
     telegram_trace_include_text: bool = False
+    openai_api_key: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",
-        extra="forbid",
+        env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     def lmstudio_v1_base_url(self) -> str:

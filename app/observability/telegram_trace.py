@@ -8,6 +8,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 TELEGRAM_RUNS_DIR = REPO_ROOT / "logs" / "telegram_runs"
 TELEGRAM_TRACE_OPTIONAL_FIELDS = (
     "provider",
+    "temperature",
+    "temperature_ignored",
     "tokens_input",
     "tokens_output",
     "tokens_total",

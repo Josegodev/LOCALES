@@ -1,6 +1,7 @@
 import sys
 import time
 import uuid
+import math
 from pathlib import Path
 
 import requests
@@ -19,12 +20,25 @@ from app.services import bot_service
 from app.telegram_permissions import is_telegram_user_allowed
 
 FASTAPI_URL = backend_client.FASTAPI_URL
+DEFAULT_PROVIDER = "ollama"
+DEFAULT_MODEL = "granite4.1:8b"
+DEFAULT_TEMPERATURE = 0.2
+MODEL_ALIASES: dict[str, tuple[str, str]] = {
+    "granite": ("ollama", "granite4.1:8b"),
+    "mistral": ("ollama", "mistral:latest"),
+    "qwen": ("ollama", "qwen2.5-coder:7b"),
+    "llama": ("ollama", "llama3.1:8b"),
+    "gpt": ("openai", "gpt-5.5"),
+}
 
 TG_TOKEN = settings.telegram_bot_token
 if not TG_TOKEN:
     raise RuntimeError("TELEGRAM_BOT_TOKEN no definido en .env")
 
 last_update_id = None
+SELECTED_PROVIDER = DEFAULT_PROVIDER
+SELECTED_MODEL = DEFAULT_MODEL
+SELECTED_TEMPERATURE = DEFAULT_TEMPERATURE
 
 DOC_COMMAND = bot_service.DOC_COMMAND
 DOC_USAGE_TEXT = bot_service.DOC_USAGE_TEXT
@@ -33,6 +47,47 @@ DOC_AI_USAGE_TEXT = bot_service.DOC_AI_USAGE_TEXT
 DocCommandParseError = bot_service.DocCommandParseError
 LLMOutputValidationError = bot_service.LLMOutputValidationError
 LLMClientError = LLMClientError
+
+
+def select_model() -> tuple[str, str]:
+    try:
+        alias = input("Insert Modelo: ").strip().lower()
+    except EOFError:
+        alias = ""
+
+    if alias in MODEL_ALIASES:
+        return MODEL_ALIASES[alias]
+
+    print(
+        f"Aviso: modelo invalido '{alias}'. Usando provider={DEFAULT_PROVIDER}, model={DEFAULT_MODEL}.",
+        file=sys.stderr,
+    )
+    return DEFAULT_PROVIDER, DEFAULT_MODEL
+
+
+def select_temperature() -> float:
+    try:
+        raw_value = input("Insert Temperature (0.0 - 1.0): ").strip()
+    except EOFError:
+        raw_value = ""
+
+    try:
+        temperature = float(raw_value)
+    except ValueError:
+        print(
+            f"Aviso: temperature invalida '{raw_value}'. Usando temperature={DEFAULT_TEMPERATURE}.",
+            file=sys.stderr,
+        )
+        return DEFAULT_TEMPERATURE
+
+    if not math.isfinite(temperature) or temperature < 0.0 or temperature > 1.0:
+        print(
+            f"Aviso: temperature invalida '{raw_value}'. Usando temperature={DEFAULT_TEMPERATURE}.",
+            file=sys.stderr,
+        )
+        return DEFAULT_TEMPERATURE
+
+    return temperature
 
 
 def parse_doc_command(text: str, user_id: int | None, chat_id: int | None):
@@ -91,6 +146,17 @@ def handle_doc_ai_command(
     )
 
 
+def _chat_response_error_reason(response: requests.Response) -> str:
+    try:
+        detail = response.json().get("detail", {})
+    except Exception:
+        return response.text or "backend_error"
+
+    if isinstance(detail, dict):
+        return str(detail.get("code") or detail.get("message") or "backend_error")
+    return str(detail or "backend_error")
+
+
 def get_updates() -> list[dict]:
     return telegram_api.get_updates(
         last_update_id=last_update_id,
@@ -143,14 +209,57 @@ def ask_fastapi(
     user_id: int | None = None,
     chat_id: int | None = None,
 ) -> dict:
-    return backend_client.ask_chat(
-        message,
-        trace_id=trace_id,
-        user_id=user_id,
-        chat_id=chat_id,
-        requests_module=requests,
-        base_url=FASTAPI_URL,
+    payload = {
+        "message": message,
+        "provider": SELECTED_PROVIDER,
+        "model": SELECTED_MODEL,
+        "temperature": SELECTED_TEMPERATURE,
+    }
+    optional_fields = {
+        "trace_id": trace_id,
+        "user_id": user_id,
+        "chat_id": chat_id,
+    }
+    for key, value in optional_fields.items():
+        if value is not None:
+            payload[key] = value
+
+    response = requests.post(
+        f"{FASTAPI_URL}/chat",
+        json=payload,
+        timeout=90,
     )
+
+    if response.status_code >= 400:
+        error = backend_client.BackendClientError(
+            code=_chat_response_error_reason(response),
+            message="backend_chat_error",
+            status_code=response.status_code,
+        )
+        error.provider = SELECTED_PROVIDER
+        error.model = SELECTED_MODEL
+        error.temperature = SELECTED_TEMPERATURE
+        raise error
+
+    try:
+        data = response.json()
+    except ValueError as exc:
+        error = backend_client.BackendClientError(
+            code="backend_invalid_response",
+            message="backend_invalid_response",
+            status_code=502,
+        )
+        error.provider = SELECTED_PROVIDER
+        error.model = SELECTED_MODEL
+        error.temperature = SELECTED_TEMPERATURE
+        raise error from exc
+
+    if not isinstance(data.get("provider"), str) or not data["provider"].strip():
+        data["provider"] = SELECTED_PROVIDER
+    if not isinstance(data.get("temperature"), (int, float)):
+        data["temperature"] = SELECTED_TEMPERATURE
+
+    return data
 
 
 def ask_backend(text: str) -> str:
@@ -171,13 +280,28 @@ def handle_message(msg: dict) -> None:
 
 def main() -> None:
     global last_update_id
+    global SELECTED_PROVIDER
+    global SELECTED_MODEL
+    global SELECTED_TEMPERATURE
     consecutive_failures = 0
+    SELECTED_PROVIDER, SELECTED_MODEL = select_model()
+    SELECTED_TEMPERATURE = select_temperature()
+
+    print(f"Provider seleccionado: {SELECTED_PROVIDER}")
+    print(f"Modelo seleccionado: {SELECTED_MODEL}")
+    print(f"Temperature seleccionada: {SELECTED_TEMPERATURE}")
 
     log_event(
         component="telegram.polling",
         event="telegram.polling.started",
         status="started",
         fastapi_url=f"{FASTAPI_URL}/chat",
+        selected_provider=SELECTED_PROVIDER,
+        selected_model=SELECTED_MODEL,
+        selected_temperature=SELECTED_TEMPERATURE,
+        provider=SELECTED_PROVIDER,
+        model=SELECTED_MODEL,
+        temperature=SELECTED_TEMPERATURE,
     )
 
     while True:
