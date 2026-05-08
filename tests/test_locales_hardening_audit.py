@@ -89,6 +89,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
                     return_value={
                         "status": "ok",
                         "model": "granite4.1:8b",
+                        "use_rag": True,
                         "answer": "OK",
                     },
                 ) as ask_chat_mock:
@@ -106,12 +107,14 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["provider"], "ollama")
         self.assertEqual(response.json()["temperature"], 0.7)
+        self.assertTrue(response.json()["use_rag"])
         ask_chat_mock.assert_called_once_with(
             message="context prompt",
             provider="ollama",
             model="granite4.1:8b",
             max_tokens=None,
             temperature=0.7,
+            use_rag=True,
         )
 
     def test_chat_endpoint_passes_openai_provider_to_llm(self):
@@ -131,6 +134,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
                     "status": "ok",
                     "provider": "openai",
                     "model": "gpt-5.5",
+                    "use_rag": True,
                     "answer": "OK",
                 },
             ) as ask_chat_mock:
@@ -150,12 +154,54 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["provider"], "openai")
         self.assertEqual(response.json()["temperature"], 0.4)
+        self.assertTrue(response.json()["use_rag"])
         ask_chat_mock.assert_called_once_with(
             message="context prompt",
             provider="openai",
             model="gpt-5.5",
             max_tokens=None,
             temperature=0.4,
+            use_rag=True,
+        )
+
+    def test_chat_endpoint_disables_rag_when_requested(self):
+        client = TestClient(app)
+
+        with patch("app.main.build_document_prompt") as build_document_prompt_mock:
+            with patch(
+                "app.main.ask_chat",
+                return_value={
+                    "status": "ok",
+                    "provider": "ollama",
+                    "model": "granite4.1:8b",
+                    "temperature": 0.2,
+                    "use_rag": False,
+                    "answer": "OK",
+                },
+            ) as ask_chat_mock:
+                response = client.post(
+                    "/chat",
+                    json={
+                        "message": "hola",
+                        "use_rag": False,
+                        "trace_id": REQUEST_ID,
+                        "user_id": 123,
+                        "chat_id": 456,
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["retrieval_status"], "DISABLED")
+        self.assertEqual(response.json()["chunk_ids"], [])
+        self.assertFalse(response.json()["use_rag"])
+        build_document_prompt_mock.assert_not_called()
+        ask_chat_mock.assert_called_once_with(
+            message="hola",
+            provider="ollama",
+            model="granite4.1:8b",
+            max_tokens=None,
+            temperature=0.2,
+            use_rag=False,
         )
 
     def test_resolve_provider_model_accepts_openai_gpt_55(self):
@@ -284,6 +330,26 @@ class LocalesHardeningAuditTests(unittest.TestCase):
                 with patch("builtins.input", return_value=raw_value):
                     self.assertEqual(run_telegram.select_temperature(), 0.2)
 
+    def test_select_use_rag_accepts_true_and_false_values(self):
+        truthy_values = ["yes", "y", "si", "sí", "s", "true", "1"]
+        falsy_values = ["no", "n", "false", "0"]
+
+        for raw_value in truthy_values:
+            with self.subTest(raw_value=raw_value):
+                with patch("builtins.input", return_value=raw_value):
+                    self.assertTrue(run_telegram.select_use_rag())
+
+        for raw_value in falsy_values:
+            with self.subTest(raw_value=raw_value):
+                with patch("builtins.input", return_value=raw_value):
+                    self.assertFalse(run_telegram.select_use_rag())
+
+    def test_select_use_rag_defaults_to_true_on_invalid_or_empty_input(self):
+        for raw_value in ["", "tal vez", "maybe"]:
+            with self.subTest(raw_value=raw_value):
+                with patch("builtins.input", return_value=raw_value):
+                    self.assertTrue(run_telegram.select_use_rag())
+
     def test_chat_response_accepts_chunk_ids_separately_from_chunks(self):
         response = ChatResponse(
             status="ok",
@@ -322,6 +388,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
                     "provider": "ollama",
                     "model": "granite4.1:8b",
                     "temperature": 0.2,
+                    "use_rag": True,
                     "answer": "NUCLEO es un runtime local con política explícita.",
                 },
             ):
@@ -340,6 +407,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         self.assertEqual(body["retrieval_status"], "EVIDENCE_FOUND")
         self.assertEqual(body["chunk_ids"], [346, 206, 262])
         self.assertEqual(body["temperature"], 0.2)
+        self.assertTrue(body["use_rag"])
         self.assertEqual(
             body["chunks"],
             [
@@ -408,6 +476,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
                     "provider": "ollama",
                     "model": "granite4.1:8b",
                     "temperature": 0.2,
+                    "use_rag": True,
                     "answer": "OK",
                 },
                 ):
@@ -433,6 +502,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         self.assertEqual(chat_event["user_id"], 123)
         self.assertEqual(chat_event["model"], "granite4.1:8b")
         self.assertEqual(chat_event["temperature"], 0.2)
+        self.assertTrue(chat_event["use_rag"])
         self.assertEqual(chat_event["status"], "ok")
         self.assertIn("latency_ms", chat_event)
 

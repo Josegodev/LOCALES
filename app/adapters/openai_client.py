@@ -122,6 +122,7 @@ def ask_chat(
     model: str | None = None,
     max_tokens: int | None = None,
     temperature: float | None = None,
+    use_rag: bool | None = None,
     system_prompt: str | None = None,
     settings_obj=settings,
 ) -> dict:
@@ -173,6 +174,7 @@ def ask_chat(
         "model": selected_model,
         "temperature": selected_temperature,
         "temperature_ignored": temperature_ignored,
+        "use_rag": True if use_rag is None else bool(use_rag),
         "answer": answer,
         "latency_ms": latency_ms,
     }

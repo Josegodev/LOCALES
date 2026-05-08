@@ -10,6 +10,7 @@ TELEGRAM_TRACE_OPTIONAL_FIELDS = (
     "provider",
     "temperature",
     "temperature_ignored",
+    "use_rag",
     "tokens_input",
     "tokens_output",
     "tokens_total",

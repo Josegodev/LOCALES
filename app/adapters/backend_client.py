@@ -63,6 +63,7 @@ def ask_chat(
     model: str | None = None,
     max_tokens: int | None = None,
     temperature: float | None = None,
+    use_rag: bool | None = None,
     top_k: int | None = None,
     requests_module=requests,
     base_url: str = FASTAPI_URL,
@@ -76,6 +77,7 @@ def ask_chat(
         "model": model,
         "max_tokens": max_tokens,
         "temperature": temperature,
+        "use_rag": use_rag,
         "top_k": top_k,
     }
     for key, value in optional_fields.items():

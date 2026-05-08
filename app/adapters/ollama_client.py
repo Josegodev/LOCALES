@@ -116,6 +116,7 @@ def ask_chat(
     *,
     model: str | None = None,
     temperature: float | None = None,
+    use_rag: bool | None = None,
     num_predict: int | None = None,
     system_prompt: str | None = None,
     requests_module=requests,
@@ -190,6 +191,7 @@ def ask_chat(
         "model": response_model,
         "temperature": selected_temperature,
         "temperature_ignored": False,
+        "use_rag": True if use_rag is None else bool(use_rag),
         "answer": content.strip(),
         **metrics,
     }

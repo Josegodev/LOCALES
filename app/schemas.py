@@ -12,6 +12,7 @@ class ChatRequest(BaseModel):
     model: str | None = None
     max_tokens: int | None = Field(default=None, ge=1, le=2048)
     temperature: float = Field(default=0.2, ge=0.0, le=1.0)
+    use_rag: bool = True
     top_k: int | None = Field(default=3, ge=1, le=10)
     trace_id: str | None = Field(default=None, min_length=32, max_length=36)
     user_id: int | None = None
@@ -47,6 +48,7 @@ class ChatResponse(BaseModel):
     model: str
     temperature: float = 0.2
     temperature_ignored: bool = False
+    use_rag: bool = True
     answer: str
     latency_ms: int
     retrieval_status: str | None = None

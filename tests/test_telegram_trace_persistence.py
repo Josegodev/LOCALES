@@ -75,6 +75,7 @@ class TelegramTracePersistenceTests(unittest.TestCase):
                             "provider": "ollama",
                             "model": "granite4.1:8b",
                             "temperature": 0.2,
+                            "use_rag": True,
                             "status": "ok",
                             "latency_ms": 12,
                         },
@@ -97,6 +98,7 @@ class TelegramTracePersistenceTests(unittest.TestCase):
         self.assertEqual(payload["provider"], "ollama")
         self.assertEqual(payload["model"], "granite4.1:8b")
         self.assertEqual(payload["temperature"], 0.2)
+        self.assertTrue(payload["use_rag"])
         self.assertEqual(payload["status"], "ok")
         self.assertIsNone(payload["error_code"])
         self.assertIn("created_at", payload)
@@ -110,6 +112,7 @@ class TelegramTracePersistenceTests(unittest.TestCase):
                 "provider": "ollama",
                 "model": "granite4.1:8b",
                 "temperature": 0.2,
+                "use_rag": True,
                 "status": "ok",
                 "latency_ms": 12,
                 "prompt_eval_count": 1404,
@@ -125,6 +128,7 @@ class TelegramTracePersistenceTests(unittest.TestCase):
 
         self.assertEqual(payload["provider"], "ollama")
         self.assertEqual(payload["temperature"], 0.2)
+        self.assertTrue(payload["use_rag"])
         self.assertEqual(payload["tokens_input"], 1404)
         self.assertEqual(payload["tokens_output"], 77)
         self.assertEqual(payload["tokens_total"], 1481)
@@ -160,6 +164,7 @@ class TelegramTracePersistenceTests(unittest.TestCase):
                 "provider": "ollama",
                 "model": "granite4.1:8b",
                 "temperature": 0.2,
+                "use_rag": True,
                 "status": "ok",
                 "latency_ms": 12,
             },
@@ -167,6 +172,7 @@ class TelegramTracePersistenceTests(unittest.TestCase):
 
         self.assertEqual(payload["provider"], "ollama")
         self.assertEqual(payload["temperature"], 0.2)
+        self.assertTrue(payload["use_rag"])
         self.assertIsNone(payload["tokens_input"])
         self.assertIsNone(payload["tokens_output"])
         self.assertIsNone(payload["tokens_total"])
@@ -197,6 +203,7 @@ class TelegramTracePersistenceTests(unittest.TestCase):
                             "provider": "ollama",
                             "model": "granite4.1:8b",
                             "temperature": 0.2,
+                            "use_rag": True,
                             "status": "ok",
                             "latency_ms": 7,
                         },
@@ -228,6 +235,7 @@ class TelegramTracePersistenceTests(unittest.TestCase):
                     "provider": "ollama",
                     "model": "granite4.1:8b",
                     "temperature": 0.2,
+                    "use_rag": True,
                     "status": "ok",
                     "latency_ms": 4,
                 },

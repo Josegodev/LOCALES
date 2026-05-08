@@ -168,18 +168,27 @@ def chat(request: ChatRequest) -> ChatResponse:
     model = request.model or ""
     temperature = request.temperature
     temperature_ignored = False
+    use_rag = request.use_rag
+    context = {
+        "status": "DISABLED" if not use_rag else "unknown",
+        "prompt": request.message,
+        "chunks": [],
+    }
 
     try:
         provider, model = resolve_provider_model(provider, request.model)
-        context = build_document_prompt(request.message, limit=request.top_k or 3)
-        retrieval_status = str(context["status"])
-        if context["status"] == "EVIDENCE_FOUND" and _should_force_no_evidence(
-            request.message,
-            context.get("chunks", []),
-        ):
-            retrieval_status = "NO_EVIDENCE"
+        if use_rag:
+            context = build_document_prompt(request.message, limit=request.top_k or 3)
+            retrieval_status = str(context["status"])
+            if context["status"] == "EVIDENCE_FOUND" and _should_force_no_evidence(
+                request.message,
+                context.get("chunks", []),
+            ):
+                retrieval_status = "NO_EVIDENCE"
+        else:
+            retrieval_status = "DISABLED"
 
-        if retrieval_status != "EVIDENCE_FOUND":
+        if use_rag and retrieval_status != "EVIDENCE_FOUND":
             status = "ok"
             return ChatResponse(
                 status="ok",
@@ -187,6 +196,7 @@ def chat(request: ChatRequest) -> ChatResponse:
                 model=model,
                 temperature=temperature,
                 temperature_ignored=False,
+                use_rag=use_rag,
                 answer=_no_evidence_answer(),
                 latency_ms=0,
                 retrieval_status=retrieval_status,
@@ -201,6 +211,7 @@ def chat(request: ChatRequest) -> ChatResponse:
             model=model,
             max_tokens=request.max_tokens,
             temperature=request.temperature,
+            use_rag=use_rag,
         )
         result["latency_ms"] = int((time.perf_counter() - llm_started_at) * 1000)
         response_provider = result.get("provider")
@@ -211,8 +222,10 @@ def chat(request: ChatRequest) -> ChatResponse:
             temperature = float(result["temperature"])
         if isinstance(result.get("temperature_ignored"), bool):
             temperature_ignored = result["temperature_ignored"]
+        if isinstance(result.get("use_rag"), bool):
+            use_rag = result["use_rag"]
         status = "ok"
-        chunk_texts, chunk_ids = _extract_chunk_response_data(context.get("chunks", []))
+        chunk_texts, chunk_ids = _extract_chunk_response_data(context.get("chunks", [])) if use_rag else ([], [])
         response_payload = dict(result)
         if not isinstance(response_payload.get("provider"), str) or not response_payload["provider"].strip():
             response_payload["provider"] = provider
@@ -220,6 +233,8 @@ def chat(request: ChatRequest) -> ChatResponse:
             response_payload["temperature"] = temperature
         if not isinstance(response_payload.get("temperature_ignored"), bool):
             response_payload["temperature_ignored"] = temperature_ignored
+        if not isinstance(response_payload.get("use_rag"), bool):
+            response_payload["use_rag"] = use_rag
 
         return ChatResponse(
             **response_payload,
@@ -263,6 +278,7 @@ def chat(request: ChatRequest) -> ChatResponse:
             model=model,
             temperature=temperature,
             temperature_ignored=temperature_ignored,
+            use_rag=use_rag,
             status=status,
             latency_ms=int((time.perf_counter() - started_at) * 1000),
             error_code=error_code,

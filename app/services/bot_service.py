@@ -182,6 +182,9 @@ def _chat_trace_metadata(result: dict | None) -> dict:
     temperature_ignored = result.get("temperature_ignored")
     if not isinstance(temperature_ignored, bool):
         temperature_ignored = None
+    use_rag = result.get("use_rag")
+    if not isinstance(use_rag, bool):
+        use_rag = None
 
     tokens_total = None
     if prompt_eval_count is not None and eval_count is not None:
@@ -191,6 +194,7 @@ def _chat_trace_metadata(result: dict | None) -> dict:
         "provider": result.get("provider") if isinstance(result.get("provider"), str) else None,
         "temperature": temperature,
         "temperature_ignored": temperature_ignored,
+        "use_rag": use_rag,
         "tokens_input": prompt_eval_count,
         "tokens_output": eval_count,
         "tokens_total": tokens_total,
@@ -583,6 +587,7 @@ def handle_message(
                 trace_model = getattr(exc, "model", None)
                 trace_temperature = getattr(exc, "temperature", None)
                 trace_temperature_ignored = getattr(exc, "temperature_ignored", None)
+                trace_use_rag = getattr(exc, "use_rag", None)
                 if isinstance(trace_model, str) and trace_model.strip():
                     model = trace_model
                 if isinstance(trace_provider, str) and trace_provider.strip():
@@ -591,6 +596,8 @@ def handle_message(
                     trace_metadata["temperature"] = trace_temperature
                 if isinstance(trace_temperature_ignored, bool):
                     trace_metadata["temperature_ignored"] = trace_temperature_ignored
+                if isinstance(trace_use_rag, bool):
+                    trace_metadata["use_rag"] = trace_use_rag
                 log_event(
                     component="telegram.chat",
                     event="telegram.chat.failed",
@@ -621,6 +628,7 @@ def handle_message(
                 chat_id=message.chat_id,
                 user_id=message.user_id,
                 model=model,
+                use_rag=result.get("use_rag"),
                 status=status,
                 latency_ms=result.get("latency_ms", 0),
             )

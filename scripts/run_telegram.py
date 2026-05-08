@@ -23,6 +23,7 @@ FASTAPI_URL = backend_client.FASTAPI_URL
 DEFAULT_PROVIDER = "ollama"
 DEFAULT_MODEL = "granite4.1:8b"
 DEFAULT_TEMPERATURE = 0.2
+DEFAULT_USE_RAG = True
 MODEL_ALIASES: dict[str, tuple[str, str]] = {
     "granite": ("ollama", "granite4.1:8b"),
     "mistral": ("ollama", "mistral:latest"),
@@ -39,6 +40,7 @@ last_update_id = None
 SELECTED_PROVIDER = DEFAULT_PROVIDER
 SELECTED_MODEL = DEFAULT_MODEL
 SELECTED_TEMPERATURE = DEFAULT_TEMPERATURE
+SELECTED_USE_RAG = DEFAULT_USE_RAG
 
 DOC_COMMAND = bot_service.DOC_COMMAND
 DOC_USAGE_TEXT = bot_service.DOC_USAGE_TEXT
@@ -88,6 +90,28 @@ def select_temperature() -> float:
         return DEFAULT_TEMPERATURE
 
     return temperature
+
+
+def select_use_rag() -> bool:
+    try:
+        raw_value = input("Use RAG? (yes/no): ").strip()
+    except EOFError:
+        raw_value = ""
+
+    if raw_value == "":
+        return True
+
+    normalized = raw_value.casefold()
+    if normalized in {"yes", "y", "si", "sí", "s", "true", "1"}:
+        return True
+    if normalized in {"no", "n", "false", "0"}:
+        return False
+
+    print(
+        f"Aviso: valor de RAG invalido '{raw_value}'. Usando use_rag=True.",
+        file=sys.stderr,
+    )
+    return True
 
 
 def parse_doc_command(text: str, user_id: int | None, chat_id: int | None):
@@ -214,6 +238,7 @@ def ask_fastapi(
         "provider": SELECTED_PROVIDER,
         "model": SELECTED_MODEL,
         "temperature": SELECTED_TEMPERATURE,
+        "use_rag": SELECTED_USE_RAG,
     }
     optional_fields = {
         "trace_id": trace_id,
@@ -239,6 +264,7 @@ def ask_fastapi(
         error.provider = SELECTED_PROVIDER
         error.model = SELECTED_MODEL
         error.temperature = SELECTED_TEMPERATURE
+        error.use_rag = SELECTED_USE_RAG
         raise error
 
     try:
@@ -252,12 +278,15 @@ def ask_fastapi(
         error.provider = SELECTED_PROVIDER
         error.model = SELECTED_MODEL
         error.temperature = SELECTED_TEMPERATURE
+        error.use_rag = SELECTED_USE_RAG
         raise error from exc
 
     if not isinstance(data.get("provider"), str) or not data["provider"].strip():
         data["provider"] = SELECTED_PROVIDER
     if not isinstance(data.get("temperature"), (int, float)):
         data["temperature"] = SELECTED_TEMPERATURE
+    if not isinstance(data.get("use_rag"), bool):
+        data["use_rag"] = SELECTED_USE_RAG
 
     return data
 
@@ -283,13 +312,16 @@ def main() -> None:
     global SELECTED_PROVIDER
     global SELECTED_MODEL
     global SELECTED_TEMPERATURE
+    global SELECTED_USE_RAG
     consecutive_failures = 0
     SELECTED_PROVIDER, SELECTED_MODEL = select_model()
     SELECTED_TEMPERATURE = select_temperature()
+    SELECTED_USE_RAG = select_use_rag()
 
     print(f"Provider seleccionado: {SELECTED_PROVIDER}")
     print(f"Modelo seleccionado: {SELECTED_MODEL}")
     print(f"Temperature seleccionada: {SELECTED_TEMPERATURE}")
+    print(f"RAG seleccionado: {'enabled' if SELECTED_USE_RAG else 'disabled'}")
 
     log_event(
         component="telegram.polling",
@@ -299,9 +331,11 @@ def main() -> None:
         selected_provider=SELECTED_PROVIDER,
         selected_model=SELECTED_MODEL,
         selected_temperature=SELECTED_TEMPERATURE,
+        selected_use_rag=SELECTED_USE_RAG,
         provider=SELECTED_PROVIDER,
         model=SELECTED_MODEL,
         temperature=SELECTED_TEMPERATURE,
+        use_rag=SELECTED_USE_RAG,
     )
 
     while True:
