@@ -44,8 +44,31 @@ htmlcov/
 artifacts/
 
 # Runtime logs
-logs/telegram_runs/*.jsonl
+logs/telegram_runs/
 
 # Eval artifacts
-evals/runs/*.json
+evals/runs/
+evals/archive/
 
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Local env
+.env
+# Local SSH/private keys
+clavegit
+clavegit.pub
+*.pem
+*.key
+id_rsa
+id_ed25519
+
+# Local SQLite backups
+*.sqlite.backup*
+*.backup_before_*
+
+# Local Continue config
+.continue/
+.continueignore
