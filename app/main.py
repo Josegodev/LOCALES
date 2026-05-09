@@ -1,5 +1,6 @@
 import re
 import time
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from DB.chunks.document_context import build_document_prompt
@@ -48,9 +49,37 @@ def _should_force_no_evidence(query: str, chunks: list[dict]) -> bool:
     )
 
 
-def _extract_chunk_response_data(chunks: list[dict]) -> tuple[list[str], list[int]]:
+def _normalize_source_filename(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+
+    candidate = value.strip()
+    if not candidate:
+        return None
+
+    return Path(candidate).name
+
+
+def _extract_chunk_source_filename(chunk: dict) -> str | None:
+    for key in ("filename", "source_filename", "document_name", "source_path"):
+        filename = _normalize_source_filename(chunk.get(key))
+        if filename:
+            return filename
+
+    metadata = chunk.get("metadata")
+    if isinstance(metadata, dict):
+        for key in ("filename", "source_filename", "document_name", "source_path"):
+            filename = _normalize_source_filename(metadata.get(key))
+            if filename:
+                return filename
+
+    return None
+
+
+def _extract_chunk_response_data(chunks: list[dict]) -> tuple[list[str], list[int], list[str]]:
     chunk_texts: list[str] = []
     chunk_ids: list[int] = []
+    source_filenames: set[str] = set()
 
     for chunk in chunks:
         if not isinstance(chunk, dict):
@@ -63,12 +92,14 @@ def _extract_chunk_response_data(chunks: list[dict]) -> tuple[list[str], list[in
         chunk_id = chunk.get("id")
         if isinstance(chunk_id, int):
             chunk_ids.append(chunk_id)
-            continue
-
-        if isinstance(chunk_id, str) and chunk_id.isdigit():
+        elif isinstance(chunk_id, str) and chunk_id.isdigit():
             chunk_ids.append(int(chunk_id))
 
-    return chunk_texts, chunk_ids
+        source_filename = _extract_chunk_source_filename(chunk)
+        if source_filename:
+            source_filenames.add(source_filename)
+
+    return chunk_texts, chunk_ids, sorted(source_filenames)
 
 
 @app.get("/health")
@@ -178,7 +209,11 @@ def chat(request: ChatRequest) -> ChatResponse:
     try:
         provider, model = resolve_provider_model(provider, request.model)
         if use_rag:
-            context = build_document_prompt(request.message, limit=request.top_k or 3)
+            context = build_document_prompt(
+                request.message,
+                limit=request.top_k or 3,
+                allowed_source_filenames=request.allowed_source_filenames,
+            )
             retrieval_status = str(context["status"])
             if context["status"] == "EVIDENCE_FOUND" and _should_force_no_evidence(
                 request.message,
@@ -202,6 +237,7 @@ def chat(request: ChatRequest) -> ChatResponse:
                 retrieval_status=retrieval_status,
                 chunks=[],
                 chunk_ids=[],
+                source_filenames=[],
             )
 
         llm_started_at = time.perf_counter()
@@ -225,8 +261,12 @@ def chat(request: ChatRequest) -> ChatResponse:
         if isinstance(result.get("use_rag"), bool):
             use_rag = result["use_rag"]
         status = "ok"
-        chunk_texts, chunk_ids = _extract_chunk_response_data(context.get("chunks", [])) if use_rag else ([], [])
+        chunk_texts, chunk_ids, source_filenames = _extract_chunk_response_data(context.get("chunks", [])) if use_rag else ([], [], [])
         response_payload = dict(result)
+        response_payload.pop("retrieval_status", None)
+        response_payload.pop("chunks", None)
+        response_payload.pop("chunk_ids", None)
+        response_payload.pop("source_filenames", None)
         if not isinstance(response_payload.get("provider"), str) or not response_payload["provider"].strip():
             response_payload["provider"] = provider
         if not isinstance(response_payload.get("temperature"), (int, float)):
@@ -241,6 +281,7 @@ def chat(request: ChatRequest) -> ChatResponse:
             retrieval_status=retrieval_status,
             chunks=chunk_texts,
             chunk_ids=chunk_ids,
+            source_filenames=source_filenames,
         )
 
     except LLMClientError as exc:

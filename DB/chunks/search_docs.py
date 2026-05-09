@@ -1,74 +1,43 @@
 from __future__ import annotations
 
 import argparse
-import sqlite3
-from pathlib import Path
+
+try:
+    from .document_context import search_chunks as canonical_search_chunks
+except ImportError:
+    from document_context import search_chunks as canonical_search_chunks
 
 
-BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = BASE_DIR / "documents.sqlite"
-
-
-def search_chunks(query: str, limit: int = 5) -> list[dict]:
-    terms = [
-        term.strip().lower()
-        for term in query.replace(",", " ").replace(".", " ").split()
-        if len(term.strip()) >= 4
-    ]
-
-    if not terms:
-        return []
-
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-
-    try:
-        rows = conn.execute(
-            """
-            SELECT
-                chunks.id,
-                documents.filename,
-                chunks.chunk_index,
-                chunks.char_count,
-                chunks.text
-            FROM chunks
-            JOIN documents ON documents.id = chunks.document_id
-            """
-        ).fetchall()
-
-        ranked: list[dict] = []
-
-        for row in rows:
-            item = dict(row)
-            text_lower = item["text"].lower()
-
-            score = sum(1 for term in terms if term in text_lower)
-
-            if score > 0:
-                item["score"] = score
-                ranked.append(item)
-
-        ranked.sort(
-            key=lambda item: (
-                item["score"],
-                -item["chunk_index"],
-            ),
-            reverse=True,
-        )
-
-        return ranked[:limit]
-
-    finally:
-        conn.close()
+def search_chunks(
+    query: str,
+    limit: int = 5,
+    allowed_source_filenames: list[str] | None = None,
+) -> list[dict]:
+    """Compatibility wrapper over the canonical document retrieval."""
+    return canonical_search_chunks(
+        query=query,
+        limit=limit,
+        allowed_source_filenames=allowed_source_filenames,
+    )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("query")
     parser.add_argument("--limit", type=int, default=5)
+    parser.add_argument(
+        "--allowed-source-filename",
+        action="append",
+        default=[],
+        help="Restringe la búsqueda a filenames concretos. Se puede repetir.",
+    )
     args = parser.parse_args()
 
-    results = search_chunks(args.query, args.limit)
+    results = search_chunks(
+        query=args.query,
+        limit=args.limit,
+        allowed_source_filenames=args.allowed_source_filename,
+    )
 
     if not results:
         print("NO_RESULTS")

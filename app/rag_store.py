@@ -1,46 +1,24 @@
-import sqlite3
-from pathlib import Path
+from DB.chunks.document_context import search_chunks as canonical_search_chunks
 
 
-DB_PATH = Path("chunks/document_chunks.sqlite")
-
-
-def search_chunks(query: str, limit: int = 3) -> list[dict]:
-    terms = [t.strip().lower() for t in query.split() if len(t.strip()) > 2]
-
-    if not terms:
-        return []
-
-    sql = """
-    SELECT id, source, text
-    FROM chunks
-    WHERE lower(text) LIKE ?
-    LIMIT ?
-    """
-
-    results = []
-
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.row_factory = sqlite3.Row
-
-        for term in terms:
-            rows = conn.execute(sql, (f"%{term}%", limit)).fetchall()
-
-            for row in rows:
-                item = dict(row)
-                item["score"] = sum(
-                    1 for t in terms if t in item["text"].lower()
-                )
-                results.append(item)
-
-    dedup = {}
-    for item in results:
-        dedup[item["id"]] = item
-
-    ranked = sorted(
-        dedup.values(),
-        key=lambda x: x["score"],
-        reverse=True,
+def search_chunks(
+    query: str,
+    limit: int = 3,
+    allowed_source_filenames: list[str] | None = None,
+) -> list[dict]:
+    """App-facing compatibility wrapper over canonical document retrieval."""
+    results = canonical_search_chunks(
+        query=query,
+        limit=limit,
+        allowed_source_filenames=allowed_source_filenames,
     )
 
-    return ranked[:limit]
+    normalized_results: list[dict] = []
+    for item in results:
+        normalized_item = dict(item)
+        filename = normalized_item.get("filename")
+        if isinstance(filename, str) and filename.strip():
+            normalized_item.setdefault("source", filename)
+        normalized_results.append(normalized_item)
+
+    return normalized_results

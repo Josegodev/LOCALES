@@ -16,6 +16,7 @@ os.environ.setdefault("TELEGRAM_ALLOWED_USER_IDS", "123")
 from app import llm_client
 from app.adapters.backend_client import BackendClientError
 from app.adapters import openai_client
+from app.main import _extract_chunk_response_data
 from app.main import app
 from app.observability import log_event, new_trace_id
 from app.schemas import ChatResponse
@@ -162,6 +163,46 @@ class LocalesHardeningAuditTests(unittest.TestCase):
             max_tokens=None,
             temperature=0.4,
             use_rag=True,
+        )
+
+    def test_chat_endpoint_passes_allowed_source_filenames_to_rag_builder(self):
+        client = TestClient(app)
+
+        with patch(
+            "app.main.build_document_prompt",
+            return_value={
+                "status": "EVIDENCE_FOUND",
+                "prompt": "context prompt",
+                "chunks": [{"id": 346, "filename": "EVOLUTION_MAP.md", "text": "AgentRuntime"}],
+            },
+        ) as build_document_prompt_mock:
+            with patch(
+                "app.main.ask_chat",
+                return_value={
+                    "status": "ok",
+                    "provider": "ollama",
+                    "model": "granite4.1:8b",
+                    "temperature": 0.2,
+                    "use_rag": True,
+                    "answer": "OK",
+                },
+            ):
+                response = client.post(
+                    "/chat",
+                    json={
+                        "message": "hola",
+                        "trace_id": REQUEST_ID,
+                        "user_id": 123,
+                        "chat_id": 456,
+                        "allowed_source_filenames": ["/tmp/docs/EVOLUTION_MAP.md", "ARCHITECTURE.md"],
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        build_document_prompt_mock.assert_called_once_with(
+            "hola",
+            limit=3,
+            allowed_source_filenames=["EVOLUTION_MAP.md", "ARCHITECTURE.md"],
         )
 
     def test_chat_endpoint_disables_rag_when_requested(self):
@@ -350,7 +391,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
                 with patch("builtins.input", return_value=raw_value):
                     self.assertTrue(run_telegram.select_use_rag())
 
-    def test_chat_response_accepts_chunk_ids_separately_from_chunks(self):
+    def test_chat_response_accepts_chunk_ids_and_source_filenames_separately_from_chunks(self):
         response = ChatResponse(
             status="ok",
             provider="ollama",
@@ -361,12 +402,14 @@ class LocalesHardeningAuditTests(unittest.TestCase):
             retrieval_status="EVIDENCE_FOUND",
             chunks=["Fragmento A", "Fragmento B"],
             chunk_ids=[346, 206, 262],
+            source_filenames=["ARCHITECTURE.md", "POLICY.md"],
         )
 
         self.assertEqual(response.chunks, ["Fragmento A", "Fragmento B"])
         self.assertEqual(response.chunk_ids, [346, 206, 262])
+        self.assertEqual(response.source_filenames, ["ARCHITECTURE.md", "POLICY.md"])
 
-    def test_chat_endpoint_returns_chunk_ids_without_breaking_response_validation(self):
+    def test_chat_endpoint_returns_chunk_ids_and_source_filenames_without_breaking_response_validation(self):
         client = TestClient(app)
 
         with patch(
@@ -375,9 +418,9 @@ class LocalesHardeningAuditTests(unittest.TestCase):
                 "status": "EVIDENCE_FOUND",
                 "prompt": "context prompt",
                 "chunks": [
-                    {"id": 346, "text": "NUCLEO es un runtime local."},
-                    {"id": 206, "text": "Usa herramientas registradas."},
-                    {"id": 262, "text": "La política controla la ejecución."},
+                    {"id": 346, "text": "NUCLEO es un runtime local.", "filename": "ARCHITECTURE.md"},
+                    {"id": 206, "text": "Usa herramientas registradas.", "source_path": "/tmp/docs/ARCHITECTURE.md"},
+                    {"id": 262, "text": "La política controla la ejecución.", "metadata": {"source_path": "/srv/docs/POLICY.md"}},
                 ],
             },
         ):
@@ -406,6 +449,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         body = response.json()
         self.assertEqual(body["retrieval_status"], "EVIDENCE_FOUND")
         self.assertEqual(body["chunk_ids"], [346, 206, 262])
+        self.assertEqual(body["source_filenames"], ["ARCHITECTURE.md", "POLICY.md"])
         self.assertEqual(body["temperature"], 0.2)
         self.assertTrue(body["use_rag"])
         self.assertEqual(
@@ -416,6 +460,23 @@ class LocalesHardeningAuditTests(unittest.TestCase):
                 "La política controla la ejecución.",
             ],
         )
+
+    def test_extract_chunk_response_data_does_not_store_chunk_text_as_source_filename(self):
+        chunk_texts, chunk_ids, source_filenames = _extract_chunk_response_data(
+            [
+                {
+                    "id": 346,
+                    "text": "Contenido completo del chunk que no debe aparecer como filename.",
+                }
+            ]
+        )
+
+        self.assertEqual(
+            chunk_texts,
+            ["Contenido completo del chunk que no debe aparecer como filename."],
+        )
+        self.assertEqual(chunk_ids, [346])
+        self.assertEqual(source_filenames, [])
 
     def test_chat_endpoint_does_not_import_lmstudio_directly(self):
         source = Path("/home/jose-gonzalez-oliva/LOCALES/app/main.py").read_text(encoding="utf-8")
@@ -531,6 +592,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         body = response.json()
         self.assertTrue(body["answer"].startswith("NO_EVIDENCE_FOR_ANSWER"))
         self.assertEqual(body["retrieval_status"], "NO_EVIDENCE")
+        self.assertEqual(body["source_filenames"], [])
 
     def test_chat_forces_no_evidence_when_anchor_term_is_absent_from_chunks(self):
         client = TestClient(app)

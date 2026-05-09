@@ -17,6 +17,7 @@ class ChatRequest(BaseModel):
     trace_id: str | None = Field(default=None, min_length=32, max_length=36)
     user_id: int | None = None
     chat_id: int | None = None
+    allowed_source_filenames: list[str] = Field(default_factory=list)
 
     @field_validator("trace_id")
     @classmethod
@@ -42,6 +43,20 @@ class ChatRequest(BaseModel):
             raise ValueError("temperature_invalid")
         return value
 
+    @field_validator("allowed_source_filenames")
+    @classmethod
+    def validate_allowed_source_filenames(cls, value: list[str]) -> list[str]:
+        normalized_filenames: list[str] = []
+
+        for item in value:
+            filename = Path(item.strip()).name
+            if not filename:
+                raise ValueError("allowed_source_filename_invalid")
+            if filename not in normalized_filenames:
+                normalized_filenames.append(filename)
+
+        return normalized_filenames
+
 class ChatResponse(BaseModel):
     status: str
     provider: str
@@ -54,6 +69,7 @@ class ChatResponse(BaseModel):
     retrieval_status: str | None = None
     chunks: list[str] = Field(default_factory=list)
     chunk_ids: list[int] = Field(default_factory=list)
+    source_filenames: list[str] = Field(default_factory=list)
     prompt_eval_count: int | None = None
     eval_count: int | None = None
     prompt_eval_duration: int | None = None

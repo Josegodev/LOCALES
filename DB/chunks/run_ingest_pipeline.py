@@ -77,10 +77,18 @@ def validate_sqlite() -> None:
         conn.close()
 
 
-def validate_search(query: str, top_k: int) -> None:
+def validate_search(
+    query: str,
+    top_k: int,
+    allowed_source_filenames: list[str] | None = None,
+) -> None:
     print("== VALIDATE SEARCH_DOCS ==")
 
-    results = search_chunks(query=query, limit=top_k)
+    results = search_chunks(
+        query=query,
+        limit=top_k,
+        allowed_source_filenames=allowed_source_filenames,
+    )
 
     print(f"query: {query}")
     print(f"results: {len(results)}")
@@ -96,10 +104,18 @@ def validate_search(query: str, top_k: int) -> None:
         )
 
 
-def validate_document_context(query: str, top_k: int) -> None:
+def validate_document_context(
+    query: str,
+    top_k: int,
+    allowed_source_filenames: list[str] | None = None,
+) -> None:
     print("== VALIDATE DOCUMENT_CONTEXT ==")
 
-    context = build_document_prompt(query=query, limit=top_k)
+    context = build_document_prompt(
+        query=query,
+        limit=top_k,
+        allowed_source_filenames=allowed_source_filenames,
+    )
 
     print(f"status: {context['status']}")
     print(f"chunks: {[chunk['id'] for chunk in context['chunks']]}")
@@ -130,6 +146,12 @@ def main() -> None:
         default=3,
         help="Número de chunks a recuperar",
     )
+    parser.add_argument(
+        "--allowed-source-filename",
+        action="append",
+        default=[],
+        help="Restringe la validación a filenames concretos. Se puede repetir.",
+    )
     args = parser.parse_args()
 
     pdf_path = Path(args.pdf).resolve()
@@ -139,8 +161,8 @@ def main() -> None:
 
     run_ingest(pdf_path)
     validate_sqlite()
-    validate_search(args.query, args.top_k)
-    validate_document_context(args.query, args.top_k)
+    validate_search(args.query, args.top_k, args.allowed_source_filename)
+    validate_document_context(args.query, args.top_k, args.allowed_source_filename)
 
     print("== PIPELINE_OK ==")
 

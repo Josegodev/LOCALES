@@ -26,11 +26,33 @@ def normalize_terms(query: str) -> list[str]:
     ]
 
 
-def search_chunks(query: str, limit: int = 5) -> list[dict]:
+def normalize_source_filenames(values: list[str] | None) -> list[str]:
+    if not values:
+        return []
+
+    normalized: list[str] = []
+    for item in values:
+        filename = Path(item.strip()).name
+        if filename and filename not in normalized:
+            normalized.append(filename)
+    return normalized
+
+
+def search_chunks(
+    query: str,
+    limit: int = 5,
+    allowed_source_filenames: list[str] | None = None,
+) -> list[dict]:
+    """Canonical retrieval path for documents.sqlite searches."""
     terms = normalize_terms(query)
 
     if not terms:
         return []
+
+    allowed_filenames = {
+        filename.lower()
+        for filename in normalize_source_filenames(allowed_source_filenames)
+    }
 
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -53,6 +75,8 @@ def search_chunks(query: str, limit: int = 5) -> list[dict]:
 
         for row in rows:
             item = dict(row)
+            if allowed_filenames and str(item["filename"]).lower() not in allowed_filenames:
+                continue
             text_lower = item["text"].lower()
 
             score = sum(1 for term in terms if term in text_lower)
@@ -75,8 +99,16 @@ def search_chunks(query: str, limit: int = 5) -> list[dict]:
         conn.close()
 
 
-def build_document_prompt(query: str, limit: int = 5) -> dict:
-    chunks = search_chunks(query=query, limit=limit)
+def build_document_prompt(
+    query: str,
+    limit: int = 5,
+    allowed_source_filenames: list[str] | None = None,
+) -> dict:
+    chunks = search_chunks(
+        query=query,
+        limit=limit,
+        allowed_source_filenames=allowed_source_filenames,
+    )
 
     if not chunks:
         return {

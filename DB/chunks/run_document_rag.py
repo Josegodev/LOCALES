@@ -6,14 +6,22 @@ from document_context import build_document_prompt
 from lmstudio_client import ask_lmstudio
 
 
-def ask_once(query: str, top_k: int) -> None:
+def ask_once(
+    query: str,
+    top_k: int,
+    allowed_source_filenames: list[str] | None = None,
+) -> None:
     query = query.strip()
 
     if not query:
         print("ERROR: pregunta vacía")
         return
 
-    context = build_document_prompt(query, limit=top_k)
+    context = build_document_prompt(
+        query,
+        limit=top_k,
+        allowed_source_filenames=allowed_source_filenames,
+    )
 
     print("\nretrieval_status:", context["status"])
     print("chunks:", [chunk["id"] for chunk in context["chunks"]])
@@ -31,7 +39,7 @@ def ask_once(query: str, top_k: int) -> None:
     print(answer)
 
 
-def interactive_loop(top_k: int) -> None:
+def interactive_loop(top_k: int, allowed_source_filenames: list[str] | None = None) -> None:
     print("RAG documental local listo.")
     print("Escribe una pregunta y pulsa Enter.")
     print("Comandos: /exit para salir, /quit para salir.\n")
@@ -47,7 +55,7 @@ def interactive_loop(top_k: int) -> None:
             print("Saliendo.")
             break
 
-        ask_once(query=query, top_k=top_k)
+        ask_once(query=query, top_k=top_k, allowed_source_filenames=allowed_source_filenames)
         print("\n" + "-" * 80 + "\n")
 
 
@@ -64,13 +72,26 @@ def main() -> None:
         default=3,
         help="Número máximo de chunks recuperados",
     )
+    parser.add_argument(
+        "--allowed-source-filename",
+        action="append",
+        default=[],
+        help="Restringe la búsqueda a filenames concretos. Se puede repetir.",
+    )
     args = parser.parse_args()
 
     if args.query:
-        ask_once(query=args.query, top_k=args.top_k)
+        ask_once(
+            query=args.query,
+            top_k=args.top_k,
+            allowed_source_filenames=args.allowed_source_filename,
+        )
         return
 
-    interactive_loop(top_k=args.top_k)
+    interactive_loop(
+        top_k=args.top_k,
+        allowed_source_filenames=args.allowed_source_filename,
+    )
 
 
 if __name__ == "__main__":
