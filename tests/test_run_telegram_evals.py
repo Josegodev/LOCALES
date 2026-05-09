@@ -18,6 +18,11 @@ class FakeResponse:
 
 
 class RunTelegramEvalsTests(unittest.TestCase):
+    def build_case_with_forbidden_sources(self) -> dict:
+        case = dict(run_telegram_evals.INITIAL_CASES[0])
+        case["forbidden_source_filenames"] = ["UNRELATED_NOTES.md"]
+        return case
+
     def test_parse_temperatures_returns_expected_list(self):
         self.assertEqual(
             run_telegram_evals.parse_temperatures("0.2,0.7,1.0"),
@@ -114,17 +119,17 @@ class RunTelegramEvalsTests(unittest.TestCase):
 
     def test_evaluate_response_fails_when_forbidden_source_is_retrieved(self):
         result = run_telegram_evals.evaluate_response(
-            run_telegram_evals.INITIAL_CASES[0],
+            self.build_case_with_forbidden_sources(),
             {
                 "status": "ok",
                 "retrieval_status": "EVIDENCE_FOUND",
                 "chunk_ids": [1],
-                "source_filenames": ["MEMORIA 27.12.2021.pdf"],
+                "source_filenames": ["UNRELATED_NOTES.md"],
                 "response": "El AgentRuntime es el orquestador de producción.",
             },
         )
 
-        self.assertEqual(result["forbidden_sources_found"], ["MEMORIA 27.12.2021.pdf"])
+        self.assertEqual(result["forbidden_sources_found"], ["UNRELATED_NOTES.md"])
         self.assertFalse(result["retrieval_source_ok"])
         self.assertFalse(result["pass"])
         self.assertEqual(result["drift_score"], 3)
@@ -229,7 +234,7 @@ class RunTelegramEvalsTests(unittest.TestCase):
                     "pass": False,
                     "drift_score": 3,
                     "forbidden_terms_found": [],
-                    "forbidden_sources_found": ["MEMORIA 27.12.2021.pdf"],
+                    "forbidden_sources_found": ["UNRELATED_NOTES.md"],
                     "source_filename_match": False,
                     "retrieval_source_ok": False,
                 },

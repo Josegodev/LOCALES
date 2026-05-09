@@ -40,7 +40,6 @@ INITIAL_CASES = [
         "expected_terms": ["AgentRuntime", "orquestador", "producción"],
         "allowed_source_filenames": NUCLEO_ALLOWED_SOURCE_FILENAMES,
         "expected_source_filenames": ["EVOLUTION_MAP.md"],
-        "forbidden_source_filenames": ["MEMORIA 27.12.2021.pdf", "CVjgo.pdf"],
         "forbidden_terms": [
             "supervisor de producción",
             "API, runtime y tools de producción",
