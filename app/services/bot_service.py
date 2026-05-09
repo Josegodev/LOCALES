@@ -8,7 +8,7 @@ from app.adapters import backend_client
 from app.config import settings
 from app.contracts import ParsedDocAiCommand, ParsedDocCommand, TelegramMessage, TraceContext
 from app.llm_client import LLMClientError, generate_markdown
-from app.observability import append_telegram_trace, log_event, new_trace_id
+from app.observability import append_telegram_trace, log_event, new_trace_id, write_telegram_eval_run
 from app.schemas import CreateDocumentRequest
 from app.telegram_permissions import TelegramPermissionConfigError, is_telegram_user_allowed
 
@@ -185,6 +185,18 @@ def _chat_trace_metadata(result: dict | None) -> dict:
     use_rag = result.get("use_rag")
     if not isinstance(use_rag, bool):
         use_rag = None
+    warnings = result.get("warnings")
+    if not isinstance(warnings, list) or not all(isinstance(item, str) for item in warnings):
+        warnings = []
+    generation_config = result.get("generation_config")
+    if not isinstance(generation_config, dict):
+        generation_config = None
+    top_k = result.get("top_k")
+    if not isinstance(top_k, int):
+        top_k = None
+    source_filenames = result.get("source_filenames")
+    if not isinstance(source_filenames, list) or not all(isinstance(item, str) for item in source_filenames):
+        source_filenames = []
 
     tokens_total = None
     if prompt_eval_count is not None and eval_count is not None:
@@ -194,6 +206,10 @@ def _chat_trace_metadata(result: dict | None) -> dict:
         "provider": result.get("provider") if isinstance(result.get("provider"), str) else None,
         "temperature": temperature,
         "temperature_ignored": temperature_ignored,
+        "generation_config": generation_config,
+        "prompt_version": "telegram_rag_v1",
+        "top_k": top_k,
+        "source_filenames": source_filenames,
         "use_rag": use_rag,
         "tokens_input": prompt_eval_count,
         "tokens_output": eval_count,
@@ -208,6 +224,7 @@ def _chat_trace_metadata(result: dict | None) -> dict:
         "output_tokens_per_second": _safe_token_rate(eval_count, eval_duration),
         "retrieval_status": result.get("retrieval_status"),
         "chunk_ids": chunk_ids,
+        "warnings": warnings,
     }
 
 
@@ -534,7 +551,12 @@ def handle_message(
     model: str | None = None
     status = "error"
     error_code: str | None = None
-    trace_metadata: dict = {}
+    error_message: str | None = None
+    trace_metadata: dict = {
+        "prompt_version": "telegram_rag_v1",
+        "top_k": None,
+        "source_filenames": [],
+    }
 
     log_event(
         component="telegram.message",
@@ -588,6 +610,9 @@ def handle_message(
                 trace_temperature = getattr(exc, "temperature", None)
                 trace_temperature_ignored = getattr(exc, "temperature_ignored", None)
                 trace_use_rag = getattr(exc, "use_rag", None)
+                trace_generation_config = getattr(exc, "generation_config", None)
+                trace_top_k = getattr(exc, "top_k", None)
+                trace_source_filenames = getattr(exc, "source_filenames", None)
                 if isinstance(trace_model, str) and trace_model.strip():
                     model = trace_model
                 if isinstance(trace_provider, str) and trace_provider.strip():
@@ -596,6 +621,12 @@ def handle_message(
                     trace_metadata["temperature"] = trace_temperature
                 if isinstance(trace_temperature_ignored, bool):
                     trace_metadata["temperature_ignored"] = trace_temperature_ignored
+                if isinstance(trace_generation_config, dict):
+                    trace_metadata["generation_config"] = trace_generation_config
+                if isinstance(trace_top_k, int):
+                    trace_metadata["top_k"] = trace_top_k
+                if isinstance(trace_source_filenames, list) and all(isinstance(item, str) for item in trace_source_filenames):
+                    trace_metadata["source_filenames"] = trace_source_filenames
                 if isinstance(trace_use_rag, bool):
                     trace_metadata["use_rag"] = trace_use_rag
                 log_event(
@@ -609,6 +640,7 @@ def handle_message(
                     latency_ms=0,
                 )
                 error_code = exc.code
+                error_message = exc.message
                 response_text = _doc_error_reply("No se pudo procesar el mensaje.", trace.trace_id)
                 send_message_fn(
                     message.chat_id,
@@ -635,6 +667,7 @@ def handle_message(
             send_message_fn(message.chat_id, answer)
     except Exception as exc:
         error_code = exc.__class__.__name__
+        error_message = str(exc)
         response_text = f"ERROR: {exc}"
         log_event(
             component="telegram.message",
@@ -647,6 +680,7 @@ def handle_message(
         )
         send_message_fn(message.chat_id, response_text)
     finally:
+        final_latency_ms = int((time.perf_counter() - started_at) * 1000)
         try:
             append_telegram_trace(
                 trace_id=trace.trace_id,
@@ -659,10 +693,12 @@ def handle_message(
                 model=model,
                 status=status,
                 error_code=error_code,
-                latency_ms=int((time.perf_counter() - started_at) * 1000),
+                latency_ms=final_latency_ms,
                 created_at=created_at,
                 include_text=settings.telegram_trace_include_text,
                 text=message.text,
+                response_text=response_text,
+                error_message=error_message,
                 metadata=trace_metadata,
             )
         except Exception as exc:
@@ -675,6 +711,36 @@ def handle_message(
                 status="error",
                 reason=exc.__class__.__name__,
             )
+        try:
+            write_telegram_eval_run(
+                trace_id=trace.trace_id,
+                request_id=trace.trace_id,
+                chat_id=message.chat_id,
+                user_id=message.user_id,
+                command=command,
+                model=model,
+                input_text=message.text,
+                response_text=response_text,
+                status=status,
+                latency_ms=final_latency_ms,
+                error_code=error_code,
+                error_message=error_message,
+                created_at=created_at,
+                include_text=settings.telegram_trace_include_text,
+                metadata=trace_metadata,
+            )
+        except Exception as exc:
+            log_event(
+                component="telegram.eval",
+                event="telegram.eval.persist_failed",
+                trace_id=trace.trace_id,
+                chat_id=message.chat_id,
+                user_id=message.user_id,
+                status="error",
+                reason=exc.__class__.__name__,
+            )
+
+
 def main_loop(
     *,
     get_updates_fn: Callable[[], list[dict]],

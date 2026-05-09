@@ -24,6 +24,7 @@ DEFAULT_PROVIDER = "ollama"
 DEFAULT_MODEL = "granite4.1:8b"
 DEFAULT_TEMPERATURE = 0.2
 DEFAULT_USE_RAG = True
+DEFAULT_TOP_K = 3
 MODEL_ALIASES: dict[str, tuple[str, str]] = {
     "granite": ("ollama", "granite4.1:8b"),
     "mistral": ("ollama", "mistral:latest"),
@@ -239,6 +240,7 @@ def ask_fastapi(
         "model": SELECTED_MODEL,
         "temperature": SELECTED_TEMPERATURE,
         "use_rag": SELECTED_USE_RAG,
+        "top_k": DEFAULT_TOP_K,
     }
     optional_fields = {
         "trace_id": trace_id,
@@ -265,6 +267,7 @@ def ask_fastapi(
         error.model = SELECTED_MODEL
         error.temperature = SELECTED_TEMPERATURE
         error.use_rag = SELECTED_USE_RAG
+        error.top_k = DEFAULT_TOP_K
         raise error
 
     try:
@@ -279,6 +282,7 @@ def ask_fastapi(
         error.model = SELECTED_MODEL
         error.temperature = SELECTED_TEMPERATURE
         error.use_rag = SELECTED_USE_RAG
+        error.top_k = DEFAULT_TOP_K
         raise error from exc
 
     if not isinstance(data.get("provider"), str) or not data["provider"].strip():
@@ -287,6 +291,10 @@ def ask_fastapi(
         data["temperature"] = SELECTED_TEMPERATURE
     if not isinstance(data.get("use_rag"), bool):
         data["use_rag"] = SELECTED_USE_RAG
+    if not isinstance(data.get("top_k"), int):
+        data["top_k"] = DEFAULT_TOP_K
+    if not isinstance(data.get("source_filenames"), list):
+        data["source_filenames"] = []
 
     return data
 
