@@ -57,9 +57,9 @@ class DocumentContextTests(unittest.TestCase):
                     VALUES (?, ?, ?, ?, ?)
                     """,
                     (
-                        "MEMORIA 27.12.2021.pdf",
-                        "/docs/MEMORIA 27.12.2021.pdf",
-                        "sha-memoria",
+                        "UNRELATED_NOTES.md",
+                        "/docs/UNRELATED_NOTES.md",
+                        "sha-unrelated",
                         "AgentRuntime texto contaminante",
                         "2026-05-09T00:00:00Z",
                     ),

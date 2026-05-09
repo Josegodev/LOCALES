@@ -12,7 +12,14 @@ from search_docs import search_chunks
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "documents.sqlite"
-DEFAULT_PDF = BASE_DIR / "pdf" / "MEMORIA 27.12.2021.pdf"
+
+
+def default_pdf_path() -> Path | None:
+    pdf_dir = BASE_DIR / "pdf"
+    pdf_candidates = sorted(pdf_dir.glob("*.pdf"))
+    if not pdf_candidates:
+        return None
+    return pdf_candidates[0]
 
 
 def run_ingest(pdf_path: Path) -> None:
@@ -129,11 +136,12 @@ def validate_document_context(
 
 
 def main() -> None:
+    default_pdf = default_pdf_path()
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--pdf",
-        default=str(DEFAULT_PDF),
-        help="Ruta al PDF a ingerir",
+        default=str(default_pdf) if default_pdf is not None else "",
+        help="Ruta al PDF a ingerir. Si se omite, usa el primer PDF disponible en DB/chunks/pdf.",
     )
     parser.add_argument(
         "--query",
@@ -153,6 +161,9 @@ def main() -> None:
         help="Restringe la validación a filenames concretos. Se puede repetir.",
     )
     args = parser.parse_args()
+
+    if not args.pdf.strip():
+        raise FileNotFoundError("No hay PDF por defecto disponible. Indica --pdf explícitamente.")
 
     pdf_path = Path(args.pdf).resolve()
 

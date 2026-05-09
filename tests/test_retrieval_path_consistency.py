@@ -46,7 +46,7 @@ def _create_documents_sqlite(db_path: Path) -> None:
                 "/docs/CONTRACT_POLICY_TOOLREGISTRY.md",
                 "sha-contract",
             ),
-            ("MEMORIA 27.12.2021.pdf", "/docs/MEMORIA 27.12.2021.pdf", "sha-memoria"),
+            ("UNRELATED_NOTES.md", "/docs/UNRELATED_NOTES.md", "sha-unrelated"),
         ]
         for filename, source_path, sha256 in documents:
             conn.execute(
@@ -82,7 +82,7 @@ def _create_documents_sqlite(db_path: Path) -> None:
             (
                 4,
                 0,
-                "La memoria antigua también menciona orquestador y AgentRuntime fuera del dominio NUCLEO.",
+                "Las notas ajenas también mencionan orquestador y AgentRuntime fuera del dominio NUCLEO.",
             ),
         ]
         for document_id, chunk_index, text in chunks:
@@ -122,7 +122,7 @@ class RetrievalPathConsistencyTests(unittest.TestCase):
             sorted({item["filename"] for item in results}),
             ["ARCHITECTURE.md", "EVOLUTION_MAP.md"],
         )
-        self.assertNotIn("MEMORIA 27.12.2021.pdf", [item["filename"] for item in results])
+        self.assertNotIn("UNRELATED_NOTES.md", [item["filename"] for item in results])
 
     def test_rag_store_filters_by_allowed_source_filenames_and_preserves_source_alias(self):
         with TemporaryDirectory() as tmpdir:
@@ -151,7 +151,7 @@ class RetrievalPathConsistencyTests(unittest.TestCase):
                     limit=10,
                 )
 
-        self.assertIn("MEMORIA 27.12.2021.pdf", [item["filename"] for item in results])
+        self.assertIn("UNRELATED_NOTES.md", [item["filename"] for item in results])
 
     def test_build_document_prompt_returns_no_evidence_when_allowlist_has_no_matches(self):
         with TemporaryDirectory() as tmpdir:
@@ -168,7 +168,7 @@ class RetrievalPathConsistencyTests(unittest.TestCase):
         self.assertEqual(context["status"], "NO_EVIDENCE")
         self.assertEqual(context["chunks"], [])
 
-    def test_regression_orchestrator_query_never_returns_memoria_when_allowlisted(self):
+    def test_regression_orchestrator_query_only_returns_allowlisted_sources(self):
         allowed_source_filenames = [
             "EVOLUTION_MAP.md",
             "ARCHITECTURE.md",
@@ -187,7 +187,7 @@ class RetrievalPathConsistencyTests(unittest.TestCase):
                 )
 
         source_filenames = [item["filename"] for item in results]
-        self.assertNotIn("MEMORIA 27.12.2021.pdf", source_filenames)
+        self.assertNotIn("UNRELATED_NOTES.md", source_filenames)
         self.assertTrue(source_filenames)
         self.assertTrue(set(source_filenames).issubset(set(allowed_source_filenames)))
 
