@@ -110,3 +110,6 @@ logs/
 logs/telegram_runs/
 evals/runs/
 *.jsonl
+
+# RAG source PDFs - keep out of repo
+DB/chunks/pdf/*.pdf
