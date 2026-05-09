@@ -88,3 +88,25 @@ id_ed25519
 # Local Continue config
 .continue/
 .continueignore
+
+# Local secrets
+clavegit
+clavegit.pub
+*.pem
+*.key
+id_rsa
+id_ed25519
+
+# Local SQLite backups
+*.sqlite.backup*
+*.backup_before_*
+
+# Local Continue config
+.continue/
+.continueignore
+
+# Runtime/eval outputs
+logs/
+logs/telegram_runs/
+evals/runs/
+*.jsonl
