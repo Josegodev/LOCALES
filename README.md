@@ -80,6 +80,14 @@ Si la API corre en Windows y el bot en Linux, una comprobación mínima desde Li
 curl http://IP_WINDOWS:8000/health
 ```
 
+## Distributed RAG over LAN
+
+LOCALES puede ejecutarse en modo distribuido dentro de la LAN: Linux mantiene el corpus RAG y Ollama, mientras Windows puede ejecutar FastAPI y consumir evidencias por HTTP.
+
+Guía operativa completa:
+
+- `docs/distributed_rag_lan.md`
+
 ## Uso rápido
 
 Arranque local del backend y del bot:
