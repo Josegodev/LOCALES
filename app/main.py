@@ -566,6 +566,17 @@ def chat(request: ChatRequest) -> ChatResponse:
         "warnings": [],
     }
 
+    log_event(
+        component="fastapi.chat.request",
+        event="main_chat_request_received",
+        trace_id=trace_id,
+        endpoint="/chat",
+        provider=provider,
+        model=request.model,
+        rag_enabled=use_rag,
+        message_length=len(request.message),
+    )
+
     try:
         provider, model = resolve_provider_model(provider, request.model)
         active_document_title = _normalize_active_document_title(request.active_document_title)
@@ -790,6 +801,7 @@ def chat(request: ChatRequest) -> ChatResponse:
             component="fastapi.chat",
             event="fastapi.chat.completed" if status == "ok" else "fastapi.chat.failed",
             trace_id=trace_id,
+            endpoint="/chat",
             chat_id=request.chat_id,
             user_id=request.user_id,
             provider=provider,
@@ -800,7 +812,10 @@ def chat(request: ChatRequest) -> ChatResponse:
             status=status,
             latency_ms=int((time.perf_counter() - started_at) * 1000),
             error_code=error_code,
+            error_type=error_code,
             retrieval_status=retrieval_status,
+            rag_enabled=use_rag,
+            message_length=len(request.message),
             chunks_found=len(context.get("chunks", [])),
             query_original=context.get("query_original"),
             query_normalized=context.get("query_normalized"),

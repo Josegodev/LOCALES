@@ -72,6 +72,27 @@ function prettyJson(value) {
   return JSON.stringify(value, null, 2);
 }
 
+function truncateText(value, limit = 1200) {
+  if (typeof value !== "string") {
+    return valueOrDash(value);
+  }
+  if (value.length <= limit) {
+    return value;
+  }
+  return `${value.slice(0, limit)}\n...[truncated ${value.length - limit} chars]`;
+}
+
+function summarizeChatPayload(data) {
+  const payload = { ...data };
+  if (Array.isArray(payload.chunks)) {
+    payload.chunks = payload.chunks.map((chunk) => truncateText(chunk, 600));
+  }
+  if (typeof payload.answer === "string") {
+    payload.answer = truncateText(payload.answer, 4000);
+  }
+  return payload;
+}
+
 function updateBackendLinks() {
   const baseUrl = backendBaseUrl();
   localStorage.setItem("locales.backendUrl", baseUrl);
@@ -173,6 +194,39 @@ function valueOrDash(value) {
   return String(value);
 }
 
+function clearChatOutput() {
+  elements.retrievalStatus.textContent = "-";
+  elements.evidenceUsed.textContent = "-";
+  elements.fallbackUsed.textContent = "-";
+  elements.chunksFound.textContent = "-";
+  elements.providerModel.textContent = "-";
+  elements.traceId.textContent = "-";
+  elements.chatLatency.textContent = "-";
+  elements.warningsText.textContent = "-";
+}
+
+function setChatPending(isPending) {
+  elements.chatButton.disabled = isPending;
+  elements.chatButton.textContent = isPending ? "Sending..." : "Send";
+}
+
+function visibleChatErrorMessage(error) {
+  const detail = error?.data?.detail;
+  if (detail && typeof detail === "object") {
+    const detailMessage = detail.message || detail.code;
+    if (detailMessage) {
+      return String(detailMessage);
+    }
+  }
+  if (error?.data?.message) {
+    return String(error.data.message);
+  }
+  if (error?.message === "Failed to fetch") {
+    return "Failed to fetch. Revisa Backend base URL, CORS y que FastAPI este accesible desde el navegador.";
+  }
+  return error?.message || "Error inesperado llamando al backend.";
+}
+
 function renderEvidence(data) {
   const chunks = Array.isArray(data.chunks) ? data.chunks : [];
   const filenames = Array.isArray(data.source_filenames) ? data.source_filenames : [];
@@ -201,7 +255,7 @@ function renderEvidence(data) {
     `;
 
     const snippet = document.createElement("pre");
-    snippet.textContent = valueOrDash(chunks[index]);
+    snippet.textContent = truncateText(chunks[index], 900);
     item.append(meta, snippet);
     elements.evidenceList.appendChild(item);
   }
@@ -209,6 +263,7 @@ function renderEvidence(data) {
 
 async function sendChat() {
   updateBackendLinks();
+  setChatPending(true);
   const payload = {
     message: elements.messageInput.value.trim(),
     use_rag: elements.useRagInput.checked,
@@ -216,11 +271,15 @@ async function sendChat() {
 
   if (!payload.message) {
     setStatus(elements.chatStatus, "Escribe un mensaje antes de enviar", "error");
+    setChatPending(false);
     return;
   }
 
   setStatus(elements.chatStatus, "Enviando a /chat...", "muted");
   elements.chatRaw.textContent = prettyJson({ request: payload });
+  elements.answerText.textContent = "Esperando respuesta...";
+  clearChatOutput();
+  renderEvidence({});
 
   try {
     const { data, latencyMs } = await fetchJsonWithLatency(`${requireBackendBaseUrl()}/chat`, {
@@ -239,14 +298,18 @@ async function sendChat() {
     elements.chatLatency.textContent = String(latencyMs);
     elements.answerText.textContent = valueOrDash(data.answer);
     elements.warningsText.textContent = Array.isArray(data.warnings) && data.warnings.length ? data.warnings.join("\n") : "-";
-    elements.chatRaw.textContent = prettyJson(data);
+    elements.chatRaw.textContent = prettyJson(summarizeChatPayload(data));
     renderEvidence(data);
   } catch (error) {
     setStatus(elements.chatStatus, "Error llamando a /chat", "error");
+    clearChatOutput();
     elements.chatLatency.textContent = error.latencyMs ? String(error.latencyMs) : "-";
-    elements.answerText.textContent = error.message;
+    elements.answerText.textContent = visibleChatErrorMessage(error);
+    elements.warningsText.textContent = "La llamada al backend ha fallado.";
     elements.chatRaw.textContent = error.data ? prettyJson(error.data) : error.message;
     renderEvidence({});
+  } finally {
+    setChatPending(false);
   }
 }
 
