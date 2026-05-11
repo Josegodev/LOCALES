@@ -4,6 +4,8 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from DB.chunks.document_context import build_document_prompt, detect_source_intent, normalize_terms
+from app.config import settings
+from app.rag_client import query_remote_rag
 from app.observability import new_trace_id
 from app.observability import log_event
 from app.llm_client import LLMClientError, ask_chat, resolve_provider_model
@@ -515,21 +517,34 @@ def chat(request: ChatRequest) -> ChatResponse:
             active_document_title=active_document_title,
         )
         if use_rag:
-            rag_kwargs = {
-                "limit": request.top_k or 3,
-                "allowed_source_filenames": request.allowed_source_filenames,
-            }
-            if request.active_document_id is not None or active_document_title is not None:
-                rag_kwargs.update(
-                    active_document_id=request.active_document_id if use_active_context else None,
-                    active_document_title=active_document_title if use_active_context else None,
-                    allow_active_document_fallback=use_active_context,
-                    active_context_reason=active_context_reason,
+            top_k = request.top_k or 3
+            if settings.use_remote_rag:
+                context = query_remote_rag(
+                    query=request.message,
+                    top_k=top_k,
+                    trace_id=trace_id,
+                    allowed_source_filenames=request.allowed_source_filenames,
                 )
-            context = build_document_prompt(
-                request.message,
-                **rag_kwargs,
-            )
+            else:
+                rag_kwargs = {
+                    "limit": top_k,
+                    "allowed_source_filenames": request.allowed_source_filenames,
+                }
+                if request.active_document_id is not None or active_document_title is not None:
+                    rag_kwargs.update(
+                        active_document_id=request.active_document_id if use_active_context else None,
+                        active_document_title=active_document_title if use_active_context else None,
+                        allow_active_document_fallback=use_active_context,
+                        active_context_reason=active_context_reason,
+                    )
+                context = build_document_prompt(
+                    request.message,
+                    **rag_kwargs,
+                )
+            context.setdefault("status", context.get("retrieval_status", "unknown"))
+            context.setdefault("prompt", request.message)
+            context.setdefault("chunks", [])
+            context.setdefault("warnings", [])
             context["active_document_id"] = request.active_document_id
             context["active_document_title"] = active_document_title
             context["active_context_used"] = bool(context.get("active_context_used"))
