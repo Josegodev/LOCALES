@@ -1,7 +1,7 @@
 import math
 import uuid
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -94,7 +94,7 @@ class ChatResponse(BaseModel):
     document_ids: list[int] = Field(default_factory=list)
     source_filenames: list[str] = Field(default_factory=list)
     scores: list[int] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
+    warnings: list[Any] = Field(default_factory=list)
     prompt_eval_count: int | None = None
     eval_count: int | None = None
     prompt_eval_duration: int | None = None

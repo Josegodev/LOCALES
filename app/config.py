@@ -1,7 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-
 class Settings(BaseSettings):
     backend_url: str = "http://127.0.0.1:8000"
     lmstudio_base_url: str = "http://127.0.0.1:1234"
@@ -27,6 +26,7 @@ class Settings(BaseSettings):
     repo_analyzer_model: str = "granite4.1:8b"
     repo_analyzer_temperature: float = 0.2
     openai_api_key: str | None = None
+    documents_db_path: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",
