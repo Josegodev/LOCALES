@@ -8,14 +8,33 @@ from app.adapters import backend_client
 from app.config import settings
 from app.contracts import ParsedDocAiCommand, ParsedDocCommand, TelegramMessage, TraceContext
 from app.llm_client import LLMClientError, generate_markdown
-from app.observability import append_telegram_trace, log_event, new_trace_id, write_telegram_eval_run
+from app.observability import (
+    append_telegram_trace,
+    log_event,
+    new_trace_id,
+    write_telegram_conversation_record,
+    write_telegram_eval_run,
+)
 from app.schemas import CreateDocumentRequest
+from app.services.repo_analyzer_service import (
+    build_repo_trace_metadata,
+    handle_repo_command,
+    is_repo_command,
+)
 from app.telegram_permissions import TelegramPermissionConfigError, is_telegram_user_allowed
 
 DOC_COMMAND = "doc.create"
 DOC_USAGE_TEXT = "Uso: /doc nombre.md\\ncontenido"
 DOC_AI_COMMAND = "doc_ai.create"
 DOC_AI_USAGE_TEXT = "Uso: /doc_ai nombre.md\\ninstrucción para el modelo"
+NO_EVIDENCE_MARKER = "NO_EVIDENCE_FOR_ANSWER"
+NO_EVIDENCE_EXPLANATION = "No hay evidencia documental suficiente para responder."
+ANSWER_MODE_DOCUMENTARY = "documentary_answer"
+ANSWER_MODE_SAFE_REFUSAL = "safe_refusal"
+ANSWER_MODE_MODEL_INTERNAL = "model_internal_answer"
+ACTIVE_CONTEXT_REASON_OVERRIDDEN = "overridden_by_explicit_intent"
+ACTIVE_CONTEXT_REASON_SHORT = "short_or_ambiguous_query"
+_ACTIVE_DOCUMENT_CONTEXTS: dict[int, dict[str, object]] = {}
 
 
 class DocCommandParseError(Exception):
@@ -30,6 +49,93 @@ class LLMOutputValidationError(Exception):
         self.code = code
         self.message = message
         super().__init__(message)
+
+
+def reset_active_document_contexts() -> None:
+    _ACTIVE_DOCUMENT_CONTEXTS.clear()
+
+
+def _message_preview(text: str, limit: int = 200) -> str:
+    normalized = " ".join(text.split())
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[:limit].rstrip() + "..."
+
+
+def _strip_no_evidence_markers(answer: str) -> str:
+    normalized = answer.replace("\r\n", "\n").replace("\r", "\n")
+    for token in (NO_EVIDENCE_MARKER, NO_EVIDENCE_EXPLANATION):
+        normalized = normalized.replace(token, "")
+    lines = [line.strip() for line in normalized.split("\n") if line.strip()]
+    return "\n".join(lines).strip()
+
+
+def _normalize_answer_mode(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    candidate = value.strip()
+    return candidate or None
+
+
+def _finalize_telegram_chat_message(result: dict) -> tuple[str, str]:
+    retrieval_status = str(result.get("retrieval_status") or "").strip()
+    answer_mode = _normalize_answer_mode(result.get("answer_mode"))
+    raw_answer = result.get("answer")
+    answer = raw_answer if isinstance(raw_answer, str) else ""
+
+    if retrieval_status == "EVIDENCE_FOUND":
+        cleaned = _strip_no_evidence_markers(answer)
+        if cleaned:
+            return cleaned, answer_mode or ANSWER_MODE_DOCUMENTARY
+        return answer.strip(), answer_mode or ANSWER_MODE_DOCUMENTARY
+
+    if retrieval_status in {"NO_EVIDENCE", "NO_EVIDENCE_FOR_ANSWER"} and answer_mode == ANSWER_MODE_MODEL_INTERNAL:
+        return answer.strip(), answer_mode
+
+    if retrieval_status in {"NO_EVIDENCE", "NO_EVIDENCE_FOR_ANSWER"}:
+        return f"{NO_EVIDENCE_MARKER}\n{NO_EVIDENCE_EXPLANATION}", answer_mode or ANSWER_MODE_SAFE_REFUSAL
+
+    return answer.strip(), answer_mode or "unknown"
+
+
+def _read_active_document_context(chat_id: int | None) -> dict[str, object]:
+    if not isinstance(chat_id, int):
+        return {}
+
+    stored = _ACTIVE_DOCUMENT_CONTEXTS.get(chat_id)
+    if not isinstance(stored, dict):
+        return {}
+
+    return dict(stored)
+
+
+def _store_active_document_context(chat_id: int | None, result: dict) -> None:
+    if not isinstance(chat_id, int):
+        return
+    if not isinstance(result, dict):
+        return
+    if result.get("answer_mode") != ANSWER_MODE_DOCUMENTARY:
+        return
+
+    document_ids = result.get("document_ids")
+    if not isinstance(document_ids, list) or not document_ids or not isinstance(document_ids[0], int):
+        return
+
+    selected_filenames = result.get("selected_filenames")
+    source_filenames = result.get("source_filenames")
+    active_document_title = None
+    if isinstance(selected_filenames, list) and selected_filenames and isinstance(selected_filenames[0], str):
+        active_document_title = selected_filenames[0]
+    elif isinstance(source_filenames, list) and source_filenames and isinstance(source_filenames[0], str):
+        active_document_title = source_filenames[0]
+
+    _ACTIVE_DOCUMENT_CONTEXTS[chat_id] = {
+        "active_document_id": document_ids[0],
+        "active_document_title": active_document_title,
+        "active_corpus": result.get("selected_corpus"),
+        "last_source_intent": result.get("source_intent"),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 def build_llm_prompt(user_message: str) -> str:
@@ -135,6 +241,8 @@ def _trace_context(
 
 
 def _message_command(text: str) -> str:
+    if is_repo_command(text):
+        return "repo"
     if text.startswith("/doc_ai"):
         return "doc_ai"
     if text.startswith("/doc"):
@@ -161,6 +269,7 @@ def _chat_trace_metadata(result: dict | None) -> dict:
     total_duration = result.get("total_duration")
     load_duration = result.get("load_duration")
     chunk_ids = result.get("chunk_ids")
+    document_ids = result.get("document_ids")
 
     if not isinstance(prompt_eval_count, int):
         prompt_eval_count = None
@@ -176,6 +285,8 @@ def _chat_trace_metadata(result: dict | None) -> dict:
         load_duration = None
     if not isinstance(chunk_ids, list) or not all(isinstance(item, int) for item in chunk_ids):
         chunk_ids = []
+    if not isinstance(document_ids, list) or not all(isinstance(item, int) for item in document_ids):
+        document_ids = []
     temperature = result.get("temperature")
     if not isinstance(temperature, (int, float)):
         temperature = None
@@ -197,6 +308,69 @@ def _chat_trace_metadata(result: dict | None) -> dict:
     source_filenames = result.get("source_filenames")
     if not isinstance(source_filenames, list) or not all(isinstance(item, str) for item in source_filenames):
         source_filenames = []
+    query_original = result.get("query_original")
+    if not isinstance(query_original, str):
+        query_original = None
+    query_normalized = result.get("query_normalized")
+    if not isinstance(query_normalized, str):
+        query_normalized = None
+    query_terms = result.get("query_terms")
+    if not isinstance(query_terms, list) or not all(isinstance(item, str) for item in query_terms):
+        query_terms = []
+    quoted_terms = result.get("quoted_terms")
+    if not isinstance(quoted_terms, list) or not all(isinstance(item, str) for item in quoted_terms):
+        quoted_terms = []
+    source_intent = result.get("source_intent")
+    if not isinstance(source_intent, str):
+        source_intent = None
+    selected_corpus = result.get("selected_corpus")
+    if not isinstance(selected_corpus, str):
+        selected_corpus = None
+    active_document_id = result.get("active_document_id")
+    if not isinstance(active_document_id, int):
+        active_document_id = None
+    active_document_title = result.get("active_document_title")
+    if not isinstance(active_document_title, str):
+        active_document_title = None
+    active_context_used = result.get("active_context_used")
+    if not isinstance(active_context_used, bool):
+        active_context_used = False
+    active_context_reason = result.get("active_context_reason")
+    if not isinstance(active_context_reason, str):
+        active_context_reason = None
+    evidence_used = result.get("evidence_used")
+    if not isinstance(evidence_used, bool):
+        evidence_used = bool(chunk_ids or document_ids or source_filenames)
+    fallback_used = result.get("fallback_used")
+    if not isinstance(fallback_used, bool):
+        fallback_used = bool(
+            _normalize_answer_mode(result.get("answer_mode")) == ANSWER_MODE_MODEL_INTERNAL
+            or str(result.get("retrieval_status") or "").strip() in {"NO_EVIDENCE", "NO_EVIDENCE_FOR_ANSWER"}
+        )
+    query_expansion_used = result.get("query_expansion_used")
+    if not isinstance(query_expansion_used, bool):
+        query_expansion_used = False
+    query_expansion_reason = result.get("query_expansion_reason")
+    if not isinstance(query_expansion_reason, str):
+        query_expansion_reason = None
+    expanded_query_terms = result.get("expanded_query_terms")
+    if not isinstance(expanded_query_terms, list) or not all(isinstance(item, str) for item in expanded_query_terms):
+        expanded_query_terms = []
+    candidate_filenames = result.get("candidate_filenames")
+    if not isinstance(candidate_filenames, list) or not all(isinstance(item, str) for item in candidate_filenames):
+        candidate_filenames = []
+    selected_filenames = result.get("selected_filenames")
+    if not isinstance(selected_filenames, list) or not all(isinstance(item, str) for item in selected_filenames):
+        selected_filenames = []
+    scores = result.get("scores")
+    if not isinstance(scores, list) or not all(isinstance(item, int) for item in scores):
+        scores = []
+    answer_mode = result.get("answer_mode")
+    if not isinstance(answer_mode, str):
+        answer_mode = None
+    final_message_preview = result.get("answer")
+    if not isinstance(final_message_preview, str):
+        final_message_preview = None
 
     tokens_total = None
     if prompt_eval_count is not None and eval_count is not None:
@@ -209,6 +383,26 @@ def _chat_trace_metadata(result: dict | None) -> dict:
         "generation_config": generation_config,
         "prompt_version": "telegram_rag_v1",
         "top_k": top_k,
+        "query_original": query_original,
+        "query_normalized": query_normalized,
+        "query_terms": query_terms,
+        "quoted_terms": quoted_terms,
+        "source_intent": source_intent,
+        "selected_corpus": selected_corpus,
+        "active_document_id": active_document_id,
+        "active_document_title": active_document_title,
+        "active_context_used": active_context_used,
+        "active_context_reason": active_context_reason,
+        "evidence_used": evidence_used,
+        "fallback_used": fallback_used,
+        "query_expansion_used": query_expansion_used,
+        "query_expansion_reason": query_expansion_reason,
+        "expanded_query_terms": expanded_query_terms,
+        "candidate_filenames": candidate_filenames,
+        "selected_filenames": selected_filenames,
+        "scores": scores,
+        "answer_mode": answer_mode,
+        "final_message_preview": _message_preview(final_message_preview) if final_message_preview else None,
         "source_filenames": source_filenames,
         "use_rag": use_rag,
         "tokens_input": prompt_eval_count,
@@ -224,6 +418,7 @@ def _chat_trace_metadata(result: dict | None) -> dict:
         "output_tokens_per_second": _safe_token_rate(eval_count, eval_duration),
         "retrieval_status": result.get("retrieval_status"),
         "chunk_ids": chunk_ids,
+        "document_ids": document_ids,
         "warnings": warnings,
     }
 
@@ -529,6 +724,7 @@ def handle_message(
     *,
     send_message_fn: Callable[[int, str], None],
     ask_chat_fn: Callable[[str], dict],
+    repo_handler: Callable[..., dict] = handle_repo_command,
     doc_handler: Callable[..., str] = handle_doc_command,
     doc_ai_handler: Callable[..., str] = handle_doc_ai_command,
     trace_id_factory: Callable[[], str] = new_trace_id,
@@ -555,7 +751,22 @@ def handle_message(
     trace_metadata: dict = {
         "prompt_version": "telegram_rag_v1",
         "top_k": None,
+        "query_original": message.text,
+        "retrieval_status": None,
+        "active_document_id": None,
+        "active_document_title": None,
+        "active_context_used": False,
+        "active_context_reason": None,
+        "evidence_used": False,
+        "fallback_used": False,
+        "query_expansion_used": False,
+        "query_expansion_reason": None,
+        "expanded_query_terms": [],
+        "chunk_ids": [],
+        "document_ids": [],
         "source_filenames": [],
+        "answer_mode": None,
+        "final_message_preview": None,
     }
 
     log_event(
@@ -575,7 +786,32 @@ def handle_message(
             status = "ok"
             return
 
-        if message.text.startswith("/doc_ai"):
+        if is_repo_command(message.text):
+            result = repo_handler(
+                message.text,
+                user_id=message.user_id,
+                trace_id=trace.trace_id,
+            )
+            response_text = result.get("reply_text", "")
+            model = result.get("model")
+            status = result.get("status", "error")
+            error_code = result.get("error_code")
+            error_message = result.get("error_message")
+            trace_metadata = build_repo_trace_metadata(result)
+            log_event(
+                component="telegram.repo",
+                event="telegram.repo.completed" if status == "ok" else "telegram.repo.failed",
+                trace_id=trace.trace_id,
+                chat_id=message.chat_id,
+                user_id=message.user_id,
+                model=model,
+                status=status,
+                error_code=error_code,
+                latency_ms=result.get("latency_ms", 0),
+                repo_path=result.get("repo_path"),
+            )
+            send_message_fn(message.chat_id, response_text)
+        elif message.text.startswith("/doc_ai"):
             model = settings.effective_ollama_model()
             response = doc_ai_handler(
                 message.text,
@@ -598,11 +834,16 @@ def handle_message(
             status = "ok"
         else:
             try:
+                active_context = _read_active_document_context(message.chat_id)
                 result = ask_chat_fn(
                     message.text,
                     trace_id=trace.trace_id,
                     user_id=message.user_id,
                     chat_id=message.chat_id,
+                    active_document_id=active_context.get("active_document_id"),
+                    active_document_title=active_context.get("active_document_title"),
+                    active_corpus=active_context.get("active_corpus"),
+                    last_source_intent=active_context.get("last_source_intent"),
                 )
             except backend_client.BackendClientError as exc:
                 trace_provider = getattr(exc, "provider", None)
@@ -613,6 +854,10 @@ def handle_message(
                 trace_generation_config = getattr(exc, "generation_config", None)
                 trace_top_k = getattr(exc, "top_k", None)
                 trace_source_filenames = getattr(exc, "source_filenames", None)
+                trace_retrieval_status = getattr(exc, "retrieval_status", None)
+                trace_chunk_ids = getattr(exc, "chunk_ids", None)
+                trace_document_ids = getattr(exc, "document_ids", None)
+                trace_query_original = getattr(exc, "query_original", None)
                 if isinstance(trace_model, str) and trace_model.strip():
                     model = trace_model
                 if isinstance(trace_provider, str) and trace_provider.strip():
@@ -627,6 +872,14 @@ def handle_message(
                     trace_metadata["top_k"] = trace_top_k
                 if isinstance(trace_source_filenames, list) and all(isinstance(item, str) for item in trace_source_filenames):
                     trace_metadata["source_filenames"] = trace_source_filenames
+                if isinstance(trace_retrieval_status, str) and trace_retrieval_status.strip():
+                    trace_metadata["retrieval_status"] = trace_retrieval_status
+                if isinstance(trace_chunk_ids, list) and all(isinstance(item, int) for item in trace_chunk_ids):
+                    trace_metadata["chunk_ids"] = trace_chunk_ids
+                if isinstance(trace_document_ids, list) and all(isinstance(item, int) for item in trace_document_ids):
+                    trace_metadata["document_ids"] = trace_document_ids
+                if isinstance(trace_query_original, str) and trace_query_original.strip():
+                    trace_metadata["query_original"] = trace_query_original
                 if isinstance(trace_use_rag, bool):
                     trace_metadata["use_rag"] = trace_use_rag
                 log_event(
@@ -648,11 +901,14 @@ def handle_message(
                 )
                 return
 
-            answer = result.get("answer", "")
+            answer, answer_mode = _finalize_telegram_chat_message(result)
             response_text = answer
+            result["answer"] = answer
+            result["answer_mode"] = answer_mode
             model = result.get("model")
             status = result.get("status", "ok")
             trace_metadata = _chat_trace_metadata(result)
+            _store_active_document_context(message.chat_id, result)
             log_event(
                 component="telegram.chat",
                 event="telegram.chat.completed",
@@ -663,6 +919,24 @@ def handle_message(
                 use_rag=result.get("use_rag"),
                 status=status,
                 latency_ms=result.get("latency_ms", 0),
+                query_original=trace_metadata.get("query_original"),
+                retrieval_status=trace_metadata.get("retrieval_status"),
+                active_document_id=trace_metadata.get("active_document_id"),
+                active_document_title=trace_metadata.get("active_document_title"),
+                active_context_used=trace_metadata.get("active_context_used"),
+                active_context_reason=trace_metadata.get("active_context_reason"),
+                evidence_used=trace_metadata.get("evidence_used"),
+                fallback_used=trace_metadata.get("fallback_used"),
+                query_expansion_used=trace_metadata.get("query_expansion_used"),
+                query_expansion_reason=trace_metadata.get("query_expansion_reason"),
+                expanded_query_terms=trace_metadata.get("expanded_query_terms"),
+                source_intent=trace_metadata.get("source_intent"),
+                selected_corpus=trace_metadata.get("selected_corpus"),
+                chunks_found=len(trace_metadata.get("chunk_ids", [])),
+                chunk_ids=trace_metadata.get("chunk_ids"),
+                selected_filenames=trace_metadata.get("selected_filenames"),
+                answer_mode=trace_metadata.get("answer_mode"),
+                final_message_preview=trace_metadata.get("final_message_preview"),
             )
             send_message_fn(message.chat_id, answer)
     except Exception as exc:
@@ -681,6 +955,32 @@ def handle_message(
         send_message_fn(message.chat_id, response_text)
     finally:
         final_latency_ms = int((time.perf_counter() - started_at) * 1000)
+        try:
+            write_telegram_conversation_record(
+                trace_id=trace.trace_id,
+                chat_id=message.chat_id,
+                user_id=message.user_id,
+                command=command,
+                model=model,
+                input_text=message.text,
+                response_text=response_text,
+                status=status,
+                latency_ms=final_latency_ms,
+                error_code=error_code,
+                error_message=error_message,
+                created_at=created_at,
+                metadata=trace_metadata,
+            )
+        except Exception as exc:
+            log_event(
+                component="telegram.memory",
+                event="telegram.memory.persist_failed",
+                trace_id=trace.trace_id,
+                chat_id=message.chat_id,
+                user_id=message.user_id,
+                status="warning",
+                reason=exc.__class__.__name__,
+            )
         try:
             append_telegram_trace(
                 trace_id=trace.trace_id,

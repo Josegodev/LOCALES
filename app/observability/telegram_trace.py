@@ -1,5 +1,7 @@
 import json
+import os
 import re
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -8,6 +10,7 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TELEGRAM_RUNS_DIR = REPO_ROOT / "logs" / "telegram_runs"
 TELEGRAM_EVAL_RUNS_DIR = REPO_ROOT / "evals" / "runs"
+TELEGRAM_CONVERSATION_RUNS_DIR = REPO_ROOT / "DB" / "conversations" / "telegram" / "runs"
 TELEGRAM_PROMPT_VERSION = "telegram_rag_v1"
 UNKNOWN_MODEL_NAME = "unknown_model"
 MAX_SAFE_MODEL_NAME_LENGTH = 80
@@ -17,6 +20,35 @@ TELEGRAM_TRACE_OPTIONAL_FIELDS = (
     "temperature_ignored",
     "generation_config",
     "prompt_version",
+    "repo_tool",
+    "repo_path",
+    "question",
+    "evidence_files",
+    "requested_file",
+    "resolved_path",
+    "start_line",
+    "end_line",
+    "query",
+    "query_original",
+    "query_normalized",
+    "query_terms",
+    "quoted_terms",
+    "source_intent",
+    "selected_corpus",
+    "active_document_id",
+    "active_document_title",
+    "active_context_used",
+    "active_context_reason",
+    "evidence_used",
+    "fallback_used",
+    "query_expansion_used",
+    "query_expansion_reason",
+    "expanded_query_terms",
+    "candidate_filenames",
+    "selected_filenames",
+    "scores",
+    "answer_mode",
+    "final_message_preview",
     "top_k",
     "source_filenames",
     "use_rag",
@@ -33,6 +65,7 @@ TELEGRAM_TRACE_OPTIONAL_FIELDS = (
     "output_tokens_per_second",
     "retrieval_status",
     "chunk_ids",
+    "document_ids",
     "warnings",
 )
 
@@ -71,6 +104,9 @@ def _build_telegram_trace_payload(
     chunk_ids = metadata.get("chunk_ids") if isinstance(metadata, dict) else None
     if not isinstance(chunk_ids, list) or not all(isinstance(item, int) for item in chunk_ids):
         chunk_ids = []
+    document_ids = metadata.get("document_ids") if isinstance(metadata, dict) else None
+    if not isinstance(document_ids, list) or not all(isinstance(item, int) for item in document_ids):
+        document_ids = []
     warnings = metadata.get("warnings") if isinstance(metadata, dict) else None
     warnings = _warnings_list(warnings)
     payload: dict[str, Any] = {
@@ -96,6 +132,7 @@ def _build_telegram_trace_payload(
         "error_message": error_message,
         "retrieval_status": metadata.get("retrieval_status") if isinstance(metadata, dict) else None,
         "chunk_ids": chunk_ids,
+        "document_ids": document_ids,
         "latency_ms": latency_ms,
         "warnings": warnings,
         "created_at": timestamp.isoformat(),
@@ -300,3 +337,195 @@ def write_telegram_eval_run(
     )
     print(f"[telegram_eval] wrote eval run: {output_path}")
     return output_path
+
+
+def _int_list(value: Any) -> list[int]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, int)]
+
+
+def _conversation_run_dir(
+    *,
+    created_at: datetime | None = None,
+    base_dir: Path | None = None,
+) -> Path:
+    timestamp = _utc_timestamp(created_at)
+    resolved_base_dir = base_dir or TELEGRAM_CONVERSATION_RUNS_DIR
+    return resolved_base_dir / f"{timestamp:%Y-%m-%d}"
+
+
+def _build_telegram_conversation_payload(
+    *,
+    trace_id: str,
+    chat_id: int | None,
+    user_id: int | None,
+    command: str,
+    model: str | None,
+    status: str,
+    error_code: str | None,
+    latency_ms: int,
+    created_at: datetime | None = None,
+    input_text: str | None = None,
+    response_text: str | None = None,
+    error_message: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    timestamp = _utc_timestamp(created_at)
+    source_filenames = metadata.get("source_filenames") if isinstance(metadata, dict) else None
+    if not isinstance(source_filenames, list) or not all(isinstance(item, str) for item in source_filenames):
+        source_filenames = []
+
+    return {
+        "trace_id": trace_id,
+        "created_at": timestamp.isoformat(),
+        "source": "telegram",
+        "user_id": user_id,
+        "chat_id": chat_id,
+        "session_id": str(chat_id) if isinstance(chat_id, int) else None,
+        "command": command,
+        "input": input_text,
+        "response": response_text,
+        "model": model,
+        "provider": metadata.get("provider") if isinstance(metadata, dict) else None,
+        "temperature": metadata.get("temperature") if isinstance(metadata, dict) else None,
+        "tokens_input": metadata.get("tokens_input") if isinstance(metadata, dict) and isinstance(metadata.get("tokens_input"), int) else None,
+        "tokens_output": metadata.get("tokens_output") if isinstance(metadata, dict) and isinstance(metadata.get("tokens_output"), int) else None,
+        "tokens_total": metadata.get("tokens_total") if isinstance(metadata, dict) and isinstance(metadata.get("tokens_total"), int) else None,
+        "latency_ms": latency_ms,
+        "retrieval_status": metadata.get("retrieval_status") if isinstance(metadata, dict) else None,
+        "chunk_ids": _int_list(metadata.get("chunk_ids")) if isinstance(metadata, dict) else [],
+        "document_ids": _int_list(metadata.get("document_ids")) if isinstance(metadata, dict) else [],
+        "source_filenames": source_filenames,
+        "status": status,
+        "error_code": error_code,
+        "error_message": error_message,
+        "warnings": _warnings_list(metadata.get("warnings")) if isinstance(metadata, dict) else [],
+    }
+
+
+def write_telegram_conversation_record(
+    *,
+    trace_id: str,
+    chat_id: int | None,
+    user_id: int | None,
+    command: str,
+    model: str | None,
+    input_text: str | None,
+    response_text: str | None,
+    status: str,
+    latency_ms: int,
+    error_code: str | None = None,
+    error_message: str | None = None,
+    created_at: datetime | None = None,
+    metadata: dict[str, Any] | None = None,
+    base_dir: Path | None = None,
+) -> Path:
+    timestamp = _utc_timestamp(created_at)
+    output_dir = _conversation_run_dir(created_at=timestamp, base_dir=base_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f"{trace_id}.json"
+    payload = _build_telegram_conversation_payload(
+        trace_id=trace_id,
+        chat_id=chat_id,
+        user_id=user_id,
+        command=command,
+        model=model,
+        status=status,
+        error_code=error_code,
+        latency_ms=latency_ms,
+        created_at=timestamp,
+        input_text=input_text,
+        response_text=response_text,
+        error_message=error_message,
+        metadata=metadata,
+    )
+
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=output_dir,
+            prefix=f"{trace_id}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
+            handle.write("\n")
+            temp_path = Path(handle.name)
+
+        os.replace(temp_path, output_path)
+    except Exception:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink(missing_ok=True)
+        raise
+
+    return output_path
+
+
+def _parse_conversation_created_at(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+
+    try:
+        return _utc_timestamp(datetime.fromisoformat(value))
+    except ValueError:
+        return None
+
+
+def _load_conversation_records_report(
+    base_dir: Path,
+    limit: int,
+) -> dict[str, Any]:
+    if limit <= 0 or not base_dir.exists():
+        return {
+            "records": [],
+            "loaded_records": 0,
+            "skipped_records": 0,
+            "warnings": [],
+            "base_dir": str(base_dir),
+        }
+
+    loaded_items: list[tuple[datetime, str, dict[str, Any]]] = []
+    skipped_records = 0
+    warnings: list[str] = []
+
+    for candidate in sorted(base_dir.rglob("*.json")):
+        try:
+            payload = json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            skipped_records += 1
+            warnings.append(f"conversation_record_skipped path={candidate} reason={exc.__class__.__name__}")
+            continue
+
+        if not isinstance(payload, dict):
+            skipped_records += 1
+            warnings.append(f"conversation_record_skipped path={candidate} reason=invalid_payload_type")
+            continue
+
+        created_at = _parse_conversation_created_at(payload.get("created_at"))
+        if created_at is None:
+            skipped_records += 1
+            warnings.append(f"conversation_record_skipped path={candidate} reason=created_at_invalid")
+            continue
+
+        loaded_items.append((created_at, str(candidate), payload))
+
+    loaded_items.sort(key=lambda item: (item[0], item[1]))
+    records = [item[2] for item in loaded_items[-limit:]]
+    return {
+        "records": records,
+        "loaded_records": len(records),
+        "skipped_records": skipped_records,
+        "warnings": warnings,
+        "base_dir": str(base_dir),
+    }
+
+
+def load_conversation_records(base_dir: Path, limit: int = 1000) -> list[dict[str, Any]]:
+    return _load_conversation_records_report(base_dir=base_dir, limit=limit)["records"]
+
+
+def load_conversation_records_report(base_dir: Path, limit: int = 1000) -> dict[str, Any]:
+    return _load_conversation_records_report(base_dir=base_dir, limit=limit)

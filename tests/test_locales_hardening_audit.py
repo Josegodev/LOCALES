@@ -205,6 +205,128 @@ class LocalesHardeningAuditTests(unittest.TestCase):
             allowed_source_filenames=["EVOLUTION_MAP.md", "ARCHITECTURE.md"],
         )
 
+    def test_chat_endpoint_uses_active_document_context_for_short_follow_up(self):
+        client = TestClient(app)
+
+        with patch(
+            "app.main.build_document_prompt",
+            return_value={
+                "status": "EVIDENCE_FOUND",
+                "prompt": "context prompt",
+                "query_original": "que son modelos?",
+                "query_normalized": "que son modelos",
+                "source_intent": "mixed",
+                "selected_corpus": "documentos_oficiales",
+                "active_document_id": 68,
+                "active_document_title": "Attention is all yout need.pdf",
+                "active_context_used": True,
+                "active_context_reason": "short_or_ambiguous_query",
+                "selected_filenames": ["Attention is all yout need.pdf"],
+                "chunks": [{"id": 376, "document_id": 68, "filename": "Attention is all yout need.pdf", "text": "these models are superior"}],
+            },
+        ) as build_document_prompt_mock:
+            with patch(
+                "app.main.ask_chat",
+                return_value={
+                    "status": "ok",
+                    "provider": "ollama",
+                    "model": "granite4.1:8b",
+                    "temperature": 0.2,
+                    "use_rag": True,
+                    "answer": "El documento usa modelos Transformer para traducción.",
+                },
+            ):
+                response = client.post(
+                    "/chat",
+                    json={
+                        "message": "que son modelos?",
+                        "trace_id": REQUEST_ID,
+                        "user_id": 123,
+                        "chat_id": 456,
+                        "active_document_id": 68,
+                        "active_document_title": "Attention is all yout need.pdf",
+                        "active_corpus": "documentos_oficiales",
+                        "last_source_intent": "official_docs",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["retrieval_status"], "EVIDENCE_FOUND")
+        self.assertEqual(body["answer_mode"], "documentary_answer")
+        self.assertTrue(body["active_context_used"])
+        self.assertEqual(body["active_context_reason"], "short_or_ambiguous_query")
+        self.assertEqual(body["selected_filenames"], ["Attention is all yout need.pdf"])
+        build_document_prompt_mock.assert_called_once_with(
+            "que son modelos?",
+            limit=3,
+            allowed_source_filenames=[],
+            active_document_id=68,
+            active_document_title="Attention is all yout need.pdf",
+            allow_active_document_fallback=True,
+            active_context_reason="short_or_ambiguous_query",
+        )
+
+    def test_chat_endpoint_disables_active_document_context_when_query_explicitly_switches_corpus(self):
+        client = TestClient(app)
+
+        with patch(
+            "app.main.build_document_prompt",
+            return_value={
+                "status": "EVIDENCE_FOUND",
+                "prompt": "context prompt",
+                "query_original": "qué hace el orquestador de NUCLEO?",
+                "query_normalized": "qué hace el orquestador de nucleo",
+                "source_intent": "nucleo",
+                "selected_corpus": "nucleo",
+                "active_document_id": 68,
+                "active_document_title": "Attention is all yout need.pdf",
+                "active_context_used": False,
+                "active_context_reason": "overridden_by_explicit_intent",
+                "selected_filenames": ["orchestrator.md"],
+                "chunks": [{"id": 3, "document_id": 3, "filename": "orchestrator.md", "text": "El orquestador coordina planner, policy y runtime."}],
+            },
+        ) as build_document_prompt_mock:
+            with patch(
+                "app.main.ask_chat",
+                return_value={
+                    "status": "ok",
+                    "provider": "ollama",
+                    "model": "granite4.1:8b",
+                    "temperature": 0.2,
+                    "use_rag": True,
+                    "answer": "El orquestador coordina la ejecución en NUCLEO.",
+                },
+            ):
+                response = client.post(
+                    "/chat",
+                    json={
+                        "message": "qué hace el orquestador de NUCLEO?",
+                        "trace_id": REQUEST_ID,
+                        "user_id": 123,
+                        "chat_id": 456,
+                        "active_document_id": 68,
+                        "active_document_title": "Attention is all yout need.pdf",
+                        "active_corpus": "documentos_oficiales",
+                        "last_source_intent": "official_docs",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertFalse(body["active_context_used"])
+        self.assertEqual(body["active_context_reason"], "overridden_by_explicit_intent")
+        self.assertEqual(body["selected_corpus"], "nucleo")
+        build_document_prompt_mock.assert_called_once_with(
+            "qué hace el orquestador de NUCLEO?",
+            limit=3,
+            allowed_source_filenames=[],
+            active_document_id=None,
+            active_document_title=None,
+            allow_active_document_fallback=False,
+            active_context_reason="overridden_by_explicit_intent",
+        )
+
     def test_chat_endpoint_disables_rag_when_requested(self):
         client = TestClient(app)
 
@@ -462,7 +584,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         )
 
     def test_extract_chunk_response_data_does_not_store_chunk_text_as_source_filename(self):
-        chunk_texts, chunk_ids, source_filenames = _extract_chunk_response_data(
+        chunk_texts, chunk_ids, document_ids, source_filenames = _extract_chunk_response_data(
             [
                 {
                     "id": 346,
@@ -476,6 +598,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
             ["Contenido completo del chunk que no debe aparecer como filename."],
         )
         self.assertEqual(chunk_ids, [346])
+        self.assertEqual(document_ids, [])
         self.assertEqual(source_filenames, [])
 
     def test_chat_endpoint_does_not_import_lmstudio_directly(self):
@@ -578,21 +701,182 @@ class LocalesHardeningAuditTests(unittest.TestCase):
                 "chunks": [],
             },
         ):
-            response = client.post(
-                "/chat",
-                json={
-                    "message": "consulta sin evidencia",
-                    "trace_id": REQUEST_ID,
-                    "user_id": 123,
-                    "chat_id": 456,
+            with patch(
+                "app.main.ask_chat",
+                return_value={
+                    "status": "ok",
+                    "provider": "ollama",
+                    "model": "granite4.1:8b",
+                    "temperature": 0.2,
+                    "use_rag": True,
+                    "answer": "Parece una consulta sin contexto documental local, pero en términos generales puedo ayudarte.",
                 },
-            )
+            ) as ask_chat_mock:
+                response = client.post(
+                    "/chat",
+                    json={
+                        "message": "consulta sin evidencia",
+                        "trace_id": REQUEST_ID,
+                        "user_id": 123,
+                        "chat_id": 456,
+                    },
+                )
 
         self.assertEqual(response.status_code, 200)
         body = response.json()
-        self.assertTrue(body["answer"].startswith("NO_EVIDENCE_FOR_ANSWER"))
-        self.assertEqual(body["retrieval_status"], "NO_EVIDENCE")
+        self.assertTrue(body["answer"].startswith("No he encontrado evidencia suficiente en los documentos cargados."))
+        self.assertEqual(body["retrieval_status"], "NO_EVIDENCE_FOR_ANSWER")
+        self.assertEqual(body["answer_mode"], "model_internal_answer")
+        self.assertEqual(body["chunk_ids"], [])
+        self.assertEqual(body["document_ids"], [])
         self.assertEqual(body["source_filenames"], [])
+        self.assertFalse(body["evidence_used"])
+        self.assertTrue(body["fallback_used"])
+        self.assertEqual(
+            body["warnings"],
+            ["Respuesta generada sin evidencia documental local. Puede requerir verificación."],
+        )
+        ask_chat_mock.assert_called_once()
+
+    def test_chat_endpoint_strips_no_evidence_marker_from_documentary_answer(self):
+        client = TestClient(app)
+        output = io.StringIO()
+
+        with redirect_stdout(output):
+            with patch(
+                "app.main.build_document_prompt",
+                return_value={
+                    "status": "EVIDENCE_FOUND",
+                    "prompt": "context prompt",
+                    "query_original": 'que significa "attention"?',
+                    "query_normalized": "que significa attention",
+                    "quoted_terms": ["attention"],
+                    "chunk_ids": [375],
+                    "document_ids": [68],
+                    "source_filenames": ["Attention is all yout need.pdf"],
+                    "chunks": [{"id": 375, "document_id": 68, "filename": "Attention is all yout need.pdf", "text": "attention is all you need"}],
+                },
+            ):
+                with patch(
+                    "app.main.ask_chat",
+                    return_value={
+                        "status": "ok",
+                        "provider": "ollama",
+                        "model": "granite4.1:8b",
+                        "temperature": 0.2,
+                        "use_rag": True,
+                        "answer": (
+                            "El paper define attention como un mecanismo para relacionar posiciones.\n"
+                            "NO_EVIDENCE_FOR_ANSWER\n"
+                            "No hay evidencia documental suficiente para responder."
+                        ),
+                    },
+                ):
+                    response = client.post(
+                        "/chat",
+                        json={
+                            "message": 'que significa "attention"?',
+                            "trace_id": REQUEST_ID,
+                            "user_id": 123,
+                            "chat_id": 456,
+                        },
+                    )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["retrieval_status"], "EVIDENCE_FOUND")
+        self.assertEqual(body["answer_mode"], "documentary_answer")
+        self.assertTrue(body["evidence_used"])
+        self.assertFalse(body["fallback_used"])
+        self.assertIn("mecanismo", body["answer"])
+        self.assertNotIn("NO_EVIDENCE_FOR_ANSWER", body["answer"])
+        self.assertNotIn("No hay evidencia documental suficiente", body["answer"])
+
+        events = [
+            json.loads(line)
+            for line in output.getvalue().splitlines()
+            if line.strip().startswith("{")
+        ]
+        chat_event = next(event for event in events if event["component"] == "fastapi.chat")
+        self.assertEqual(chat_event["trace_id"], REQUEST_ID)
+        self.assertEqual(chat_event["query_original"], 'que significa "attention"?')
+        self.assertEqual(chat_event["retrieval_status"], "EVIDENCE_FOUND")
+        self.assertEqual(chat_event["chunks_found"], 1)
+        self.assertEqual(chat_event["chunk_ids"], [375])
+        self.assertEqual(chat_event["answer_mode"], "documentary_answer")
+        self.assertNotIn("NO_EVIDENCE_FOR_ANSWER", chat_event["final_message_preview"])
+
+    def test_chat_endpoint_converts_marker_only_llm_answer_to_no_evidence(self):
+        client = TestClient(app)
+
+        with patch(
+            "app.main.build_document_prompt",
+            return_value={
+                "status": "EVIDENCE_FOUND",
+                "prompt": "context prompt",
+                "query_original": "¿que es un mecanismo de atencion?",
+                "query_normalized": "que es un mecanismo de atencion",
+                "chunk_ids": [375],
+                "document_ids": [68],
+                "source_filenames": ["Attention is all yout need.pdf"],
+                "chunks": [
+                    {
+                        "id": 375,
+                        "document_id": 68,
+                        "filename": "Attention is all yout need.pdf",
+                        "text": "Attention mechanism allows the model to focus on relevant positions.",
+                    }
+                ],
+            },
+        ):
+            with patch(
+                "app.main.ask_chat",
+                side_effect=[
+                    {
+                        "status": "ok",
+                        "provider": "openai",
+                        "model": "gpt-5.5",
+                        "temperature": 0.5,
+                        "use_rag": True,
+                        "answer": "NO_EVIDENCE_FOR_ANSWER\nNo hay evidencia documental suficiente para responder.",
+                    },
+                    {
+                        "status": "ok",
+                        "provider": "openai",
+                        "model": "gpt-5.5",
+                        "temperature": 0.5,
+                        "use_rag": True,
+                        "answer": "Un mecanismo de atención permite al modelo centrarse en partes relevantes de la entrada.",
+                    },
+                ],
+            ):
+                response = client.post(
+                    "/chat",
+                    json={
+                        "message": "¿que es un mecanismo de atencion?",
+                        "trace_id": REQUEST_ID,
+                        "user_id": 123,
+                        "chat_id": 456,
+                        "provider": "openai",
+                        "model": "gpt-5.5",
+                        "temperature": 0.5,
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["retrieval_status"], "NO_EVIDENCE_FOR_ANSWER")
+        self.assertEqual(body["answer_mode"], "model_internal_answer")
+        self.assertTrue(body["answer"].startswith("No he encontrado evidencia suficiente en los documentos cargados."))
+        self.assertEqual(body["chunk_ids"], [])
+        self.assertEqual(body["document_ids"], [])
+        self.assertEqual(body["source_filenames"], [])
+        self.assertFalse(body["evidence_used"])
+        self.assertTrue(body["fallback_used"])
+        self.assertEqual(
+            body["warnings"],
+            ["Respuesta generada sin evidencia documental local. Puede requerir verificación."],
+        )
 
     def test_chat_forces_no_evidence_when_anchor_term_is_absent_from_chunks(self):
         client = TestClient(app)
@@ -610,7 +894,17 @@ class LocalesHardeningAuditTests(unittest.TestCase):
                 ],
             },
         ):
-            with patch("app.main.ask_chat") as ask_chat_mock:
+            with patch(
+                "app.main.ask_chat",
+                return_value={
+                    "status": "ok",
+                    "provider": "ollama",
+                    "model": "granite4.1:8b",
+                    "temperature": 0.2,
+                    "use_rag": True,
+                    "answer": "No conozco ese término en los documentos, pero en general parece un identificador artificial de prueba.",
+                },
+            ) as ask_chat_mock:
                 response = client.post(
                     "/chat",
                     json={
@@ -622,10 +916,121 @@ class LocalesHardeningAuditTests(unittest.TestCase):
                 )
 
         self.assertEqual(response.status_code, 200)
-        ask_chat_mock.assert_not_called()
+        ask_chat_mock.assert_called_once()
         body = response.json()
-        self.assertTrue(body["answer"].startswith("NO_EVIDENCE_FOR_ANSWER"))
-        self.assertEqual(body["retrieval_status"], "NO_EVIDENCE")
+        self.assertTrue(body["answer"].startswith("No he encontrado evidencia suficiente en los documentos cargados."))
+        self.assertEqual(body["retrieval_status"], "NO_EVIDENCE_FOR_ANSWER")
+        self.assertEqual(body["answer_mode"], "model_internal_answer")
+        self.assertEqual(body["chunk_ids"], [])
+        self.assertEqual(body["source_filenames"], [])
+        self.assertFalse(body["evidence_used"])
+        self.assertTrue(body["fallback_used"])
+
+    def test_chat_forces_no_evidence_for_missing_meaningful_alpha_term(self):
+        client = TestClient(app)
+
+        with patch(
+            "app.main.build_document_prompt",
+            return_value={
+                "status": "EVIDENCE_FOUND",
+                "prompt": "context prompt",
+                "chunks": [
+                    {
+                        "id": "chunk-1",
+                        "text": "Documento sobre attention y transformers.",
+                    }
+                ],
+            },
+        ):
+            with patch(
+                "app.main.ask_chat",
+                return_value={
+                    "status": "ok",
+                    "provider": "ollama",
+                    "model": "granite4.1:8b",
+                    "temperature": 0.2,
+                    "use_rag": True,
+                    "answer": "No puedo verificar ese término en los documentos, pero parece un token inventado para una prueba.",
+                },
+            ) as ask_chat_mock:
+                response = client.post(
+                    "/chat",
+                    json={
+                        "message": "qué dice el PDF sobre una cosa que no existe xyzabc?",
+                        "trace_id": REQUEST_ID,
+                        "user_id": 123,
+                        "chat_id": 456,
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        ask_chat_mock.assert_called_once()
+        body = response.json()
+        self.assertTrue(body["answer"].startswith("No he encontrado evidencia suficiente en los documentos cargados."))
+        self.assertEqual(body["retrieval_status"], "NO_EVIDENCE_FOR_ANSWER")
+        self.assertEqual(body["answer_mode"], "model_internal_answer")
+        self.assertEqual(body["chunk_ids"], [])
+        self.assertEqual(body["source_filenames"], [])
+        self.assertFalse(body["evidence_used"])
+        self.assertTrue(body["fallback_used"])
+
+    def test_chat_active_context_without_chunks_sets_specific_warning_and_flags(self):
+        client = TestClient(app)
+
+        with patch(
+            "app.main.build_document_prompt",
+            return_value={
+                "status": "NO_EVIDENCE",
+                "prompt": "unused",
+                "chunks": [],
+                "active_document_id": 68,
+                "active_document_title": "Attention is all yout need.pdf",
+                "active_context_used": True,
+                "active_context_reason": "short_or_ambiguous_query",
+                "query_expansion_used": True,
+                "query_expansion_reason": "domain_dictionary",
+                "expanded_query_terms": ["attention", "self-attention", "attention mechanism"],
+            },
+        ):
+            with patch(
+                "app.main.ask_chat",
+                return_value={
+                    "status": "ok",
+                    "provider": "openai",
+                    "model": "gpt-5.5",
+                    "temperature": 0.5,
+                    "use_rag": True,
+                    "answer": "En términos generales, un mecanismo de atención permite ponderar partes relevantes de la entrada.",
+                },
+            ):
+                response = client.post(
+                    "/chat",
+                    json={
+                        "message": "¿que es un mecanismo de atencion?",
+                        "trace_id": REQUEST_ID,
+                        "user_id": 123,
+                        "chat_id": 456,
+                        "provider": "openai",
+                        "model": "gpt-5.5",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body["active_context_used"])
+        self.assertEqual(body["chunk_ids"], [])
+        self.assertFalse(body["evidence_used"])
+        self.assertTrue(body["fallback_used"])
+        self.assertTrue(body["query_expansion_used"])
+        self.assertEqual(body["query_expansion_reason"], "domain_dictionary")
+        self.assertIn("attention", body["expanded_query_terms"])
+        self.assertEqual(
+            body["warnings"],
+            [
+                "Contexto activo detectado, pero sin chunks documentales suficientes. "
+                "Respuesta generada con conocimiento general del modelo."
+            ],
+        )
 
     def test_telegram_chat_error_is_controlled(self):
         sent_messages: list[tuple[int, str]] = []
@@ -636,15 +1041,16 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         def failing_chat(*args, **kwargs) -> dict:
             raise BackendClientError("llm_timeout", "backend_chat_error", 504)
 
-        bot_service.handle_message(
-            {
-                "chat": {"id": 456},
-                "from": {"id": 123},
-                "text": "hola",
-            },
-            send_message_fn=fake_send,
-            ask_chat_fn=failing_chat,
-        )
+        with patch("app.services.bot_service.write_telegram_conversation_record"):
+            bot_service.handle_message(
+                {
+                    "chat": {"id": 456},
+                    "from": {"id": 123},
+                    "text": "hola",
+                },
+                send_message_fn=fake_send,
+                ask_chat_fn=failing_chat,
+            )
 
         self.assertEqual(len(sent_messages), 1)
         self.assertEqual(sent_messages[0][0], 456)

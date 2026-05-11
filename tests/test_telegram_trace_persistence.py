@@ -2,6 +2,7 @@ import json
 import importlib.util
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -19,6 +20,9 @@ TRACE_ID = "12345678123456781234567812345678"
 
 
 class TelegramTracePersistenceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        bot_service.reset_active_document_contexts()
+
     def _run_message_and_read_traces(
         self,
         *,
@@ -45,15 +49,16 @@ class TelegramTracePersistenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(telegram_trace_module, "TELEGRAM_RUNS_DIR", Path(tmpdir) / "telegram_runs"):
                 with patch.object(telegram_trace_module, "TELEGRAM_EVAL_RUNS_DIR", Path(tmpdir) / "eval_runs"):
-                    with patch.object(bot_service.settings, "telegram_trace_include_text", False):
-                        bot_service.handle_message(
-                            {
-                                "chat": {"id": 456},
-                                "from": {"id": 123},
-                                "text": text,
-                            },
-                            **kwargs,
-                        )
+                    with patch.object(telegram_trace_module, "TELEGRAM_CONVERSATION_RUNS_DIR", Path(tmpdir) / "conversation_runs"):
+                        with patch.object(bot_service.settings, "telegram_trace_include_text", False):
+                            bot_service.handle_message(
+                                {
+                                    "chat": {"id": 456},
+                                    "from": {"id": 123},
+                                    "text": text,
+                                },
+                                **kwargs,
+                            )
 
             jsonl_files = list((Path(tmpdir) / "telegram_runs").glob("telegram_chat_*.jsonl"))
             eval_files = list((Path(tmpdir) / "eval_runs").glob("chat_eval_*.json"))
@@ -68,6 +73,7 @@ class TelegramTracePersistenceTests(unittest.TestCase):
             "jsonl_path": jsonl_files[0],
             "eval_payload": eval_payload,
             "eval_path": eval_files[0],
+            "sent_messages": sent_messages,
         }
 
     def test_handle_message_persists_jsonl_trace_without_text_by_default(self):
@@ -79,25 +85,26 @@ class TelegramTracePersistenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(telegram_trace_module, "TELEGRAM_RUNS_DIR", Path(tmpdir) / "telegram_runs"):
                 with patch.object(telegram_trace_module, "TELEGRAM_EVAL_RUNS_DIR", Path(tmpdir) / "eval_runs"):
-                    with patch.object(bot_service.settings, "telegram_trace_include_text", False):
-                        bot_service.handle_message(
-                            {
-                                "chat": {"id": 456},
-                                "from": {"id": 123},
-                                "text": "hola",
-                            },
-                            send_message_fn=fake_send,
-                            ask_chat_fn=lambda *args, **kwargs: {
-                                "answer": "respuesta",
-                                "provider": "ollama",
-                                "model": "granite4.1:8b",
-                                "temperature": 0.2,
-                                "use_rag": True,
-                                "status": "ok",
-                                "latency_ms": 12,
-                            },
-                            trace_id_factory=lambda: TRACE_ID,
-                        )
+                    with patch.object(telegram_trace_module, "TELEGRAM_CONVERSATION_RUNS_DIR", Path(tmpdir) / "conversation_runs"):
+                        with patch.object(bot_service.settings, "telegram_trace_include_text", False):
+                            bot_service.handle_message(
+                                {
+                                    "chat": {"id": 456},
+                                    "from": {"id": 123},
+                                    "text": "hola",
+                                },
+                                send_message_fn=fake_send,
+                                ask_chat_fn=lambda *args, **kwargs: {
+                                    "answer": "respuesta",
+                                    "provider": "ollama",
+                                    "model": "granite4.1:8b",
+                                    "temperature": 0.2,
+                                    "use_rag": True,
+                                    "status": "ok",
+                                    "latency_ms": 12,
+                                },
+                                trace_id_factory=lambda: TRACE_ID,
+                            )
 
             output_path = Path(tmpdir) / "telegram_runs"
             files = list(output_path.glob("telegram_chat_*.jsonl"))
@@ -214,6 +221,87 @@ class TelegramTracePersistenceTests(unittest.TestCase):
         self.assertIsNone(eval_payload["error_message"])
         self.assertIn("granite4.1_8b", traces["eval_path"].name)
 
+    def test_handle_message_sanitizes_mixed_documentary_answer_before_sending_and_persisting(self):
+        traces = self._run_message_and_read_traces(
+            text='que significa "attention"?',
+            ask_chat_fn=lambda *args, **kwargs: {
+                "answer": (
+                    "Attention es un mecanismo de alineamiento.\n"
+                    "NO_EVIDENCE_FOR_ANSWER\n"
+                    "No hay evidencia documental suficiente para responder."
+                ),
+                "provider": "ollama",
+                "model": "granite4.1:8b",
+                "temperature": 0.2,
+                "use_rag": True,
+                "status": "ok",
+                "latency_ms": 12,
+                "retrieval_status": "EVIDENCE_FOUND",
+                "chunk_ids": [375],
+                "document_ids": [68],
+                "query_original": 'que significa "attention"?',
+                "source_filenames": ["Attention is all yout need.pdf"],
+            },
+        )
+        payload = traces["jsonl_payload"]
+        eval_payload = traces["eval_payload"]
+
+        self.assertEqual(traces["sent_messages"], [(456, "Attention es un mecanismo de alineamiento.")])
+        self.assertEqual(payload["response"], "Attention es un mecanismo de alineamiento.")
+        self.assertEqual(payload["retrieval_status"], "EVIDENCE_FOUND")
+        self.assertEqual(payload["answer_mode"], "documentary_answer")
+        self.assertEqual(payload["chunk_ids"], [375])
+        self.assertEqual(payload["document_ids"], [68])
+        self.assertEqual(payload["query_original"], 'que significa "attention"?')
+        self.assertEqual(payload["source_filenames"], ["Attention is all yout need.pdf"])
+        self.assertNotIn("NO_EVIDENCE_FOR_ANSWER", payload["response"])
+        self.assertNotIn("NO_EVIDENCE_FOR_ANSWER", payload["final_message_preview"])
+        self.assertEqual(eval_payload["answer_mode"], "documentary_answer")
+
+    def test_handle_message_preserves_model_internal_answer_when_no_local_evidence(self):
+        traces = self._run_message_and_read_traces(
+            text="consulta sin evidencia",
+            ask_chat_fn=lambda *args, **kwargs: {
+                "answer": (
+                    "No he encontrado evidencia suficiente en los documentos cargados. "
+                    "Respuesta basada en conocimiento general del modelo:\n"
+                    "En términos generales, la consulta parece referirse a un concepto amplio."
+                ),
+                "provider": "ollama",
+                "model": "granite4.1:8b",
+                "temperature": 0.2,
+                "use_rag": True,
+                "status": "ok",
+                "latency_ms": 12,
+                "retrieval_status": "NO_EVIDENCE_FOR_ANSWER",
+                "answer_mode": "model_internal_answer",
+                "warnings": ["Respuesta generada sin evidencia documental local. Puede requerir verificación."],
+                "chunk_ids": [],
+                "document_ids": [],
+                "source_filenames": [],
+                "selected_filenames": [],
+            },
+        )
+
+        payload = traces["jsonl_payload"]
+        eval_payload = traces["eval_payload"]
+        expected_prefix = "No he encontrado evidencia suficiente en los documentos cargados."
+        self.assertEqual(traces["sent_messages"][0][0], 456)
+        self.assertTrue(traces["sent_messages"][0][1].startswith(expected_prefix))
+        self.assertEqual(payload["retrieval_status"], "NO_EVIDENCE_FOR_ANSWER")
+        self.assertEqual(payload["answer_mode"], "model_internal_answer")
+        self.assertEqual(payload["chunk_ids"], [])
+        self.assertEqual(payload["document_ids"], [])
+        self.assertEqual(payload["source_filenames"], [])
+        self.assertFalse(payload["evidence_used"])
+        self.assertTrue(payload["fallback_used"])
+        self.assertEqual(
+            payload["warnings"],
+            ["Respuesta generada sin evidencia documental local. Puede requerir verificación."],
+        )
+        self.assertTrue(payload["response"].startswith(expected_prefix))
+        self.assertEqual(eval_payload["answer_mode"], "model_internal_answer")
+
     def test_handle_message_persists_non_llm_command_without_token_metrics(self):
         traces = self._run_message_and_read_traces(
             text="/doc ejemplo.md\ncontenido",
@@ -285,25 +373,26 @@ class TelegramTracePersistenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(telegram_trace_module, "TELEGRAM_RUNS_DIR", Path(tmpdir) / "telegram_runs"):
                 with patch.object(telegram_trace_module, "TELEGRAM_EVAL_RUNS_DIR", Path(tmpdir) / "eval_runs"):
-                    with patch.object(bot_service.settings, "telegram_trace_include_text", True):
-                        bot_service.handle_message(
-                            {
-                                "chat": {"id": 456},
-                                "from": {"id": 123},
-                                "text": "hola con texto",
-                            },
-                            send_message_fn=fake_send,
-                            ask_chat_fn=lambda *args, **kwargs: {
-                                "answer": "ok",
-                                "provider": "ollama",
-                                "model": "granite4.1:8b",
-                                "temperature": 0.2,
-                                "use_rag": True,
-                                "status": "ok",
-                                "latency_ms": 7,
-                            },
-                            trace_id_factory=lambda: TRACE_ID,
-                        )
+                    with patch.object(telegram_trace_module, "TELEGRAM_CONVERSATION_RUNS_DIR", Path(tmpdir) / "conversation_runs"):
+                        with patch.object(bot_service.settings, "telegram_trace_include_text", True):
+                            bot_service.handle_message(
+                                {
+                                    "chat": {"id": 456},
+                                    "from": {"id": 123},
+                                    "text": "hola con texto",
+                                },
+                                send_message_fn=fake_send,
+                                ask_chat_fn=lambda *args, **kwargs: {
+                                    "answer": "ok",
+                                    "provider": "ollama",
+                                    "model": "granite4.1:8b",
+                                    "temperature": 0.2,
+                                    "use_rag": True,
+                                    "status": "ok",
+                                    "latency_ms": 7,
+                                },
+                                trace_id_factory=lambda: TRACE_ID,
+                            )
 
             files = list((Path(tmpdir) / "telegram_runs").glob("telegram_chat_*.jsonl"))
             payload = json.loads(files[0].read_text(encoding="utf-8").strip())
@@ -319,26 +408,27 @@ class TelegramTracePersistenceTests(unittest.TestCase):
         def fake_send(chat_id: int, text: str) -> None:
             sent_messages.append((chat_id, text))
 
-        with patch("app.services.bot_service.append_telegram_trace", side_effect=OSError("disk full")):
-            with patch("app.services.bot_service.write_telegram_eval_run"):
-                bot_service.handle_message(
-                    {
-                        "chat": {"id": 456},
-                        "from": {"id": 123},
-                        "text": "hola",
-                    },
-                    send_message_fn=fake_send,
-                    ask_chat_fn=lambda *args, **kwargs: {
-                        "answer": "ok",
-                        "provider": "ollama",
-                        "model": "granite4.1:8b",
-                        "temperature": 0.2,
-                        "use_rag": True,
-                        "status": "ok",
-                        "latency_ms": 4,
-                    },
-                    trace_id_factory=lambda: TRACE_ID,
-                )
+        with patch("app.services.bot_service.write_telegram_conversation_record"):
+            with patch("app.services.bot_service.append_telegram_trace", side_effect=OSError("disk full")):
+                with patch("app.services.bot_service.write_telegram_eval_run"):
+                    bot_service.handle_message(
+                        {
+                            "chat": {"id": 456},
+                            "from": {"id": 123},
+                            "text": "hola",
+                        },
+                        send_message_fn=fake_send,
+                        ask_chat_fn=lambda *args, **kwargs: {
+                            "answer": "ok",
+                            "provider": "ollama",
+                            "model": "granite4.1:8b",
+                            "temperature": 0.2,
+                            "use_rag": True,
+                            "status": "ok",
+                            "latency_ms": 4,
+                        },
+                        trace_id_factory=lambda: TRACE_ID,
+                    )
 
         self.assertEqual(sent_messages, [(456, "ok")])
 
@@ -351,22 +441,23 @@ class TelegramTracePersistenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(telegram_trace_module, "TELEGRAM_RUNS_DIR", Path(tmpdir) / "telegram_runs"):
                 with patch.object(telegram_trace_module, "TELEGRAM_EVAL_RUNS_DIR", Path(tmpdir) / "eval_runs"):
-                    bot_service.handle_message(
-                        {
-                            "chat": {"id": 456},
-                            "from": {"id": 123},
-                            "text": "hola",
-                        },
-                        send_message_fn=fake_send,
-                        ask_chat_fn=lambda *args, **kwargs: (_ for _ in ()).throw(
-                            bot_service.backend_client.BackendClientError(
-                                code="backend_timeout",
-                                message="backend_chat_error",
-                                status_code=504,
-                            )
-                        ),
-                        trace_id_factory=lambda: TRACE_ID,
-                    )
+                    with patch.object(telegram_trace_module, "TELEGRAM_CONVERSATION_RUNS_DIR", Path(tmpdir) / "conversation_runs"):
+                        bot_service.handle_message(
+                            {
+                                "chat": {"id": 456},
+                                "from": {"id": 123},
+                                "text": "hola",
+                            },
+                            send_message_fn=fake_send,
+                            ask_chat_fn=lambda *args, **kwargs: (_ for _ in ()).throw(
+                                bot_service.backend_client.BackendClientError(
+                                    code="backend_timeout",
+                                    message="backend_chat_error",
+                                    status_code=504,
+                                )
+                            ),
+                            trace_id_factory=lambda: TRACE_ID,
+                        )
 
             eval_files = list((Path(tmpdir) / "eval_runs").glob("chat_eval_*.json"))
             eval_payload = json.loads(eval_files[0].read_text(encoding="utf-8"))
@@ -387,22 +478,23 @@ class TelegramTracePersistenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(telegram_trace_module, "TELEGRAM_RUNS_DIR", Path(tmpdir) / "telegram_runs"):
                 with patch.object(telegram_trace_module, "TELEGRAM_EVAL_RUNS_DIR", Path(tmpdir) / "eval_runs"):
-                    bot_service.handle_message(
-                        {
-                            "chat": {"id": 456},
-                            "from": {"id": 123},
-                            "text": "hola",
-                        },
-                        send_message_fn=fake_send,
-                        ask_chat_fn=lambda *args, **kwargs: (_ for _ in ()).throw(
-                            bot_service.backend_client.BackendClientError(
-                                code="backend_timeout",
-                                message="backend_chat_error",
-                                status_code=504,
-                            )
-                        ),
-                        trace_id_factory=lambda: TRACE_ID,
-                    )
+                    with patch.object(telegram_trace_module, "TELEGRAM_CONVERSATION_RUNS_DIR", Path(tmpdir) / "conversation_runs"):
+                        bot_service.handle_message(
+                            {
+                                "chat": {"id": 456},
+                                "from": {"id": 123},
+                                "text": "hola",
+                            },
+                            send_message_fn=fake_send,
+                            ask_chat_fn=lambda *args, **kwargs: (_ for _ in ()).throw(
+                                bot_service.backend_client.BackendClientError(
+                                    code="backend_timeout",
+                                    message="backend_chat_error",
+                                    status_code=504,
+                                )
+                            ),
+                            trace_id_factory=lambda: TRACE_ID,
+                        )
 
             jsonl_files = list((Path(tmpdir) / "telegram_runs").glob("telegram_chat_*.jsonl"))
             payload = json.loads(jsonl_files[0].read_text(encoding="utf-8").strip())
@@ -422,6 +514,51 @@ class TelegramTracePersistenceTests(unittest.TestCase):
         self.assertEqual(payload["response"], f"No se pudo procesar el mensaje. (request_id={TRACE_ID})")
         self.assertEqual(payload["source_filenames"], [])
         self.assertNotIn("ollama", payload)
+
+    def test_backend_failure_can_persist_rag_metadata_when_backend_provides_it(self):
+        sent_messages: list[tuple[int, str]] = []
+
+        def fake_send(chat_id: int, text: str) -> None:
+            sent_messages.append((chat_id, text))
+
+        backend_error = bot_service.backend_client.BackendClientError(
+            code="rag_answer_contract_invalid",
+            message="backend_chat_error",
+            status_code=502,
+        )
+        backend_error.retrieval_status = "NO_EVIDENCE_FOR_ANSWER"
+        backend_error.chunk_ids = []
+        backend_error.document_ids = []
+        backend_error.source_filenames = []
+        backend_error.query_original = "¿que es un mecanismo de atencion?"
+        backend_error.use_rag = True
+        backend_error.provider = "openai"
+        backend_error.model = "gpt-5.5"
+        backend_error.temperature = 0.5
+        backend_error.top_k = 3
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(telegram_trace_module, "TELEGRAM_RUNS_DIR", Path(tmpdir) / "telegram_runs"):
+                with patch.object(telegram_trace_module, "TELEGRAM_EVAL_RUNS_DIR", Path(tmpdir) / "eval_runs"):
+                    with patch.object(telegram_trace_module, "TELEGRAM_CONVERSATION_RUNS_DIR", Path(tmpdir) / "conversation_runs"):
+                        bot_service.handle_message(
+                            {
+                                "chat": {"id": 456},
+                                "from": {"id": 123},
+                                "text": "¿que es un mecanismo de atencion?",
+                            },
+                            send_message_fn=fake_send,
+                            ask_chat_fn=lambda *args, **kwargs: (_ for _ in ()).throw(backend_error),
+                            trace_id_factory=lambda: TRACE_ID,
+                        )
+
+            payload = json.loads(next((Path(tmpdir) / "telegram_runs").glob("telegram_chat_*.jsonl")).read_text(encoding="utf-8").strip())
+
+        self.assertEqual(sent_messages, [(456, f"No se pudo procesar el mensaje. (request_id={TRACE_ID})")])
+        self.assertEqual(payload["error_code"], "rag_answer_contract_invalid")
+        self.assertEqual(payload["retrieval_status"], "NO_EVIDENCE_FOR_ANSWER")
+        self.assertEqual(payload["query_original"], "¿que es un mecanismo de atencion?")
+        self.assertTrue(payload["use_rag"])
 
     def test_build_eval_record_from_trace_preserves_all_fields(self):
         trace_record = {
@@ -499,6 +636,210 @@ class TelegramTracePersistenceTests(unittest.TestCase):
                 "top_k": 20,
             },
         )
+
+    def test_handle_message_stores_active_document_context_and_reuses_it_for_follow_up(self):
+        sent_messages: list[tuple[int, str]] = []
+        captured_kwargs: list[dict] = []
+
+        def fake_send(chat_id: int, text: str) -> None:
+            sent_messages.append((chat_id, text))
+
+        def fake_ask_chat(message: str, **kwargs) -> dict:
+            captured_kwargs.append(dict(kwargs))
+            if message == "que es transformer?":
+                return {
+                    "answer": "Transformer es una arquitectura basada en atención.",
+                    "provider": "ollama",
+                    "model": "granite4.1:8b",
+                    "temperature": 0.2,
+                    "use_rag": True,
+                    "status": "ok",
+                    "latency_ms": 12,
+                    "retrieval_status": "EVIDENCE_FOUND",
+                    "answer_mode": "documentary_answer",
+                    "document_ids": [68],
+                    "selected_corpus": "documentos_oficiales",
+                    "source_intent": "official_docs",
+                    "selected_filenames": ["Attention is all yout need.pdf"],
+                    "source_filenames": ["Attention is all yout need.pdf"],
+                    "chunk_ids": [376],
+                    "active_document_id": 68,
+                    "active_document_title": "Attention is all yout need.pdf",
+                    "active_context_used": False,
+                    "active_context_reason": None,
+                }
+
+            return {
+                "answer": "En este documento, los modelos son los modelos Transformer.",
+                "provider": "ollama",
+                "model": "granite4.1:8b",
+                "temperature": 0.2,
+                "use_rag": True,
+                "status": "ok",
+                "latency_ms": 11,
+                "retrieval_status": "EVIDENCE_FOUND",
+                "answer_mode": "documentary_answer",
+                "document_ids": [68],
+                "selected_corpus": "documentos_oficiales",
+                "source_intent": "mixed",
+                "selected_filenames": ["Attention is all yout need.pdf"],
+                "source_filenames": ["Attention is all yout need.pdf"],
+                "chunk_ids": [376, 377],
+                "active_document_id": 68,
+                "active_document_title": "Attention is all yout need.pdf",
+                "active_context_used": True,
+                "active_context_reason": "short_or_ambiguous_query",
+            }
+
+        with patch("app.services.bot_service.write_telegram_conversation_record"):
+            with patch("app.services.bot_service.append_telegram_trace"):
+                with patch("app.services.bot_service.write_telegram_eval_run"):
+                    bot_service.handle_message(
+                        {
+                            "chat": {"id": 456},
+                            "from": {"id": 123},
+                            "text": "que es transformer?",
+                        },
+                        send_message_fn=fake_send,
+                        ask_chat_fn=fake_ask_chat,
+                        trace_id_factory=lambda: TRACE_ID,
+                    )
+                    bot_service.handle_message(
+                        {
+                            "chat": {"id": 456},
+                            "from": {"id": 123},
+                            "text": "que son modelos?",
+                        },
+                        send_message_fn=fake_send,
+                        ask_chat_fn=fake_ask_chat,
+                        trace_id_factory=lambda: TRACE_ID,
+                    )
+
+        self.assertEqual(captured_kwargs[0]["active_document_id"], None)
+        self.assertEqual(captured_kwargs[1]["active_document_id"], 68)
+        self.assertEqual(captured_kwargs[1]["active_document_title"], "Attention is all yout need.pdf")
+        self.assertEqual(captured_kwargs[1]["active_corpus"], "documentos_oficiales")
+        self.assertEqual(captured_kwargs[1]["last_source_intent"], "official_docs")
+        self.assertEqual(sent_messages[0], (456, "Transformer es una arquitectura basada en atención."))
+        self.assertEqual(sent_messages[1], (456, "En este documento, los modelos son los modelos Transformer."))
+
+    def test_handle_message_persists_active_document_trace_fields(self):
+        traces = self._run_message_and_read_traces(
+            text="que son modelos?",
+            ask_chat_fn=lambda *args, **kwargs: {
+                "answer": "En este documento, los modelos son los modelos Transformer.",
+                "provider": "ollama",
+                "model": "granite4.1:8b",
+                "temperature": 0.2,
+                "use_rag": True,
+                "status": "ok",
+                "latency_ms": 11,
+                "retrieval_status": "EVIDENCE_FOUND",
+                "answer_mode": "documentary_answer",
+                "document_ids": [68],
+                "selected_corpus": "documentos_oficiales",
+                "source_intent": "mixed",
+                "selected_filenames": ["Attention is all yout need.pdf"],
+                "source_filenames": ["Attention is all yout need.pdf"],
+                "chunk_ids": [376, 377],
+                "active_document_id": 68,
+                "active_document_title": "Attention is all yout need.pdf",
+                "active_context_used": True,
+                "active_context_reason": "short_or_ambiguous_query",
+            },
+        )
+
+        payload = traces["jsonl_payload"]
+        eval_payload = traces["eval_payload"]
+        self.assertEqual(payload["active_document_id"], 68)
+        self.assertEqual(payload["active_document_title"], "Attention is all yout need.pdf")
+        self.assertTrue(payload["active_context_used"])
+        self.assertEqual(payload["active_context_reason"], "short_or_ambiguous_query")
+        self.assertTrue(payload["evidence_used"])
+        self.assertFalse(payload["fallback_used"])
+        self.assertEqual(eval_payload["active_document_id"], 68)
+        self.assertEqual(eval_payload["active_document_title"], "Attention is all yout need.pdf")
+
+    def test_handle_message_allows_explicit_nucleo_switch_even_with_active_document_context(self):
+        sent_messages: list[tuple[int, str]] = []
+        captured_kwargs: list[dict] = []
+
+        def fake_send(chat_id: int, text: str) -> None:
+            sent_messages.append((chat_id, text))
+
+        def fake_ask_chat(message: str, **kwargs) -> dict:
+            captured_kwargs.append(dict(kwargs))
+            if message == "que es transformer?":
+                return {
+                    "answer": "Transformer es una arquitectura basada en atención.",
+                    "provider": "ollama",
+                    "model": "granite4.1:8b",
+                    "temperature": 0.2,
+                    "use_rag": True,
+                    "status": "ok",
+                    "latency_ms": 12,
+                    "retrieval_status": "EVIDENCE_FOUND",
+                    "answer_mode": "documentary_answer",
+                    "document_ids": [68],
+                    "selected_corpus": "documentos_oficiales",
+                    "source_intent": "official_docs",
+                    "selected_filenames": ["Attention is all yout need.pdf"],
+                    "source_filenames": ["Attention is all yout need.pdf"],
+                    "chunk_ids": [376],
+                    "active_document_id": 68,
+                    "active_document_title": "Attention is all yout need.pdf",
+                    "active_context_used": False,
+                    "active_context_reason": None,
+                }
+
+            return {
+                "answer": "El orquestador coordina planner, policy y runtime.",
+                "provider": "ollama",
+                "model": "granite4.1:8b",
+                "temperature": 0.2,
+                "use_rag": True,
+                "status": "ok",
+                "latency_ms": 11,
+                "retrieval_status": "EVIDENCE_FOUND",
+                "answer_mode": "documentary_answer",
+                "document_ids": [3],
+                "selected_corpus": "nucleo",
+                "source_intent": "nucleo",
+                "selected_filenames": ["orchestrator.md"],
+                "source_filenames": ["orchestrator.md"],
+                "chunk_ids": [3],
+                "active_document_id": 68,
+                "active_document_title": "Attention is all yout need.pdf",
+                "active_context_used": False,
+                "active_context_reason": "overridden_by_explicit_intent",
+            }
+
+        with patch("app.services.bot_service.write_telegram_conversation_record"):
+            with patch("app.services.bot_service.append_telegram_trace"):
+                with patch("app.services.bot_service.write_telegram_eval_run"):
+                    bot_service.handle_message(
+                        {
+                            "chat": {"id": 456},
+                            "from": {"id": 123},
+                            "text": "que es transformer?",
+                        },
+                        send_message_fn=fake_send,
+                        ask_chat_fn=fake_ask_chat,
+                        trace_id_factory=lambda: TRACE_ID,
+                    )
+                    bot_service.handle_message(
+                        {
+                            "chat": {"id": 456},
+                            "from": {"id": 123},
+                            "text": "qué hace el orquestador de NUCLEO?",
+                        },
+                        send_message_fn=fake_send,
+                        ask_chat_fn=fake_ask_chat,
+                        trace_id_factory=lambda: TRACE_ID,
+                    )
+
+        self.assertEqual(captured_kwargs[1]["active_document_id"], 68)
+        self.assertEqual(sent_messages[1], (456, "El orquestador coordina planner, policy y runtime."))
 
     def test_write_telegram_eval_run_prints_written_path(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -590,6 +931,132 @@ class TelegramTracePersistenceTests(unittest.TestCase):
         self.assertEqual(warm_summary["evidence_found_rate"], 1.0)
         self.assertEqual(legacy_summary["temperature"], None)
         self.assertEqual(legacy_summary["errors"], 1)
+
+
+class TelegramConversationRecordTests(unittest.TestCase):
+    def test_write_telegram_conversation_record_saves_valid_json(self):
+        created_at = datetime(2026, 5, 10, 9, 30, 0, tzinfo=timezone.utc)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = telegram_trace_module.write_telegram_conversation_record(
+                trace_id=TRACE_ID,
+                chat_id=456,
+                user_id=123,
+                command="chat",
+                model="granite4.1:8b",
+                input_text="hola",
+                response_text="respuesta",
+                status="ok",
+                latency_ms=42,
+                created_at=created_at,
+                metadata={
+                    "temperature": 0.2,
+                    "tokens_input": 10,
+                    "tokens_output": 5,
+                    "tokens_total": 15,
+                    "retrieval_status": "EVIDENCE_FOUND",
+                    "chunk_ids": [346],
+                    "document_ids": [12],
+                    "source_filenames": ["ARCHITECTURE.md"],
+                    "warnings": [],
+                },
+                base_dir=Path(tmpdir),
+            )
+
+            payload = json.loads(output_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(output_path.parent.name, "2026-05-10")
+        self.assertEqual(output_path.name, f"{TRACE_ID}.json")
+        self.assertEqual(payload["trace_id"], TRACE_ID)
+        self.assertEqual(payload["source"], "telegram")
+        self.assertEqual(payload["session_id"], "456")
+        self.assertEqual(payload["input"], "hola")
+        self.assertEqual(payload["response"], "respuesta")
+        self.assertEqual(payload["document_ids"], [12])
+        self.assertEqual(payload["source_filenames"], ["ARCHITECTURE.md"])
+
+    def test_load_conversation_records_returns_last_records_sorted_by_created_at(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            telegram_trace_module.write_telegram_conversation_record(
+                trace_id="00000000000000000000000000000001",
+                chat_id=1,
+                user_id=1,
+                command="chat",
+                model="m1",
+                input_text="a",
+                response_text="ra",
+                status="ok",
+                latency_ms=1,
+                created_at=datetime(2026, 5, 8, 9, 0, 0, tzinfo=timezone.utc),
+                base_dir=base_dir,
+            )
+            telegram_trace_module.write_telegram_conversation_record(
+                trace_id="00000000000000000000000000000002",
+                chat_id=1,
+                user_id=1,
+                command="chat",
+                model="m1",
+                input_text="b",
+                response_text="rb",
+                status="ok",
+                latency_ms=1,
+                created_at=datetime(2026, 5, 9, 9, 0, 0, tzinfo=timezone.utc),
+                base_dir=base_dir,
+            )
+            telegram_trace_module.write_telegram_conversation_record(
+                trace_id="00000000000000000000000000000003",
+                chat_id=1,
+                user_id=1,
+                command="chat",
+                model="m1",
+                input_text="c",
+                response_text="rc",
+                status="ok",
+                latency_ms=1,
+                created_at=datetime(2026, 5, 10, 9, 0, 0, tzinfo=timezone.utc),
+                base_dir=base_dir,
+            )
+
+            records = telegram_trace_module.load_conversation_records(base_dir=base_dir, limit=2)
+
+        self.assertEqual(
+            [record["trace_id"] for record in records],
+            [
+                "00000000000000000000000000000002",
+                "00000000000000000000000000000003",
+            ],
+        )
+
+    def test_load_conversation_records_report_skips_corrupt_json(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            valid_dir = base_dir / "2026-05-10"
+            valid_dir.mkdir(parents=True, exist_ok=True)
+            (valid_dir / "valid.json").write_text(
+                json.dumps(
+                    {
+                        "trace_id": TRACE_ID,
+                        "created_at": "2026-05-10T09:00:00+00:00",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (valid_dir / "corrupt.json").write_text("{invalid", encoding="utf-8")
+
+            report = telegram_trace_module.load_conversation_records_report(base_dir=base_dir, limit=10)
+
+        self.assertEqual(report["loaded_records"], 1)
+        self.assertEqual(report["skipped_records"], 1)
+        self.assertEqual(len(report["records"]), 1)
+        self.assertEqual(len(report["warnings"]), 1)
+
+    def test_load_conversation_records_returns_empty_when_directory_missing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir) / "missing"
+            records = telegram_trace_module.load_conversation_records(base_dir=base_dir, limit=10)
+
+        self.assertEqual(records, [])
 
 
 if __name__ == "__main__":

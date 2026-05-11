@@ -18,6 +18,10 @@ class ChatRequest(BaseModel):
     user_id: int | None = None
     chat_id: int | None = None
     allowed_source_filenames: list[str] = Field(default_factory=list)
+    active_document_id: int | None = Field(default=None, ge=1)
+    active_document_title: str | None = Field(default=None, min_length=1, max_length=255)
+    active_corpus: str | None = Field(default=None, min_length=1, max_length=64)
+    last_source_intent: str | None = Field(default=None, min_length=1, max_length=64)
 
     @field_validator("trace_id")
     @classmethod
@@ -67,9 +71,30 @@ class ChatResponse(BaseModel):
     answer: str
     latency_ms: int
     retrieval_status: str | None = None
+    answer_mode: str | None = None
+    query_original: str | None = None
+    query_normalized: str | None = None
+    query_terms: list[str] = Field(default_factory=list)
+    quoted_terms: list[str] = Field(default_factory=list)
+    source_intent: str | None = None
+    selected_corpus: str | None = None
+    active_document_id: int | None = None
+    active_document_title: str | None = None
+    active_context_used: bool = False
+    active_context_reason: str | None = None
+    evidence_used: bool = False
+    fallback_used: bool = False
+    query_expansion_used: bool = False
+    query_expansion_reason: str | None = None
+    expanded_query_terms: list[str] = Field(default_factory=list)
+    candidate_filenames: list[str] = Field(default_factory=list)
+    selected_filenames: list[str] = Field(default_factory=list)
     chunks: list[str] = Field(default_factory=list)
     chunk_ids: list[int] = Field(default_factory=list)
+    document_ids: list[int] = Field(default_factory=list)
     source_filenames: list[str] = Field(default_factory=list)
+    scores: list[int] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
     prompt_eval_count: int | None = None
     eval_count: int | None = None
     prompt_eval_duration: int | None = None
