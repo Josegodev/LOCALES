@@ -15,8 +15,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from app.config import BACKEND_URL
 
-DEFAULT_BACKEND_URL = "http://127.0.0.1:8000"
+
+DEFAULT_BACKEND_URL = BACKEND_URL
 DEFAULT_TIMEOUT_SECONDS = 60
 RAW_METRIC_KEYS = (
     "prompt_eval_count",
@@ -469,7 +471,7 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def run_evals(*, write_baseline: bool = False, compare_baseline: bool = False) -> dict[str, Any]:
-    backend_url = os.getenv("LOCALES_BACKEND_URL", DEFAULT_BACKEND_URL).rstrip("/")
+    backend_url = os.getenv("BACKEND_URL", os.getenv("LOCALES_BACKEND_URL", DEFAULT_BACKEND_URL)).rstrip("/")
     eval_timeout_seconds = int(os.getenv("EVAL_TIMEOUT_SECONDS", str(DEFAULT_TIMEOUT_SECONDS)))
     configured_model = os.getenv("OLLAMA_MODEL") or None
 

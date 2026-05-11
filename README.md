@@ -1,147 +1,120 @@
 # LOCALES
 
-Runtime local para interacción Telegram → FastAPI → herramientas controladas, con generación opcional mediante LLM local.
+## Propósito
 
-El sistema está diseñado para mantener la ejecución bajo contratos explícitos, permisos, sandbox filesystem y trazabilidad por `request_id`.
+`LOCALES` integra un bot local de Telegram con trazabilidad operativa, flujo de chat con LLM y una capa experimental de análisis de repositorio mediante `/repo`.
 
-## Arquitectura
+El objetivo práctico actual es:
 
-```text
-Telegram Bot
-    ↓
-Command Parser
-    ↓
-Permission Layer
-    ↓
-Optional LLM Generation
-    ↓
-Pydantic Contracts
-    ↓
-FastAPI /documents
-    ↓
-Sandbox Document Writer
-    ↓
-Filesystem
+- operar el bot de Telegram
+- mantener trazas y observabilidad de las interacciones
+- responder preguntas sobre un repositorio fijo con herramientas deterministas
+- usar fallback LLM solo cuando la pregunta de repositorio es abierta
 
-Comandos Telegram
-/doc
+## Estado actual
 
-Crea un documento Markdown con contenido escrito por el usuario.
+- Bot Telegram operativo.
+- `/repo` experimental para analizar únicamente `REPO_ANALYZER_PATH`.
+- Herramientas deterministas para lectura y búsqueda en repositorio.
+- Fallback LLM con Ollama para preguntas abiertas de repositorio.
+- Trazas ampliadas para el flujo Telegram.
 
-/doc prueba.md
-Contenido del documento.
+## Componentes principales
 
-Flujo:
+| Componente | Ruta | Función |
+| --- | --- | --- |
+| Bot Telegram | `app/services/bot_service.py` | Orquesta mensajes Telegram, comandos y persistencia de trazas |
+| Servicio `/repo` | `app/services/repo_analyzer_service.py` | Valida configuración de `/repo`, ejecuta routing y formatea respuestas |
+| Tools deterministas | `app/services/repo_tools.py` | Resuelve lectura de líneas, búsqueda, árbol y localización de archivos |
+| Trazas Telegram | `app/observability/telegram_trace.py` | Persiste `trace_id`, metadata y artefactos de ejecución Telegram |
+| Guía `/repo` | `docs/repo_analyzer_telegram.md` | Documentación completa del flujo `/repo` |
 
-Telegram → parser → permisos → CreateDocumentRequest → /documents → writer
-/doc_ai
+## Configuración mínima
 
-Crea un documento Markdown con contenido generado por un LLM local.
+Variables necesarias para `/repo`:
 
-/doc_ai resumen.md
-Explica en 5 líneas qué es un sandbox.
+```env
+REPO_ANALYZER_ENABLED=true
+REPO_ANALYZER_PATH=/home/jose-gonzalez-oliva/LOCALES
+REPO_ANALYZER_MODEL=granite4.1:8b
+REPO_ANALYZER_TEMPERATURE=0.2
+```
 
-Flujo:
+Variables mínimas del bot Telegram:
 
-Telegram → parser → permisos → LLM → validación salida → /documents → writer
-
-El LLM solo genera contenido. No decide filename, ruta, permisos ni escritura.
-
-Contratos principales
-CreateDocumentRequest
-
-Campos obligatorios:
-
-request_id
-filename
-content
-overwrite = false
-user_id
-chat_id
-
-Restricciones:
-
-filename obligatorio.
-Solo extensión .md.
-No rutas absolutas.
-No ...
-No / ni \.
-Máximo 120 caracteres.
-content no vacío.
-content máximo 100000 caracteres.
-overwrite solo puede ser false.
-Campos extra rechazados.
-Seguridad defensiva
-
-Medidas implementadas:
-
-Allowlist de usuarios Telegram.
-Deny-by-default si no hay usuarios permitidos.
-Sandbox filesystem.
-Rechazo de path traversal.
-Rechazo de sobrescritura.
-request_id extremo a extremo.
-Logs estructurados.
-Separación entre generación LLM y escritura.
-Tests de contrato, permisos y rechazos.
-Variables de entorno
-
-Crear .env local. No subirlo a Git.
-
+```env
 TELEGRAM_BOT_TOKEN=...
 TELEGRAM_ALLOWED_USER_IDS=123456789
+```
 
-TELEGRAM_DOCS_DIR=./TELEGRAM_DOCS
+## Configurar backend remoto en LAN
 
-LMSTUDIO_BASE_URL=http://127.0.0.1:1234
-LMSTUDIO_MODEL=granite-3.2-8b
-LLM_TIMEOUT_SECONDS=60
-LLM_MAX_OUTPUT_CHARS=50000
-Arranque local
+Si FastAPI corre en otro PC, el bot no debe usar `127.0.0.1`, porque esa IP siempre apunta a la propia máquina donde corre el proceso.
 
-Terminal 1:
+Configura `BACKEND_URL` en tu `.env`:
 
+```env
+BACKEND_URL=http://IP_DEL_PC_API:8000
+```
+
+Ejemplo en una red local:
+
+```env
+BACKEND_URL=http://192.168.1.20:8000
+```
+
+El bot y los scripts de eval construirán las rutas a partir de esa base, por ejemplo:
+
+- `http://IP_DEL_PC_API:8000/chat`
+- `http://IP_DEL_PC_API:8000/documents`
+
+## Uso rápido
+
+Arranque local del backend y del bot:
+
+```bash
 cd ~/LOCALES
 source .venv/bin/activate
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
 
-Terminal 2:
-
+```bash
 cd ~/LOCALES
 source .venv/bin/activate
-python run_telegram.py
+python scripts/run_telegram.py
+```
 
-LM Studio debe estar levantado en modo servidor OpenAI-compatible si se usa /doc_ai.
+Ejemplos de `/repo` en Telegram:
 
-Validación
+- `/repo línea 14 de config.py`
+- `/repo busca REPO_ANALYZER_ENABLED`
+- `/repo estructura del repo`
+- `/repo Qué riesgos ves en este repo?`
 
-Compilar módulos principales:
+Resumen de comportamiento:
 
-.venv/bin/python -m py_compile app/config.py app/schemas.py app/main.py app/document_writer.py app/llm_client.py run_telegram.py
+- preguntas exactas usan tools deterministas
+- preguntas abiertas usan fallback LLM
+- `/repo` no acepta rutas dinámicas desde Telegram
 
-Ejecutar tests:
+## Verificación
 
-.venv/bin/python -m unittest discover -s tests
-Límites actuales
+```bash
+python3 -m compileall app scripts tests
+python3 -m pytest -q
+```
 
-Este proyecto no debe considerarse aún un agente autónomo.
+## Límites conocidos
 
-No implementado todavía:
+- `/repo` no edita archivos.
+- `/repo` no ejecuta comandos.
+- `/repo` no acepta `repo_path` desde Telegram.
+- `/repo` no hace análisis multi-repo.
+- El fallback LLM requiere Ollama.
+- El fallback LLM depende del workspace `Analyzer`.
+- Las reglas de exclusión están duplicadas localmente en `app/services/repo_tools.py`.
 
-Tool calling autónomo por LLM.
-Planner.
-Ejecución shell.
-Memoria persistente.
-RAG integrado en /doc_ai.
-Rate limiting.
-Aislamiento fuerte por usuario Linux/systemd.
-Multiusuario avanzado.
-Principio de diseño
+## Documentación ampliada
 
-El LLM no es autoridad operacional.
-
-Puede generar texto, pero las acciones pasan por:
-
-contrato → permisos → sandbox → writer
-
-Esto evita que un fallo de inferencia implique compromiso del filesystem.
+- `docs/repo_analyzer_telegram.md`
+- `docs/telemetry_and_evals_current_state.md`

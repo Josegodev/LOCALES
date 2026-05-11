@@ -3,6 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    backend_url: str = "http://127.0.0.1:8000"
     lmstudio_base_url: str = "http://127.0.0.1:1234"
     lmstudio_timeout_seconds: float = 60.0
     lmstudio_model: str = "ibm/granite-3.2-8b"
@@ -21,6 +22,10 @@ class Settings(BaseSettings):
     telegram_allowed_chat_ids: str | None = None
     telegram_allowed_user_ids: str | None = None
     telegram_trace_include_text: bool = False
+    repo_analyzer_enabled: bool = False
+    repo_analyzer_path: str = ""
+    repo_analyzer_model: str = "granite4.1:8b"
+    repo_analyzer_temperature: float = 0.2
     openai_api_key: str | None = None
 
     model_config = SettingsConfigDict(
@@ -34,6 +39,9 @@ class Settings(BaseSettings):
         if base_url.endswith("/v1"):
             return base_url
         return f"{base_url}/v1"
+
+    def backend_base_url(self) -> str:
+        return self.backend_url.rstrip("/")
 
     def ollama_api_base_url(self) -> str:
         base_url = self.ollama_base_url.rstrip("/")
@@ -55,3 +63,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+BACKEND_URL = settings.backend_base_url()

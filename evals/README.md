@@ -52,8 +52,10 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 ### Variables
 
-- `LOCALES_BACKEND_URL`
+- `BACKEND_URL`
   - default: `http://127.0.0.1:8000`
+- `LOCALES_BACKEND_URL`
+  - legado; se usa solo como fallback si `BACKEND_URL` no está definido
 - `EVAL_TIMEOUT_SECONDS`
   - default: `60`
 - `OLLAMA_MODEL`

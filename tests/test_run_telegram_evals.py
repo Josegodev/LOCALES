@@ -55,6 +55,9 @@ class RunTelegramEvalsTests(unittest.TestCase):
             "telegram_eval_mistral-latest_20260509T125031157569Z",
         )
 
+    def test_default_endpoint_uses_backend_url_base_plus_chat(self):
+        self.assertEqual(run_telegram_evals.DEFAULT_ENDPOINT, "http://127.0.0.1:8000/chat")
+
     def test_run_interactive_cancel_does_not_call_endpoint(self):
         prompts = iter(
             [

@@ -14,11 +14,12 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from app.schemas import ChatRequest
+from app.config import BACKEND_URL
 
 
 DEFAULT_TEMPERATURES = [0.2, 0.7, 1.0]
 DEFAULT_RUNS_PER_TEMPERATURE = 5
-DEFAULT_ENDPOINT = "http://127.0.0.1:8000/chat"
+DEFAULT_ENDPOINT = f"{BACKEND_URL}/chat"
 DEFAULT_TIMEOUT_SECONDS = 60
 RUNS_ROOT = REPO_ROOT / "evals" / "runs"
 FIXED_SOURCE = "telegram_eval"
@@ -41,9 +42,9 @@ INITIAL_CASES = [
         "allowed_source_filenames": NUCLEO_ALLOWED_SOURCE_FILENAMES,
         "expected_source_filenames": ["EVOLUTION_MAP.md"],
         "forbidden_terms": [
-            "supervisor de producción",
-            "API, runtime y tools de producción",
-            "estado actual verificado",
+            "API",
+            "runtime",
+            "tools"
         ],
         "max_forbidden_terms": 0,
     }

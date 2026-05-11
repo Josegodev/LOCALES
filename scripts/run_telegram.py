@@ -12,19 +12,20 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from app.adapters import backend_client, telegram_api
-from app.config import settings
+from app.config import BACKEND_URL, settings
 from app.llm_client import LLMClientError, generate_markdown
-from app.observability import log_event
+from app.observability import TELEGRAM_CONVERSATION_RUNS_DIR, load_conversation_records_report, log_event
 from app.schemas import CreateDocumentRequest
 from app.services import bot_service
 from app.telegram_permissions import is_telegram_user_allowed
 
-FASTAPI_URL = backend_client.FASTAPI_URL
+FASTAPI_URL = BACKEND_URL
 DEFAULT_PROVIDER = "ollama"
 DEFAULT_MODEL = "granite4.1:8b"
 DEFAULT_TEMPERATURE = 0.2
 DEFAULT_USE_RAG = True
 DEFAULT_TOP_K = 3
+DEFAULT_CONVERSATION_LOAD_LIMIT = 1000
 MODEL_ALIASES: dict[str, tuple[str, str]] = {
     "granite": ("ollama", "granite4.1:8b"),
     "mistral": ("ollama", "mistral:latest"),
@@ -42,6 +43,7 @@ SELECTED_PROVIDER = DEFAULT_PROVIDER
 SELECTED_MODEL = DEFAULT_MODEL
 SELECTED_TEMPERATURE = DEFAULT_TEMPERATURE
 SELECTED_USE_RAG = DEFAULT_USE_RAG
+LOADED_CONVERSATION_RECORDS: list[dict] = []
 
 DOC_COMMAND = bot_service.DOC_COMMAND
 DOC_USAGE_TEXT = bot_service.DOC_USAGE_TEXT
@@ -233,6 +235,10 @@ def ask_fastapi(
     trace_id: str | None = None,
     user_id: int | None = None,
     chat_id: int | None = None,
+    active_document_id: int | None = None,
+    active_document_title: str | None = None,
+    active_corpus: str | None = None,
+    last_source_intent: str | None = None,
 ) -> dict:
     payload = {
         "message": message,
@@ -246,6 +252,10 @@ def ask_fastapi(
         "trace_id": trace_id,
         "user_id": user_id,
         "chat_id": chat_id,
+        "active_document_id": active_document_id,
+        "active_document_title": active_document_title,
+        "active_corpus": active_corpus,
+        "last_source_intent": last_source_intent,
     }
     for key, value in optional_fields.items():
         if value is not None:
@@ -295,6 +305,8 @@ def ask_fastapi(
         data["top_k"] = DEFAULT_TOP_K
     if not isinstance(data.get("source_filenames"), list):
         data["source_filenames"] = []
+    if not isinstance(data.get("document_ids"), list):
+        data["document_ids"] = []
 
     return data
 
@@ -315,13 +327,31 @@ def handle_message(msg: dict) -> None:
     )
 
 
+def _load_telegram_conversation_memory(limit: int = DEFAULT_CONVERSATION_LOAD_LIMIT) -> list[dict]:
+    report = load_conversation_records_report(
+        base_dir=TELEGRAM_CONVERSATION_RUNS_DIR,
+        limit=limit,
+    )
+    for warning in report["warnings"]:
+        print(f"Warning: {warning}", file=sys.stderr)
+    print(
+        "Conversation memory loaded: "
+        f"loaded_records={report['loaded_records']} "
+        f"skipped_records={report['skipped_records']} "
+        f"base_dir={report['base_dir']}"
+    )
+    return report["records"]
+
+
 def main() -> None:
     global last_update_id
     global SELECTED_PROVIDER
     global SELECTED_MODEL
     global SELECTED_TEMPERATURE
     global SELECTED_USE_RAG
+    global LOADED_CONVERSATION_RECORDS
     consecutive_failures = 0
+    LOADED_CONVERSATION_RECORDS = _load_telegram_conversation_memory()
     SELECTED_PROVIDER, SELECTED_MODEL = select_model()
     SELECTED_TEMPERATURE = select_temperature()
     SELECTED_USE_RAG = select_use_rag()
