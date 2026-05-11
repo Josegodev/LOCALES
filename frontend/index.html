@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LOCALES / NUCLEO - Local AI Runtime Console</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Consola operacional frontend/client</p>
+        <h1>LOCALES / NUCLEO - Local AI Runtime Console</h1>
+        <p class="lead">
+          Panel ligero para explicar, probar y diagnosticar el runtime local:
+          Backend API, RAG local, runtime de modelos y clientes web o Telegram.
+        </p>
+      </div>
+      <div class="runtime-card">
+        <span class="badge ok">Runtime principal</span>
+        <strong>Backend configurado</strong>
+        <small>La consola usara la URL indicada en la seccion de conexion.</small>
+      </div>
+    </header>
+
+    <main>
+      <nav class="tab-list" aria-label="Modos operativos">
+        <button class="tab-button active" type="button" data-tab-target="principal" aria-controls="tab-principal" aria-selected="true">Principal</button>
+        <button class="tab-button" type="button" data-tab-target="telegram" aria-controls="tab-telegram" aria-selected="false">Telegram</button>
+        <button class="tab-button" type="button" data-tab-target="lan" aria-controls="tab-lan" aria-selected="false">LAN opcional</button>
+      </nav>
+
+      <div id="tab-principal" class="tab-panel active" data-tab-panel="principal">
+      <section class="panel">
+        <h2>Arquitectura actual</h2>
+        <p>
+          El runtime de IA se organiza por roles. El Backend API funciona como
+          capa de control, el RAG local recupera evidencia desde documentos, el
+          runtime de modelos genera respuestas y Telegram puede actuar como otro
+          cliente del mismo backend. El frontend no lee SQLite, PDFs ni chunks
+          directamente.
+        </p>
+        <div class="diagram-grid single">
+          <article>
+            <h3>Modo principal</h3>
+            <pre>Frontend
+   -> Backend API
+        -> RAG local
+        -> Runtime de modelos</pre>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel control-panel">
+        <div>
+          <h2>Conexion backend</h2>
+          <label for="backendUrl">Backend base URL</label>
+          <input id="backendUrl" type="url" placeholder="https://backend.local" />
+        </div>
+        <div class="button-row">
+          <button id="healthButton" type="button">Check FastAPI health</button>
+          <a id="docsLink" class="secondary-button" href="#" target="_blank" rel="noreferrer">Abrir /docs</a>
+        </div>
+      </section>
+
+      <section class="grid-two">
+        <article class="panel">
+          <h2>Health panel</h2>
+          <div id="healthStatus" class="status muted">Sin ejecutar</div>
+          <dl class="metrics">
+            <div><dt>Status</dt><dd id="healthState">-</dd></div>
+            <div><dt>latency_ms</dt><dd id="healthLatency">-</dd></div>
+          </dl>
+          <pre id="healthRaw" class="output">Pulsa el boton para llamar a /health.</pre>
+        </article>
+
+        <article class="panel">
+          <h2>Chat / RAG test</h2>
+          <label for="messageInput">Mensaje</label>
+          <textarea id="messageInput" rows="5">Que es un transformer?</textarea>
+          <label class="checkbox">
+            <input id="useRagInput" type="checkbox" checked />
+            use_rag=true
+          </label>
+          <button id="chatButton" type="button">Send</button>
+        </article>
+      </section>
+
+      <section class="panel">
+        <h2>Respuesta /chat</h2>
+        <div id="chatStatus" class="status muted">Sin ejecutar</div>
+        <dl class="metrics wide">
+          <div><dt>retrieval_status</dt><dd id="retrievalStatus">-</dd></div>
+          <div><dt>evidence_used</dt><dd id="evidenceUsed">-</dd></div>
+          <div><dt>fallback_used</dt><dd id="fallbackUsed">-</dd></div>
+          <div><dt>chunks_found</dt><dd id="chunksFound">-</dd></div>
+          <div><dt>provider/model</dt><dd id="providerModel">-</dd></div>
+          <div><dt>trace_id</dt><dd id="traceId">-</dd></div>
+          <div><dt>latency_ms</dt><dd id="chatLatency">-</dd></div>
+        </dl>
+        <h3>Texto</h3>
+        <pre id="answerText" class="output">La respuesta aparecera aqui.</pre>
+        <h3>Warnings</h3>
+        <pre id="warningsText" class="output small">-</pre>
+        <h3>Raw JSON</h3>
+        <pre id="chatRaw" class="output small">-</pre>
+      </section>
+
+      <section class="panel">
+        <h2>Evidencia recuperada</h2>
+        <div id="evidenceList" class="evidence-list">
+          <p class="muted-text">Si /chat devuelve chunks, source_filenames, chunk_ids, document_ids o scores, se mostraran aqui.</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Campos de observabilidad</h2>
+        <div class="pill-list">
+          <span>trace_id / request_id</span><span>timestamp</span><span>provider</span><span>model</span>
+          <span>input/output tokens</span><span>latency_ms</span><span>retrieval_status</span>
+          <span>chunks_found</span><span>evidence_used</span><span>fallback_used</span>
+          <span>warnings</span><span>error_type/error_code</span><span>cost estimate</span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Que se ha construido</h2>
+        <div class="timeline">
+          <span>Runtime local de modelos</span>
+          <span>Backend FastAPI</span>
+          <span>Bot de Telegram</span>
+          <span>Chunking documental en SQLite</span>
+          <span>RAG sobre documents.sqlite</span>
+          <span>Trazas de evidencia y fallback</span>
+          <span>Hardening del esquema SQLite</span>
+          <span>Experimento Samba</span>
+          <span>Remote RAG Service por LAN</span>
+          <span>Paridad de filtros de fuentes</span>
+          <span>Linux como runtime principal</span>
+          <span>Frontend como cliente del backend</span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Comandos operacionales</h2>
+        <div class="command-grid">
+          <article>
+            <h3>Linux FastAPI primary runtime</h3>
+            <pre>cd /home/jose-gonzalez-oliva/LOCALES
+source .venv/bin/activate
+export BACKEND_URL=&lt;backend-api-url&gt;
+export OLLAMA_BASE_URL=&lt;model-runtime-url&gt;
+export USE_REMOTE_RAG=false
+export DOCUMENTS_DB_PATH=/home/jose-gonzalez-oliva/LOCALES/DB/chunks/documents.sqlite
+uvicorn app.main:app --host &lt;bind-host&gt; --port &lt;api-port&gt;</pre>
+          </article>
+          <article>
+            <h3>Telegram bot</h3>
+            <pre>cd /home/jose-gonzalez-oliva/LOCALES
+source .venv/bin/activate
+export BACKEND_URL=&lt;backend-api-url&gt;
+python scripts/run_telegram.py</pre>
+          </article>
+          <article>
+            <h3>Frontend test</h3>
+            <pre>curl.exe &lt;backend-api-url&gt;/health</pre>
+          </article>
+          <article>
+            <h3>RAG test</h3>
+            <pre>curl.exe -X POST "&lt;backend-api-url&gt;/chat" -H "Content-Type: application/json" -d "{\"message\":\"Que es un transformer?\",\"use_rag\":true}"</pre>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Diagnostico de fallos</h2>
+        <div class="failure-grid">
+          <article><strong>Connection refused</strong><p>El servicio no esta escuchando en ese puerto.</p></article>
+          <article><strong>Timeout</strong><p>Firewall, IP incorrecta, ruta de red o servicio no accesible.</p></article>
+          <article><strong>CORS error</strong><p>El origen del frontend no esta permitido por el Backend API.</p></article>
+          <article><strong>NO_EVIDENCE_FOR_ANSWER</strong><p>RAG no encontro evidencia usable; el fallback puede responder con conocimiento del modelo.</p></article>
+          <article><strong>RAG_SERVICE_UNAVAILABLE</strong><p>El servicio RAG remoto esta caido; solo aplica al modo distribuido.</p></article>
+          <article><strong>sqlite no such table documents</strong><p>Fallo antiguo ya protegido; si reaparece indica DB o esquema invalido.</p></article>
+        </div>
+      </section>
+      </div>
+
+      <div id="tab-telegram" class="tab-panel" data-tab-panel="telegram" hidden>
+        <section class="panel">
+          <h2>Modo Telegram</h2>
+          <p>
+            Telegram funciona como otro cliente del Backend API. El bot usa una
+            URL de backend configurada en su entorno y delega chat, RAG y modelo
+            al mismo runtime operacional.
+          </p>
+          <div class="diagram-grid single">
+            <article>
+              <h3>Flujo Telegram</h3>
+              <pre>Telegram
+   -> Bot Telegram
+        -> Backend API
+             -> RAG local
+             -> Runtime de modelos</pre>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="section-heading-row">
+            <div>
+              <h2>Observabilidad Telegram</h2>
+              <p class="muted-text">
+                Estructura visual preparada para datos reales. No llama endpoints
+                inexistentes ni inventa backend de metricas.
+              </p>
+            </div>
+            <span class="badge pending">Pendiente de backend</span>
+          </div>
+
+          <div class="telegram-control-panel">
+            <article>
+              <h3>Control del servicio</h3>
+              <div class="button-row">
+                <button id="telegramStatusButton" type="button">Consultar status</button>
+                <button id="telegramConfigButton" type="button">Consultar config</button>
+                <button id="telegramStartButton" type="button">Arrancar Telegram</button>
+                <button id="telegramStopButton" type="button">Parar Telegram</button>
+              </div>
+              <div id="telegramStatus" class="status muted">Sin ejecutar</div>
+              <pre id="telegramRaw" class="output small">Los endpoints de Telegram usan el Backend base URL configurado.</pre>
+            </article>
+            <article>
+              <h3>Config runtime</h3>
+              <label for="telegramModelInput">Modelo por defecto</label>
+              <input id="telegramModelInput" type="text" value="granite4.1:8b" />
+              <label for="telegramTemperatureInput">Temperatura</label>
+              <input id="telegramTemperatureInput" type="number" min="0" max="1" step="0.1" value="0.2" />
+              <label class="checkbox">
+                <input id="telegramRagInput" type="checkbox" checked />
+                RAG por defecto activo
+              </label>
+              <button id="telegramSaveConfigButton" type="button">Guardar config</button>
+              <p class="muted-text">El token no se muestra ni se envia desde el frontend.</p>
+            </article>
+          </div>
+
+          <div class="placeholder-grid">
+            <article>
+              <h3>Metricas</h3>
+              <p>Pendiente de conectar a endpoint de metricas.</p>
+              <div class="field-list">
+                <span>trace_id / run_id</span><span>timestamp</span><span>chat_id / user_id / session_id</span>
+                <span>source = telegram</span><span>model</span><span>retrieval_status</span><span>chunk_ids</span>
+                <span>tokens_input</span><span>tokens_output</span><span>tokens_total</span><span>latency_ms</span>
+                <span>output_tokens_per_second</span><span>status</span><span>error_code</span><span>error_message</span><span>warnings</span>
+              </div>
+            </article>
+            <article>
+              <h3>Trazas</h3>
+              <p>Pendiente de conectar a trazas por trace_id.</p>
+              <div class="field-list">
+                <span>trace_id</span><span>request_received</span><span>retrieval_started</span>
+                <span>retrieval_finished</span><span>llm_started</span><span>llm_finished</span>
+                <span>response_sent</span><span>failure_stage</span>
+              </div>
+            </article>
+            <article>
+              <h3>Evals</h3>
+              <p>Pendiente de conectar a eval_runs.</p>
+              <div class="field-list">
+                <span>eval_run_id</span><span>query</span><span>expected_terms</span>
+                <span>forbidden_terms</span><span>required_sources</span><span>passed</span>
+                <span>score</span><span>notes</span>
+              </div>
+            </article>
+            <article>
+              <h3>Coste / latencia</h3>
+              <p>Pendiente de conectar a agregados de coste y rendimiento.</p>
+              <div class="field-list">
+                <span>latency_ms</span><span>tokens_total</span><span>output_tokens_per_second</span><span>cost estimate</span>
+              </div>
+            </article>
+            <article>
+              <h3>Errores</h3>
+              <p>Pendiente de conectar a eventos de error y fallos por etapa.</p>
+              <div class="field-list">
+                <span>status</span><span>error_code</span><span>error_message</span><span>failure_stage</span><span>warnings</span>
+              </div>
+            </article>
+          </div>
+        </section>
+      </div>
+
+      <div id="tab-lan" class="tab-panel" data-tab-panel="lan" hidden>
+        <section class="panel">
+          <h2>LAN opcional</h2>
+          <p>
+            Este modo existe para aprender sistemas distribuidos en LAN. No es
+            el runtime principal recomendado: aumenta superficie de debug y separa
+            FastAPI del corpus RAG local.
+          </p>
+          <div class="diagram-grid single">
+            <article>
+              <h3>Modo distribuido experimental</h3>
+              <pre>Frontend / cliente LAN
+   -> Servicio RAG
+   -> Runtime de modelos</pre>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Notas operativas LAN</h2>
+          <div class="failure-grid">
+            <article><strong>CORS</strong><p>Permitir solo origenes de desarrollo concretos. Evitar <code>*</code> salvo laboratorio muy controlado.</p></article>
+            <article><strong>IP fija / DHCP reservado</strong><p>Reservar una direccion estable para el servidor reduce fallos por cambios de red.</p></article>
+            <article><strong>Firewall</strong><p>Abrir unicamente los puertos necesarios en la LAN confiable.</p></article>
+            <article><strong>Puertos esperados</strong><p>Documentar los puertos de Backend API, Servicio RAG y Runtime de modelos en la configuracion de despliegue.</p></article>
+            <article><strong>Runtime recomendado</strong><p>El modo all-in-one sigue siendo la ruta principal: menos piezas, corpus local y menos puntos de fallo.</p></article>
+            <article><strong>Sin red nueva</strong><p>Esta pestana solo documenta el modo; no crea llamadas ni endpoints adicionales.</p></article>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

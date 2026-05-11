@@ -6,6 +6,8 @@ from pathlib import Path
 
 import requests
 
+# Legacy standalone runner. The recommended operational mode is now embedded
+# Telegram polling inside FastAPI with TELEGRAM_ENABLED=true.
 # Allows `python scripts/run_telegram.py` to import top-level packages (e.g. `app`).
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:

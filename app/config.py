@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     temperature: float = 0.2
 
     telegram_bot_token: str | None = None
+    telegram_enabled: bool = False
+    telegram_default_model: str = "granite4.1:8b"
+    telegram_default_temperature: float = 0.2
+    telegram_default_rag_enabled: bool = True
     telegram_allowed_chat_ids: str | None = None
     telegram_allowed_user_ids: str | None = None
     telegram_trace_include_text: bool = False

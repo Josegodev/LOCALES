@@ -43,7 +43,11 @@ REPO_ANALYZER_TEMPERATURE=0.2
 Variables mínimas del bot Telegram:
 
 ```env
+TELEGRAM_ENABLED=true
 TELEGRAM_BOT_TOKEN=...
+TELEGRAM_DEFAULT_MODEL=granite4.1:8b
+TELEGRAM_DEFAULT_TEMPERATURE=0.2
+TELEGRAM_DEFAULT_RAG_ENABLED=true
 TELEGRAM_ALLOWED_USER_IDS=123456789
 ```
 
@@ -122,15 +126,24 @@ Guías:
 
 ## Uso rápido
 
+<<<<<<< HEAD
 Arranque recomendado en Linux:
+=======
+Arranque recomendado del backend con Telegram embebido:
+>>>>>>> 12e61de (Embed Telegram runtime in FastAPI)
 
 ```bash
-cd ~/LOCALES
+cd /home/jose-gonzalez-oliva/LOCALES
 source .venv/bin/activate
+<<<<<<< HEAD
+=======
+
+>>>>>>> 12e61de (Embed Telegram runtime in FastAPI)
 export BACKEND_URL=http://127.0.0.1:8000
 export OLLAMA_BASE_URL=http://127.0.0.1:11434
 export USE_REMOTE_RAG=false
 export DOCUMENTS_DB_PATH=/home/jose-gonzalez-oliva/LOCALES/DB/chunks/documents.sqlite
+<<<<<<< HEAD
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
@@ -139,7 +152,36 @@ cd ~/LOCALES
 source .venv/bin/activate
 export BACKEND_URL=http://127.0.0.1:8000
 python scripts/run_telegram.py
+=======
+
+export TELEGRAM_ENABLED=true
+export TELEGRAM_BOT_TOKEN="TU_TOKEN_AQUI"
+export TELEGRAM_DEFAULT_MODEL="granite4.1:8b"
+export TELEGRAM_DEFAULT_TEMPERATURE="0.2"
+export TELEGRAM_DEFAULT_RAG_ENABLED=true
+
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
+
+No uses `--reload` ni varios workers con Telegram embebido: ambos pueden duplicar el polling contra Telegram. `scripts/run_telegram.py` se mantiene como runner standalone legacy/opcional.
+
+## Frontend web console
+
+Hay una consola operacional estatica en `frontend/` para usar Windows como cliente del runtime Linux.
+
+```powershell
+cd C:\Users\joseg\proyectos\LOCALES\frontend
+python -m http.server 3000
+>>>>>>> 12e61de (Embed Telegram runtime in FastAPI)
+```
+
+Abrir:
+
+```text
+http://localhost:3000
+```
+
+La URL real del backend se introduce en el input `Backend base URL`. La consola prueba `/health`, `/chat` y los endpoints `/telegram/*`, muestra campos de RAG/observabilidad y documenta la arquitectura LOCALES / NUCLEO. Mas detalle en `docs/frontend_console.md` y `docs/telegram_embedded_fastapi.md`.
 
 Ejemplos de `/repo` en Telegram:
 

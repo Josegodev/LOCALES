@@ -3,6 +3,7 @@ import time
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from DB.chunks.document_context import build_document_prompt, detect_source_intent, normalize_terms
 from app.config import settings
 from app.rag_client import query_remote_rag
@@ -11,8 +12,10 @@ from app.observability import log_event
 from app.llm_client import LLMClientError, ask_chat, resolve_provider_model
 from app.schemas import ChatRequest, ChatResponse
 from app.schemas import CreateDocumentRequest, DocumentCreateResponse
+from app.schemas import TelegramConfigUpdateRequest
 from app.document_writer import create_document, DocumentWriteError
 from app.telegram_permissions import TelegramPermissionConfigError, is_telegram_user_allowed
+from app.telegram_runtime import telegram_runtime
 
 NO_EVIDENCE_MARKER = "NO_EVIDENCE_FOR_ANSWER"
 NO_EVIDENCE_EXPLANATION = "No hay evidencia documental suficiente para responder."
@@ -54,6 +57,22 @@ COMMON_QUERY_TERMS = {
 
 
 app = FastAPI(title="Local LLM Gateway")
+
+FRONTEND_DEV_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://192.168.1.20:3000",
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=FRONTEND_DEV_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type"],
+)
 
 
 def _no_evidence_answer() -> str:
@@ -386,6 +405,45 @@ def _extract_chunk_response_data(chunks: list[dict]) -> tuple[list[str], list[in
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.on_event("startup")
+def start_embedded_telegram_if_enabled() -> None:
+    telegram_runtime.start_if_enabled()
+
+
+@app.on_event("shutdown")
+def stop_embedded_telegram_on_shutdown() -> None:
+    telegram_runtime.stop()
+
+
+@app.get("/telegram/status")
+def telegram_status() -> dict:
+    return telegram_runtime.status()
+
+
+@app.get("/telegram/config")
+def telegram_config() -> dict:
+    return telegram_runtime.config()
+
+
+@app.post("/telegram/config")
+def telegram_update_config(request: TelegramConfigUpdateRequest) -> dict:
+    return telegram_runtime.update_config(
+        default_model=request.default_model,
+        default_temperature=request.default_temperature,
+        default_rag_enabled=request.default_rag_enabled,
+    )
+
+
+@app.post("/telegram/start")
+def telegram_start() -> dict:
+    return telegram_runtime.start()
+
+
+@app.post("/telegram/stop")
+def telegram_stop() -> dict:
+    return telegram_runtime.stop()
 
 
 @app.post("/documents", response_model=DocumentCreateResponse)

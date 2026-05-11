@@ -16,11 +16,30 @@ from app.observability import (
     write_telegram_eval_run,
 )
 from app.schemas import CreateDocumentRequest
-from app.services.repo_analyzer_service import (
-    build_repo_trace_metadata,
-    handle_repo_command,
-    is_repo_command,
-)
+try:
+    from app.services.repo_analyzer_service import (
+        build_repo_trace_metadata,
+        handle_repo_command,
+        is_repo_command,
+    )
+except ModuleNotFoundError:
+    def is_repo_command(text: str) -> bool:
+        return text.startswith("/repo")
+
+    def handle_repo_command(*args, **kwargs) -> dict:
+        return {
+            "status": "error",
+            "error_code": "repo_analyzer_unavailable",
+            "error_message": "Servicio /repo no disponible en este runtime.",
+            "reply_text": "Servicio /repo no disponible en este runtime.",
+        }
+
+    def build_repo_trace_metadata(result: dict) -> dict:
+        return {
+            "prompt_version": "telegram_repo_unavailable",
+            "error_code": result.get("error_code"),
+            "final_message_preview": result.get("reply_text"),
+        }
 from app.telegram_permissions import TelegramPermissionConfigError, is_telegram_user_allowed
 
 DOC_COMMAND = "doc.create"

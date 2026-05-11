@@ -167,3 +167,9 @@ class DocumentCreateResponse(BaseModel):
 
 
 DocumentCreateRequest = CreateDocumentRequest
+
+
+class TelegramConfigUpdateRequest(BaseModel):
+    default_model: str | None = Field(default=None, min_length=1, max_length=120)
+    default_temperature: float | None = Field(default=None, ge=0.0, le=1.0)
+    default_rag_enabled: bool | None = None
