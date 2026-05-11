@@ -126,36 +126,19 @@ Guías:
 
 ## Uso rápido
 
-<<<<<<< HEAD
-Arranque recomendado en Linux:
-=======
-Arranque recomendado del backend con Telegram embebido:
->>>>>>> 12e61de (Embed Telegram runtime in FastAPI)
+Arranque recomendado en Linux con Telegram embebido opcional:
 
 ```bash
 cd /home/jose-gonzalez-oliva/LOCALES
 source .venv/bin/activate
-<<<<<<< HEAD
-=======
 
->>>>>>> 12e61de (Embed Telegram runtime in FastAPI)
 export BACKEND_URL=http://127.0.0.1:8000
 export OLLAMA_BASE_URL=http://127.0.0.1:11434
 export USE_REMOTE_RAG=false
 export DOCUMENTS_DB_PATH=/home/jose-gonzalez-oliva/LOCALES/DB/chunks/documents.sqlite
-<<<<<<< HEAD
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
-
-```bash
-cd ~/LOCALES
-source .venv/bin/activate
-export BACKEND_URL=http://127.0.0.1:8000
-python scripts/run_telegram.py
-=======
 
 export TELEGRAM_ENABLED=true
-export TELEGRAM_BOT_TOKEN="TU_TOKEN_AQUI"
+export TELEGRAM_BOT_TOKEN="<NO_COMMIT_REAL_TOKEN>"
 export TELEGRAM_DEFAULT_MODEL="granite4.1:8b"
 export TELEGRAM_DEFAULT_TEMPERATURE="0.2"
 export TELEGRAM_DEFAULT_RAG_ENABLED=true
@@ -172,7 +155,6 @@ Hay una consola operacional estatica en `frontend/` para usar Windows como clien
 ```powershell
 cd C:\Users\joseg\proyectos\LOCALES\frontend
 python -m http.server 3000
->>>>>>> 12e61de (Embed Telegram runtime in FastAPI)
 ```
 
 Abrir:

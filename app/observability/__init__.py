@@ -3,10 +3,7 @@ from app.observability.telegram_trace import (
     TELEGRAM_CONVERSATION_RUNS_DIR,
     append_telegram_trace,
     build_telegram_eval_path,
-<<<<<<< HEAD
     load_conversation_records,
-=======
->>>>>>> 12e61de (Embed Telegram runtime in FastAPI)
     load_conversation_records_report,
     safe_model_name,
     telegram_trace_file_path,
@@ -23,7 +20,6 @@ __all__ = [
     "load_conversation_records",
     "load_conversation_records_report",
     "log_event",
-    "load_conversation_records_report",
     "new_trace_id",
     "safe_model_name",
     "TELEGRAM_CONVERSATION_RUNS_DIR",

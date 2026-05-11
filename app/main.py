@@ -430,9 +430,9 @@ def telegram_config() -> dict:
 @app.post("/telegram/config")
 def telegram_update_config(request: TelegramConfigUpdateRequest) -> dict:
     return telegram_runtime.update_config(
-        default_model=request.default_model,
-        default_temperature=request.default_temperature,
-        default_rag_enabled=request.default_rag_enabled,
+        model=request.model,
+        temperature=request.temperature,
+        rag_enabled=request.rag_enabled,
     )
 
 

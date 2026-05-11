@@ -43,6 +43,9 @@ class TelegramRuntime:
     def token_configured(self) -> bool:
         return bool(settings.telegram_bot_token)
 
+    def _is_running_locked(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
     def config(self) -> dict[str, Any]:
         with self._lock:
             runtime_config = TelegramRuntimeConfig(
@@ -53,53 +56,69 @@ class TelegramRuntime:
 
         return {
             "status": "ok",
+            "enabled": settings.telegram_enabled,
             "telegram_enabled_env": settings.telegram_enabled,
+            "token_present": self.token_configured(),
             "token_configured": self.token_configured(),
             "default_provider": DEFAULT_PROVIDER,
+            "provider": DEFAULT_PROVIDER,
+            "model": runtime_config.model,
             "default_model": runtime_config.model,
+            "temperature": runtime_config.temperature,
             "default_temperature": runtime_config.temperature,
+            "rag_enabled": runtime_config.use_rag,
             "default_rag_enabled": runtime_config.use_rag,
         }
 
     def update_config(
         self,
         *,
-        default_model: str | None = None,
-        default_temperature: float | None = None,
-        default_rag_enabled: bool | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        rag_enabled: bool | None = None,
     ) -> dict[str, Any]:
         with self._lock:
-            if default_model is not None:
-                normalized_model = default_model.strip()
+            if model is not None:
+                normalized_model = model.strip()
                 if normalized_model:
                     self._config.model = normalized_model
-            if default_temperature is not None:
-                self._config.temperature = float(default_temperature)
-            if default_rag_enabled is not None:
-                self._config.use_rag = bool(default_rag_enabled)
+            if temperature is not None:
+                self._config.temperature = float(temperature)
+            if rag_enabled is not None:
+                self._config.use_rag = bool(rag_enabled)
 
         return self.config()
 
     def status(self) -> dict[str, Any]:
         with self._lock:
-            running = self._thread is not None and self._thread.is_alive()
+            running = self._is_running_locked()
             return {
                 "status": "ok",
+                "enabled": settings.telegram_enabled,
                 "running": running,
                 "started_at": self._started_at,
+                "token_present": self.token_configured(),
                 "token_configured": self.token_configured(),
                 "last_update_id": self._last_update_id,
                 "last_error": self._last_error,
+                "model": self._config.model,
+                "temperature": self._config.temperature,
+                "rag_enabled": self._config.use_rag,
                 "config": {
                     "default_provider": DEFAULT_PROVIDER,
+                    "provider": DEFAULT_PROVIDER,
+                    "model": self._config.model,
                     "default_model": self._config.model,
+                    "temperature": self._config.temperature,
                     "default_temperature": self._config.temperature,
+                    "rag_enabled": self._config.use_rag,
                     "default_rag_enabled": self._config.use_rag,
                 },
             }
 
     def start(self) -> dict[str, Any]:
         if not self.token_configured():
+            self._record_error("telegram_token_missing", "TELEGRAM_BOT_TOKEN no definido.")
             return {
                 "status": "error",
                 "code": "telegram_token_missing",
@@ -107,7 +126,7 @@ class TelegramRuntime:
             }
 
         with self._lock:
-            if self._thread is not None and self._thread.is_alive():
+            if self._is_running_locked():
                 running = True
             else:
                 running = False
@@ -158,8 +177,33 @@ class TelegramRuntime:
         return self.status()
 
     def start_if_enabled(self) -> None:
+        status_before = self.status()
+        token_present = self.token_configured()
+        error_type = None
+        error_message = None
+
         if settings.telegram_enabled:
-            self.start()
+            try:
+                result = self.start()
+                if result.get("status") == "error":
+                    error_type = result.get("code")
+                    error_message = result.get("message")
+            except Exception as exc:
+                error_type = exc.__class__.__name__
+                error_message = str(exc)
+                self._record_error(error_type, error_message)
+
+        status_after = self.status()
+        log_event(
+            component="telegram.embedded",
+            event="telegram_startup_attempted",
+            telegram_enabled=settings.telegram_enabled,
+            token_present=token_present,
+            running=status_after["running"],
+            was_running=status_before["running"],
+            error_type=error_type,
+            error_message=error_message,
+        )
 
     def _runtime_config(self) -> TelegramRuntimeConfig:
         with self._lock:

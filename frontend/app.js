@@ -101,14 +101,18 @@ async function fetchJsonWithLatency(url, options = {}) {
 
 function applyTelegramConfig(data) {
   const config = data.config || data;
-  if (typeof config.default_model === "string" && config.default_model.trim()) {
-    elements.telegramModelInput.value = config.default_model;
+  const model = config.model || config.default_model;
+  const temperature = config.temperature ?? config.default_temperature;
+  const ragEnabled = config.rag_enabled ?? config.default_rag_enabled;
+
+  if (typeof model === "string" && model.trim()) {
+    elements.telegramModelInput.value = model;
   }
-  if (typeof config.default_temperature === "number") {
-    elements.telegramTemperatureInput.value = String(config.default_temperature);
+  if (typeof temperature === "number") {
+    elements.telegramTemperatureInput.value = String(temperature);
   }
-  if (typeof config.default_rag_enabled === "boolean") {
-    elements.telegramRagInput.checked = config.default_rag_enabled;
+  if (typeof ragEnabled === "boolean") {
+    elements.telegramRagInput.checked = ragEnabled;
   }
 }
 
@@ -134,9 +138,9 @@ function saveTelegramConfig() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      default_model: elements.telegramModelInput.value.trim(),
-      default_temperature: Number.isFinite(temperature) ? temperature : undefined,
-      default_rag_enabled: elements.telegramRagInput.checked,
+      model: elements.telegramModelInput.value.trim(),
+      temperature: Number.isFinite(temperature) ? temperature : undefined,
+      rag_enabled: elements.telegramRagInput.checked,
     }),
   });
 }
