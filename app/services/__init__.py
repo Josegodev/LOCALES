@@ -13,19 +13,35 @@ from app.services.bot_service import (
     parse_doc_ai_command,
     parse_doc_command,
 )
+from app.services.repo_analyzer_service import (
+    REPO_COMMAND,
+    REPO_USAGE_TEXT,
+    build_repo_trace_metadata,
+    handle_repo_command,
+    is_repo_command,
+    parse_repo_command,
+    run_repo_analysis_question,
+)
 
 __all__ = [
     "DOC_AI_COMMAND",
     "DOC_AI_USAGE_TEXT",
     "DOC_COMMAND",
     "DOC_USAGE_TEXT",
+    "REPO_COMMAND",
+    "REPO_USAGE_TEXT",
     "DocCommandParseError",
     "LLMOutputValidationError",
+    "build_repo_trace_metadata",
     "build_llm_prompt",
     "handle_doc_ai_command",
     "handle_doc_command",
     "handle_message",
+    "handle_repo_command",
+    "is_repo_command",
     "main_loop",
     "parse_doc_ai_command",
     "parse_doc_command",
+    "parse_repo_command",
+    "run_repo_analysis_question",
 ]

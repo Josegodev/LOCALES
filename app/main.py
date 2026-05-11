@@ -588,10 +588,7 @@ def chat(request: ChatRequest) -> ChatResponse:
         status = "ok"
 
         if use_rag and retrieval_status in MARKER_ONLY_RETRIEVAL_STATUSES:
-            warnings = list(context.get("warnings", []))
-            generic_warning = _no_evidence_warning_for_context(context)
-            if generic_warning not in warnings:
-                warnings.append(generic_warning)
+            warnings = [_no_evidence_warning_for_context(context)]
             context["warnings"] = warnings
             internal_response = _build_model_internal_chat_response(
                 result=result,
@@ -627,10 +624,7 @@ def chat(request: ChatRequest) -> ChatResponse:
         ):
             retrieval_status = NO_EVIDENCE_MARKER
             context["retrieval_status"] = retrieval_status
-            warnings = list(context.get("warnings", []))
-            generic_warning = _no_evidence_warning_for_context(context)
-            if generic_warning not in warnings:
-                warnings.append(generic_warning)
+            warnings = [_no_evidence_warning_for_context(context)]
             context["warnings"] = warnings
             fallback_started_at = time.perf_counter()
             internal_result = ask_chat(

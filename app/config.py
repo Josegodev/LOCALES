@@ -26,7 +26,11 @@ class Settings(BaseSettings):
     repo_analyzer_model: str = "granite4.1:8b"
     repo_analyzer_temperature: float = 0.2
     openai_api_key: str | None = None
-    documents_db_path: str = ""
+    documents_db_path: str = "DB/chunks/documents.sqlite"
+    use_remote_rag: bool = False
+    rag_service_url: str = "http://127.0.0.1:9000"
+    rag_timeout_seconds: float = 10.0
+    rag_top_k: int = 5
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -42,6 +46,9 @@ class Settings(BaseSettings):
 
     def backend_base_url(self) -> str:
         return self.backend_url.rstrip("/")
+
+    def rag_service_base_url(self) -> str:
+        return self.rag_service_url.rstrip("/")
 
     def ollama_api_base_url(self) -> str:
         base_url = self.ollama_base_url.rstrip("/")

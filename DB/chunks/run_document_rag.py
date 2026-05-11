@@ -10,6 +10,7 @@ def ask_once(
     query: str,
     top_k: int,
     allowed_source_filenames: list[str] | None = None,
+    retrieval_only: bool = False,
 ) -> None:
     query = query.strip()
 
@@ -24,8 +25,22 @@ def ask_once(
     )
 
     print("\nretrieval_status:", context["status"])
+    print("query_original:", context.get("query_original"))
+    print("query_normalized:", context.get("query_normalized"))
+    print("query_terms:", context.get("query_terms"))
+    print("quoted_terms:", context.get("quoted_terms"))
+    print("source_intent:", context.get("source_intent"))
+    print("selected_corpus:", context.get("selected_corpus"))
+    print("candidate_filenames:", context.get("candidate_filenames"))
+    print("selected_filenames:", context.get("selected_filenames"))
     print("chunks:", [chunk["id"] for chunk in context["chunks"]])
-    print("scores:", [chunk.get("score") for chunk in context["chunks"]])
+    print("document_ids:", context.get("document_ids"))
+    print("source_filenames:", context.get("source_filenames"))
+    print("scores:", context.get("scores"))
+
+    if retrieval_only:
+        print("\nANSWER:\nRETRIEVAL_ONLY")
+        return
 
     if context["status"] != "EVIDENCE_FOUND":
         print("\nANSWER:\nNO_EVIDENCE_FOR_ANSWER")
@@ -78,6 +93,11 @@ def main() -> None:
         default=[],
         help="Restringe la búsqueda a filenames concretos. Se puede repetir.",
     )
+    parser.add_argument(
+        "--retrieval-only",
+        action="store_true",
+        help="Solo valida retrieval y trazas, sin llamar al modelo.",
+    )
     args = parser.parse_args()
 
     if args.query:
@@ -85,6 +105,7 @@ def main() -> None:
             query=args.query,
             top_k=args.top_k,
             allowed_source_filenames=args.allowed_source_filename,
+            retrieval_only=args.retrieval_only,
         )
         return
 

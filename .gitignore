@@ -57,59 +57,27 @@ __pycache__/
 
 # Local env
 .env
-# Local SSH/private keys
-clavegit
-clavegit.pub
-*.pem
-*.key
-id_rsa
-id_ed25519
 
-# Local SQLite backups
-*.sqlite.backup*
-*.backup_before_*
-
-# Local Continue config
-.continue/
-.continueignore
-
-# Local secrets
-clavegit
-clavegit.pub
-*.pem
-*.key
-id_rsa
-id_ed25519
-
-# Local SQLite backups
-*.sqlite.backup*
-*.backup_before_*
-
-# Local Continue config
-.continue/
-.continueignore
-
-# Local secrets
-clavegit
-clavegit.pub
-*.pem
-*.key
-id_rsa
-id_ed25519
-
-# Local SQLite backups
-*.sqlite.backup*
-*.backup_before_*
-
-# Local Continue config
-.continue/
-.continueignore
-
-# Runtime/eval outputs
 logs/
 logs/telegram_runs/
 evals/runs/
 *.jsonl
 
-# RAG source PDFs - keep out of repo
-DB/chunks/pdf/*.pdf
+# Local env
+.env
+.venv/
+__pycache__/
+*.pyc
+
+# Local RAG databases and backups
+DB/chunks/*.sqlite
+DB/chunks/*.sqlite.*
+DB/chunks/*.db
+DB/chunks/*.db.*
+DB/chunks/*.bak*
+DB/chunks/pdf/
+DB/chunks/markdown/
+
+# Telegram/runtime traces
+DB/conversations/telegram/runs/
+

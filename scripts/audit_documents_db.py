@@ -1,29 +1,68 @@
 from __future__ import annotations
 
-import argparse
-import json
-import sys
+import sqlite3
 from pathlib import Path
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
+from app.config import settings
 
-from DB.chunks.document_context import audit_documents_db
+REQUIRED_TABLES = ["documents", "chunks"]
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Audit the LOCALES documents RAG SQLite DB.")
-    parser.add_argument("--db-path", help="Path to documents.sqlite. Defaults to settings.documents_db_path or DB/chunks/documents.sqlite.")
-    args = parser.parse_args()
+def _count_rows(conn: sqlite3.Connection, table_name: str) -> int:
+    return int(conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0])
 
-    audit = audit_documents_db(args.db_path)
-    payload = audit.as_dict()
-    if audit.error:
-        payload["error"] = audit.error
-    print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
-    return 0 if audit.status == "ok" else 1
+
+def audit_documents_db(db_path: str | Path | None = None) -> dict:
+    resolved_path = Path(db_path or settings.documents_db_path)
+    result = {
+        "db_path": str(resolved_path),
+        "exists": resolved_path.exists(),
+        "readable": False,
+        "tables": [],
+        "required_tables": list(REQUIRED_TABLES),
+        "missing_tables": list(REQUIRED_TABLES),
+        "documents_count": 0,
+        "chunks_count": 0,
+        "status": "error",
+        "retrieval_ready": False,
+    }
+
+    if not result["exists"]:
+        result["status"] = "missing"
+        return result
+
+    try:
+        conn = sqlite3.connect(resolved_path)
+        try:
+            result["readable"] = True
+            tables = sorted(
+                str(row[0])
+                for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                ).fetchall()
+            )
+            result["tables"] = tables
+            result["missing_tables"] = [
+                table_name for table_name in REQUIRED_TABLES if table_name not in tables
+            ]
+
+            if not result["missing_tables"]:
+                result["documents_count"] = _count_rows(conn, "documents")
+                result["chunks_count"] = _count_rows(conn, "chunks")
+                result["retrieval_ready"] = result["chunks_count"] > 0
+                result["status"] = "ok" if result["retrieval_ready"] else "empty"
+            else:
+                result["status"] = "invalid_schema"
+        finally:
+            conn.close()
+    except sqlite3.Error as exc:
+        result["status"] = "unreadable"
+        result["error"] = str(exc)
+
+    return result
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    import json
+
+    print(json.dumps(audit_documents_db(), ensure_ascii=False, indent=2))

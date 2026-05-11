@@ -1,2 +1,1 @@
-def build_llm_prompt(user_message: str) -> str:
-    return user_message.strip()cd
+from app.services.bot_service import *  # noqa: F401,F403
