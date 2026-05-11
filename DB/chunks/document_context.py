@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import quote
+
+from app.config import settings
+from app.observability import log_event
 
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "documents.sqlite"
+DEFAULT_DB_PATH = DB_PATH
+REQUIRED_TABLES = ("documents", "chunks")
 UNKNOWN_CORPUS = "unknown"
 UNKNOWN_SOURCE_TYPE = "unknown"
 OFFICIAL_CORPUS = "documentos_oficiales"
@@ -64,6 +71,198 @@ DOMAIN_QUERY_EXPANSIONS = {
         "translation",
     ],
 }
+
+
+@dataclass
+class DocumentsDbAudit:
+    db_path: str
+    exists: bool = False
+    readable: bool = False
+    size_bytes: int | None = None
+    tables: list[str] = field(default_factory=list)
+    required_tables: list[str] = field(default_factory=lambda: list(REQUIRED_TABLES))
+    missing_tables: list[str] = field(default_factory=list)
+    documents_count: int | None = None
+    chunks_count: int | None = None
+    status: str = "error"
+    error: str | None = None
+
+    def as_dict(self) -> dict:
+        return {
+            "db_path": self.db_path,
+            "exists": self.exists,
+            "readable": self.readable,
+            "size_bytes": self.size_bytes,
+            "tables": self.tables,
+            "required_tables": self.required_tables,
+            "missing_tables": self.missing_tables,
+            "documents_count": self.documents_count,
+            "chunks_count": self.chunks_count,
+            "status": self.status,
+        }
+
+
+def get_documents_db_path() -> str:
+    if DB_PATH != DEFAULT_DB_PATH:
+        return str(DB_PATH)
+    configured_path = str(settings.documents_db_path or "").strip()
+    if configured_path:
+        return configured_path
+    return str(DB_PATH)
+
+
+def _sqlite_uri_for_readonly(db_path: str) -> str:
+    if db_path.startswith("//") or db_path.startswith("\\\\"):
+        normalized = db_path.replace("\\", "/")
+        return f"file:{quote(normalized, safe='/:')}?mode=ro"
+    normalized = str(Path(db_path)).replace("\\", "/")
+    return f"file:{quote(normalized, safe='/:')}?mode=ro"
+
+
+def connect_documents_db_readonly(db_path: str | None = None) -> sqlite3.Connection:
+    resolved_path = str(db_path or get_documents_db_path())
+    return sqlite3.connect(_sqlite_uri_for_readonly(resolved_path), uri=True)
+
+
+def audit_documents_db(db_path: str | None = None) -> DocumentsDbAudit:
+    resolved_path = str(db_path or get_documents_db_path())
+    audit = DocumentsDbAudit(db_path=resolved_path)
+
+    path = Path(resolved_path)
+    try:
+        audit.exists = path.exists()
+        if audit.exists:
+            audit.size_bytes = path.stat().st_size
+    except OSError as exc:
+        audit.status = "unreadable"
+        audit.error = str(exc)
+        return audit
+
+    if not audit.exists:
+        audit.status = "not_found"
+        audit.missing_tables = list(REQUIRED_TABLES)
+        return audit
+
+    try:
+        conn = connect_documents_db_readonly(resolved_path)
+    except sqlite3.Error as exc:
+        audit.status = "unreadable"
+        audit.error = str(exc)
+        return audit
+
+    try:
+        audit.readable = True
+        audit.tables = [
+            str(row[0])
+            for row in conn.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table'
+                ORDER BY name
+                """
+            ).fetchall()
+        ]
+        audit.missing_tables = [
+            table_name for table_name in REQUIRED_TABLES if table_name not in audit.tables
+        ]
+        if audit.missing_tables:
+            audit.status = "schema_invalid"
+            return audit
+
+        audit.documents_count = int(conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0])
+        audit.chunks_count = int(conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0])
+        if audit.documents_count == 0 and audit.chunks_count == 0:
+            audit.status = "empty"
+            return audit
+
+        audit.status = "ok"
+        return audit
+    except sqlite3.Error as exc:
+        audit.status = "error"
+        audit.error = str(exc)
+        return audit
+    finally:
+        conn.close()
+
+
+def _warning_code_for_audit(audit: DocumentsDbAudit) -> str:
+    if audit.status == "not_found":
+        return "RAG_DB_NOT_FOUND"
+    if audit.status == "unreadable":
+        return "RAG_DB_UNREADABLE"
+    if audit.status == "schema_invalid":
+        return "RAG_DB_SCHEMA_INVALID"
+    if audit.status == "empty":
+        return "RAG_DB_EMPTY"
+    return "RAG_DB_ERROR"
+
+
+def _db_not_ready_trace(
+    *,
+    query_original: str,
+    query_normalized: str,
+    query_terms: list[str],
+    quoted_terms: list[str],
+    source_intent: str,
+    selected_corpus: str,
+    active_document_id: int | None,
+    active_document_title: str | None,
+    active_context_reason: str | None,
+    query_expansion_used: bool,
+    query_expansion_reason: str | None,
+    expanded_query_terms: list[str],
+    audit: DocumentsDbAudit,
+    warning_code: str,
+) -> dict:
+    warning = {
+        "code": warning_code,
+        "db_path": audit.db_path,
+        "existing_tables": audit.tables,
+        "missing_tables": audit.missing_tables,
+    }
+    if audit.error:
+        warning["error"] = audit.error
+
+    return {
+        **_collect_trace(
+            query_original=query_original,
+            query_normalized=query_normalized,
+            query_terms=query_terms,
+            quoted_terms=quoted_terms,
+            source_intent=source_intent,
+            selected_corpus=selected_corpus,
+            retrieval_status="NO_EVIDENCE",
+            candidate_chunks=[],
+            selected_chunks=[],
+            active_document_id=active_document_id,
+            active_document_title=active_document_title,
+            active_context_used=False,
+            active_context_reason=active_context_reason,
+            query_expansion_used=query_expansion_used,
+            query_expansion_reason=query_expansion_reason,
+            expanded_query_terms=expanded_query_terms,
+        ),
+        "db_path": audit.db_path,
+        "warnings": [warning],
+    }
+
+
+def _log_rag_db_not_ready(
+    *,
+    audit: DocumentsDbAudit,
+    warning_code: str,
+    retrieval_status: str = "NO_EVIDENCE_FOR_ANSWER",
+) -> None:
+    log_event(
+        component="rag.db",
+        event="rag.db.not_ready",
+        db_path=audit.db_path,
+        retrieval_status=retrieval_status,
+        warning_code=warning_code,
+        missing_tables=audit.missing_tables,
+        existing_tables=audit.tables,
+    )
 
 
 def normalize_query(query: str) -> str:
@@ -459,7 +658,38 @@ def search_chunks_with_trace(
             expanded_query_terms=expanded_query_terms,
         )
 
-    conn = sqlite3.connect(DB_PATH)
+    db_path = get_documents_db_path()
+    audit = audit_documents_db(db_path)
+    if audit.status in {"not_found", "unreadable", "schema_invalid", "empty"}:
+        warning_code = _warning_code_for_audit(audit)
+        _log_rag_db_not_ready(audit=audit, warning_code=warning_code)
+        return [], _db_not_ready_trace(
+            query_original=query_original,
+            query_normalized=query_normalized,
+            query_terms=query_terms,
+            quoted_terms=quoted_terms,
+            source_intent=source_intent,
+            selected_corpus=selected_corpus,
+            active_document_id=active_document_id,
+            active_document_title=active_document_title,
+            active_context_reason=active_context_reason,
+            query_expansion_used=query_expansion_used,
+            query_expansion_reason=query_expansion_reason,
+            expanded_query_terms=expanded_query_terms,
+            audit=audit,
+            warning_code=warning_code,
+        )
+    if audit.status != "ok":
+        log_event(
+            component="rag.db",
+            event="rag.db.error",
+            db_path=audit.db_path,
+            retrieval_status="RAG_ERROR",
+            error=audit.error,
+        )
+        raise sqlite3.OperationalError(audit.error or "documents_db_audit_failed")
+
+    conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
 
     try:
@@ -598,6 +828,7 @@ def build_document_prompt(
     )
 
     if not chunks:
+        trace_warnings = list(trace.get("warnings", []))
         return {
             "status": "NO_EVIDENCE",
             "retrieval_status": "NO_EVIDENCE",
@@ -608,6 +839,7 @@ def build_document_prompt(
             ),
             "chunks": [],
             **trace,
+            "warnings": trace_warnings,
         }
 
     evidence_blocks = []
