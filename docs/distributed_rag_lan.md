@@ -1,5 +1,7 @@
 # LOCALES distributed RAG over LAN
 
+This is optional distributed mode. The recommended primary mode is `docs/linux_primary_runtime.md`.
+
 ## 1. Purpose
 
 This mode runs LOCALES as a distributed LAN system.
@@ -24,7 +26,7 @@ Telegram bot Linux
       -> Ollama Linux :11434
 ```
 
-Alternative simple all-Linux mode:
+Recommended all-Linux mode:
 
 ```text
 Telegram bot Linux

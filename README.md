@@ -47,6 +47,37 @@ TELEGRAM_BOT_TOKEN=...
 TELEGRAM_ALLOWED_USER_IDS=123456789
 ```
 
+## Recommended runtime: Linux all-in-one
+
+La ruta operativa recomendada ahora es ejecutar todo el runtime principal en Linux:
+
+- bot de Telegram en Linux
+- FastAPI en Linux
+- RAG local en Linux usando `documents.sqlite`
+- Ollama en Linux
+
+Windows puede quedarse como máquina de desarrollo o cliente de prueba. Por ejemplo, puede consultar:
+
+```bash
+curl http://192.168.1.51:8000/health
+```
+
+El modo distribuido por LAN sigue disponible, pero ya no es la ruta por defecto. La razón práctica es reducir superficie de depuración:
+
+- evita problemas de runtime con Samba y SQLite
+- evita drift de rutas Windows/Linux
+- reduce piezas móviles en producción local
+- simplifica logs, arranque y futuras unidades `systemd`
+
+Guía recomendada:
+
+- `docs/linux_primary_runtime.md`
+
+Modo distribuido opcional:
+
+- `docs/distributed_rag_lan.md`
+- `docs/remote_rag_service.md`
+
 ## Configurar backend remoto en LAN
 
 Si FastAPI corre en otro PC, el bot no debe usar `127.0.0.1`, porque esa IP siempre apunta a la propia máquina donde corre el proceso.
@@ -82,25 +113,31 @@ curl http://IP_WINDOWS:8000/health
 
 ## Distributed RAG over LAN
 
-LOCALES puede ejecutarse en modo distribuido dentro de la LAN: Linux mantiene el corpus RAG y Ollama, mientras Windows puede ejecutar FastAPI y consumir evidencias por HTTP.
+LOCALES también puede ejecutarse en modo distribuido dentro de la LAN, pero ese camino es opcional. Úsalo cuando quieras aprender o probar límites de servicio entre Windows y Linux.
 
-Guía operativa completa:
+Guías:
 
+- `docs/linux_primary_runtime.md`
 - `docs/distributed_rag_lan.md`
 
 ## Uso rápido
 
-Arranque local del backend y del bot:
+Arranque recomendado en Linux:
 
 ```bash
 cd ~/LOCALES
 source .venv/bin/activate
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+export BACKEND_URL=http://127.0.0.1:8000
+export OLLAMA_BASE_URL=http://127.0.0.1:11434
+export USE_REMOTE_RAG=false
+export DOCUMENTS_DB_PATH=/home/jose-gonzalez-oliva/LOCALES/DB/chunks/documents.sqlite
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 ```bash
 cd ~/LOCALES
 source .venv/bin/activate
+export BACKEND_URL=http://127.0.0.1:8000
 python scripts/run_telegram.py
 ```
 
