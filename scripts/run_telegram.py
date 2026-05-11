@@ -360,6 +360,7 @@ def main() -> None:
     print(f"Modelo seleccionado: {SELECTED_MODEL}")
     print(f"Temperature seleccionada: {SELECTED_TEMPERATURE}")
     print(f"RAG seleccionado: {'enabled' if SELECTED_USE_RAG else 'disabled'}")
+    print(f"Backend FastAPI configurado: {FASTAPI_URL}")
 
     log_event(
         component="telegram.polling",

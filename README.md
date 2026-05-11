@@ -51,6 +51,12 @@ TELEGRAM_ALLOWED_USER_IDS=123456789
 
 Si FastAPI corre en otro PC, el bot no debe usar `127.0.0.1`, porque esa IP siempre apunta a la propia máquina donde corre el proceso.
 
+Si bot y API están en la misma máquina:
+
+```env
+BACKEND_URL=http://127.0.0.1:8000
+```
+
 Configura `BACKEND_URL` en tu `.env`:
 
 ```env
@@ -60,13 +66,19 @@ BACKEND_URL=http://IP_DEL_PC_API:8000
 Ejemplo en una red local:
 
 ```env
-BACKEND_URL=http://192.168.1.20:8000
+BACKEND_URL=http://IP_WINDOWS:8000
 ```
 
 El bot y los scripts de eval construirán las rutas a partir de esa base, por ejemplo:
 
 - `http://IP_DEL_PC_API:8000/chat`
 - `http://IP_DEL_PC_API:8000/documents`
+
+Si la API corre en Windows y el bot en Linux, una comprobación mínima desde Linux es:
+
+```bash
+curl http://IP_WINDOWS:8000/health
+```
 
 ## Uso rápido
 
