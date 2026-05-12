@@ -35,6 +35,27 @@ const elements = {
   telegramModelInput: document.querySelector("#telegramModelInput"),
   telegramTemperatureInput: document.querySelector("#telegramTemperatureInput"),
   telegramRagInput: document.querySelector("#telegramRagInput"),
+  telegramEvalsLimit: document.querySelector("#telegramEvalsLimit"),
+  telegramEvalsLoadButton: document.querySelector("#telegramEvalsLoadButton"),
+  telegramEvalsStatus: document.querySelector("#telegramEvalsStatus"),
+  telegramEvalsKpis: document.querySelector("#telegramEvalsKpis"),
+  telegramKpiTotalRuns: document.querySelector("#telegramKpiTotalRuns"),
+  telegramKpiOkRuns: document.querySelector("#telegramKpiOkRuns"),
+  telegramKpiErrorRuns: document.querySelector("#telegramKpiErrorRuns"),
+  telegramKpiErrorRate: document.querySelector("#telegramKpiErrorRate"),
+  telegramKpiAvgLatencyOk: document.querySelector("#telegramKpiAvgLatencyOk"),
+  telegramKpiAvgLatencyError: document.querySelector("#telegramKpiAvgLatencyError"),
+  telegramKpiEvidenceRate: document.querySelector("#telegramKpiEvidenceRate"),
+  telegramEvalsTableBody: document.querySelector("#telegramEvalsTableBody"),
+  telegramLatencyTimeline: document.querySelector("#telegramLatencyTimeline"),
+  telegramLatencyByModel: document.querySelector("#telegramLatencyByModel"),
+  telegramTokensByModel: document.querySelector("#telegramTokensByModel"),
+  telegramRetrievalCounts: document.querySelector("#telegramRetrievalCounts"),
+  telegramBackendConnectivityErrors: document.querySelector("#telegramBackendConnectivityErrors"),
+  telegramModelErrors: document.querySelector("#telegramModelErrors"),
+  telegramErrorsByCategory: document.querySelector("#telegramErrorsByCategory"),
+  telegramProbableTimeouts: document.querySelector("#telegramProbableTimeouts"),
+  telegramEvalsRaw: document.querySelector("#telegramEvalsRaw"),
 };
 
 function setActiveTab(tabName) {
@@ -194,6 +215,309 @@ function valueOrDash(value) {
   return String(value);
 }
 
+function numericValue(value) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function average(values) {
+  const validValues = values.filter((value) => Number.isFinite(value));
+  if (!validValues.length) {
+    return null;
+  }
+  return validValues.reduce((sum, value) => sum + value, 0) / validValues.length;
+}
+
+function groupBy(items, keyFn) {
+  return items.reduce((groups, item) => {
+    const key = keyFn(item) || "-";
+    if (!groups[key]) {
+      groups[key] = [];
+    }
+    groups[key].push(item);
+    return groups;
+  }, {});
+}
+
+function formatMetric(value, fractionDigits = 1) {
+  if (!Number.isFinite(value)) {
+    return "-";
+  }
+  return Number.isInteger(value) ? String(value) : value.toFixed(fractionDigits);
+}
+
+function formatPercent(value) {
+  return Number.isFinite(value) ? `${value.toFixed(1)}%` : "-";
+}
+
+function formatLatency(value) {
+  if (!Number.isFinite(value)) {
+    return "-";
+  }
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(1)} s`;
+  }
+  return `${Math.round(value)} ms`;
+}
+
+function normalizedStatus(item) {
+  const status = String(item.status || "").trim().toLowerCase();
+  return status || "unknown";
+}
+
+function isErrorEval(item) {
+  return normalizedStatus(item) === "error";
+}
+
+function isBackendConnectivityError(item) {
+  return String(item.error_category || "").toLowerCase() === "backend_connectivity";
+}
+
+function isModelError(item) {
+  const category = String(item.error_category || "").toLowerCase();
+  const phase = String(item.failed_phase || "").toLowerCase();
+  return category.includes("model") || category.includes("llm") || phase.includes("model") || phase.includes("llm");
+}
+
+function isProbableTimeout(item) {
+  const latencyMs = numericValue(item.latency_ms);
+  return Number.isFinite(latencyMs) && latencyMs > 30000;
+}
+
+function selectedTelegramEvalsLimit() {
+  const limit = Number(elements.telegramEvalsLimit.value);
+  return [25, 50, 100, 250, 500].includes(limit) ? limit : 100;
+}
+
+function renderTelegramEvalsKpis(items) {
+  const totalRuns = items.length;
+  const okRuns = items.filter((item) => normalizedStatus(item) === "ok");
+  const errorRuns = items.filter((item) => normalizedStatus(item) === "error");
+  const okLatencies = okRuns.map((item) => numericValue(item.latency_ms)).filter((value) => Number.isFinite(value) && value > 0);
+  const errorLatencies = errorRuns.map((item) => numericValue(item.latency_ms)).filter((value) => Number.isFinite(value) && value > 0);
+  const evidenceFoundRuns = okRuns.filter((item) => item.retrieval_status === "EVIDENCE_FOUND").length;
+
+  elements.telegramKpiTotalRuns.textContent = String(totalRuns);
+  elements.telegramKpiOkRuns.textContent = String(okRuns.length);
+  elements.telegramKpiErrorRuns.textContent = String(errorRuns.length);
+  elements.telegramKpiErrorRate.textContent = totalRuns ? formatPercent((errorRuns.length / totalRuns) * 100) : "-";
+  elements.telegramKpiAvgLatencyOk.textContent = formatLatency(average(okLatencies));
+  elements.telegramKpiAvgLatencyError.textContent = formatLatency(average(errorLatencies));
+  elements.telegramKpiEvidenceRate.textContent = okRuns.length ? formatPercent((evidenceFoundRuns / okRuns.length) * 100) : "-";
+  elements.telegramEvalsKpis.classList.toggle("has-errors", errorRuns.length > 0);
+}
+
+function renderTelegramEvalsTable(items) {
+  elements.telegramEvalsTableBody.innerHTML = "";
+  if (!items.length) {
+    elements.telegramEvalsTableBody.innerHTML = '<tr><td colspan="11">No hay evals disponibles.</td></tr>';
+    return;
+  }
+
+  for (const item of items) {
+    const row = document.createElement("tr");
+    if (isErrorEval(item)) {
+      row.classList.add("error-row");
+    }
+    if (isProbableTimeout(item)) {
+      row.classList.add("timeout-row");
+    }
+
+    const cells = [
+      item.created_at,
+      item.model,
+      item.status,
+      item.retrieval_status,
+      item.latency_ms,
+      item.tokens_input,
+      item.tokens_output,
+      item.output_tokens_per_second,
+      item.error_category,
+      item.failed_phase,
+      item.error_code,
+    ];
+
+    cells.forEach((cellValue, index) => {
+      const cell = document.createElement("td");
+      cell.textContent = valueOrDash(cellValue);
+      if (index === 4 && isProbableTimeout(item)) {
+        const badge = document.createElement("span");
+        badge.className = "inline-badge warning";
+        badge.textContent = "timeout probable";
+        cell.append(" ", badge);
+      }
+      row.appendChild(cell);
+    });
+    elements.telegramEvalsTableBody.appendChild(row);
+  }
+}
+
+function renderBarChart(container, rows, fractionDigits = 1) {
+  container.classList.remove("empty");
+  container.innerHTML = "";
+  const validRows = rows.filter((row) => Number.isFinite(row.value));
+  if (!validRows.length) {
+    container.classList.add("empty");
+    container.textContent = "Sin datos";
+    return;
+  }
+
+  const maxValue = Math.max(...validRows.map((row) => row.value), 1);
+  for (const row of validRows) {
+    const item = document.createElement("div");
+    item.className = "chart-row";
+    const width = Math.max(2, Math.round((row.value / maxValue) * 100));
+    item.innerHTML = `
+      <span class="chart-label"></span>
+      <span class="bar-track"><span class="bar-fill" style="width: ${width}%"></span></span>
+      <span class="chart-value"></span>
+    `;
+    item.querySelector(".chart-label").textContent = row.label;
+    item.querySelector(".chart-value").textContent = formatMetric(row.value, fractionDigits);
+    container.appendChild(item);
+  }
+}
+
+function renderLatencyTimeline(items) {
+  const points = items
+    .map((item) => ({ createdAt: item.created_at, value: numericValue(item.latency_ms) }))
+    .filter((point) => point.createdAt && Number.isFinite(point.value))
+    .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+
+  elements.telegramLatencyTimeline.classList.remove("empty");
+  elements.telegramLatencyTimeline.innerHTML = "";
+  if (points.length < 2) {
+    elements.telegramLatencyTimeline.classList.add("empty");
+    elements.telegramLatencyTimeline.textContent = points.length ? `latency_ms: ${formatMetric(points[0].value)}` : "Sin datos";
+    return;
+  }
+
+  const width = 520;
+  const height = 160;
+  const padding = 16;
+  const minValue = Math.min(...points.map((point) => point.value));
+  const maxValue = Math.max(...points.map((point) => point.value));
+  const valueRange = maxValue - minValue || 1;
+  const coordinates = points.map((point, index) => {
+    const x = padding + (index / (points.length - 1)) * (width - padding * 2);
+    const y = height - padding - ((point.value - minValue) / valueRange) * (height - padding * 2);
+    return { x, y, value: point.value };
+  });
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "sparkline");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  const polyline = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+  polyline.setAttribute("points", coordinates.map((point) => `${point.x},${point.y}`).join(" "));
+  svg.appendChild(polyline);
+
+  for (const point of coordinates) {
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute("cx", String(point.x));
+    circle.setAttribute("cy", String(point.y));
+    circle.setAttribute("r", "3");
+    svg.appendChild(circle);
+  }
+
+  const summary = document.createElement("p");
+  summary.className = "muted-text";
+  summary.textContent = `min ${formatMetric(minValue)} ms / max ${formatMetric(maxValue)} ms`;
+  elements.telegramLatencyTimeline.append(svg, summary);
+}
+
+function renderTelegramEvalsCharts(items) {
+  renderLatencyTimeline(items);
+
+  const byModel = groupBy(items, (item) => item.model);
+  const latencyRows = Object.entries(byModel).map(([model, rows]) => ({
+    label: model,
+    value: average(rows.map((row) => numericValue(row.latency_ms))),
+  }));
+  renderBarChart(elements.telegramLatencyByModel, latencyRows);
+
+  const tokenSpeedRows = Object.entries(byModel).map(([model, rows]) => ({
+    label: model,
+    value: average(rows.map((row) => numericValue(row.output_tokens_per_second))),
+  }));
+  renderBarChart(elements.telegramTokensByModel, tokenSpeedRows);
+
+  const retrievalCounts = Object.entries(groupBy(items, (item) => item.retrieval_status)).map(([status, rows]) => ({
+    label: status,
+    value: rows.length,
+  }));
+  renderBarChart(elements.telegramRetrievalCounts, retrievalCounts, 0);
+}
+
+function renderTelegramEvalsErrorKpis(items) {
+  const errorItems = items.filter(isErrorEval);
+  const backendConnectivityErrors = errorItems.filter(isBackendConnectivityError).length;
+  const modelErrors = errorItems.filter((item) => !isBackendConnectivityError(item) && isModelError(item)).length;
+  const probableTimeouts = items.filter(isProbableTimeout);
+
+  elements.telegramBackendConnectivityErrors.textContent = String(backendConnectivityErrors);
+  elements.telegramModelErrors.textContent = String(modelErrors);
+
+  const errorCategoryRows = Object.entries(groupBy(errorItems, (item) => item.error_category)).map(([category, rows]) => ({
+    label: category,
+    value: rows.length,
+  }));
+  renderBarChart(elements.telegramErrorsByCategory, errorCategoryRows, 0);
+
+  const timeoutRows = Object.entries(groupBy(probableTimeouts, (item) => item.error_category || item.status)).map(([category, rows]) => ({
+    label: category,
+    value: rows.length,
+  }));
+  renderBarChart(elements.telegramProbableTimeouts, timeoutRows, 0);
+}
+
+function normalizeTelegramEvalsPayload(data) {
+  if (Array.isArray(data)) {
+    return data;
+  }
+  if (Array.isArray(data?.items)) {
+    return data.items;
+  }
+  if (Array.isArray(data?.evals)) {
+    return data.evals;
+  }
+  return [];
+}
+
+async function loadTelegramEvals() {
+  updateBackendLinks();
+  const limit = selectedTelegramEvalsLimit();
+  setStatus(elements.telegramEvalsStatus, "Cargando evals...", "muted");
+  elements.telegramEvalsLoadButton.disabled = true;
+  elements.telegramEvalsTableBody.innerHTML = '<tr><td colspan="11">Cargando...</td></tr>';
+  elements.telegramEvalsRaw.textContent = "-";
+
+  try {
+    const { data, latencyMs } = await fetchJsonWithLatency(`${requireBackendBaseUrl()}/api/evals/telegram?limit=${limit}`);
+    const items = normalizeTelegramEvalsPayload(data);
+    renderTelegramEvalsKpis(items);
+    renderTelegramEvalsTable(items);
+    renderTelegramEvalsCharts(items);
+    renderTelegramEvalsErrorKpis(items);
+    elements.telegramEvalsRaw.textContent = prettyJson(data);
+    setStatus(elements.telegramEvalsStatus, `Evals cargadas: ${items.length} (${latencyMs} ms)`, "ok");
+  } catch (error) {
+    setStatus(elements.telegramEvalsStatus, "Error cargando evals", "error");
+    elements.telegramEvalsTableBody.innerHTML = '<tr><td colspan="11">No se pudo cargar el endpoint de evals.</td></tr>';
+    elements.telegramEvalsRaw.textContent = error.data ? prettyJson(error.data) : error.message;
+    renderTelegramEvalsKpis([]);
+    renderTelegramEvalsCharts([]);
+    renderTelegramEvalsErrorKpis([]);
+  } finally {
+    elements.telegramEvalsLoadButton.disabled = false;
+  }
+}
+
 function clearChatOutput() {
   elements.retrievalStatus.textContent = "-";
   elements.evidenceUsed.textContent = "-";
@@ -338,3 +662,4 @@ elements.telegramConfigButton.addEventListener("click", () => callTelegramEndpoi
 elements.telegramStartButton.addEventListener("click", () => callTelegramEndpoint("/telegram/start", { method: "POST" }));
 elements.telegramStopButton.addEventListener("click", () => callTelegramEndpoint("/telegram/stop", { method: "POST" }));
 elements.telegramSaveConfigButton.addEventListener("click", saveTelegramConfig);
+elements.telegramEvalsLoadButton.addEventListener("click", loadTelegramEvals);

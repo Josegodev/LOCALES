@@ -27,6 +27,7 @@
       <nav class="tab-list" aria-label="Modos operativos">
         <button class="tab-button active" type="button" data-tab-target="principal" aria-controls="tab-principal" aria-selected="true">Principal</button>
         <button class="tab-button" type="button" data-tab-target="telegram" aria-controls="tab-telegram" aria-selected="false">Telegram</button>
+        <button class="tab-button" type="button" data-tab-target="telegram-evals" aria-controls="tab-telegram-evals" aria-selected="false">Telegram Evals</button>
         <button class="tab-button" type="button" data-tab-target="lan" aria-controls="tab-lan" aria-selected="false">LAN opcional</button>
       </nav>
 
@@ -288,6 +289,148 @@ python scripts/run_telegram.py</pre>
               </div>
             </article>
           </div>
+        </section>
+      </div>
+
+      <div id="tab-telegram-evals" class="tab-panel" data-tab-panel="telegram-evals" hidden>
+        <section class="panel">
+          <div class="section-heading-row">
+            <div>
+              <h2>Telegram Evals</h2>
+              <p class="muted-text">
+                Vista minima de evals normalizadas. Usa el Backend base URL configurado y consulta
+                <code>/api/evals/telegram?limit=&lt;limite&gt;</code>.
+              </p>
+            </div>
+            <div class="inline-controls">
+              <label for="telegramEvalsLimit">Runs</label>
+              <select id="telegramEvalsLimit">
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100" selected>100</option>
+                <option value="250">250</option>
+                <option value="500">500</option>
+              </select>
+              <button id="telegramEvalsLoadButton" type="button">Cargar evals</button>
+            </div>
+          </div>
+          <div id="telegramEvalsStatus" class="status muted">Sin ejecutar</div>
+        </section>
+
+        <section class="panel">
+          <div class="section-heading-row">
+            <div>
+              <h2>KPIs</h2>
+              <p class="muted-text">KPIs frontend v1</p>
+            </div>
+          </div>
+          <div id="telegramEvalsKpis" class="metrics evals-kpis">
+            <div>
+              <span>total_runs</span>
+              <strong id="telegramKpiTotalRuns">-</strong>
+            </div>
+            <div>
+              <span>ok_runs</span>
+              <strong id="telegramKpiOkRuns">-</strong>
+            </div>
+            <div class="kpi-error">
+              <span>error_runs</span>
+              <strong id="telegramKpiErrorRuns">-</strong>
+            </div>
+            <div>
+              <span>error_rate_percent</span>
+              <strong id="telegramKpiErrorRate">-</strong>
+            </div>
+            <div>
+              <span>avg_latency_ok_ms</span>
+              <strong id="telegramKpiAvgLatencyOk">-</strong>
+            </div>
+            <div>
+              <span>avg_latency_error_ms</span>
+              <strong id="telegramKpiAvgLatencyError">-</strong>
+            </div>
+            <div>
+              <span>evidence_found_rate_percent</span>
+              <strong id="telegramKpiEvidenceRate">-</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Tabla</h2>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>created_at</th>
+                  <th>model</th>
+                  <th>status</th>
+                  <th>retrieval_status</th>
+                  <th>latency_ms</th>
+                  <th>tokens_input</th>
+                  <th>tokens_output</th>
+                  <th>output_tokens_per_second</th>
+                  <th>error_category</th>
+                  <th>failed_phase</th>
+                  <th>error_code</th>
+                </tr>
+              </thead>
+              <tbody id="telegramEvalsTableBody">
+                <tr><td colspan="11">Pulsa Cargar evals.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Errores explicables</h2>
+          <div class="metrics">
+            <div>
+              <span>Errores backend_connectivity</span>
+              <strong id="telegramBackendConnectivityErrors">-</strong>
+            </div>
+            <div>
+              <span>Errores de modelo</span>
+              <strong id="telegramModelErrors">-</strong>
+            </div>
+          </div>
+          <div class="charts-grid">
+            <article>
+              <h3>Errores por categoria</h3>
+              <div id="telegramErrorsByCategory" class="bar-chart empty">Sin datos</div>
+            </article>
+            <article>
+              <h3>Timeouts probables</h3>
+              <div id="telegramProbableTimeouts" class="bar-chart empty">Sin datos</div>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Graficos</h2>
+          <div class="charts-grid">
+            <article>
+              <h3>latency_ms en el tiempo</h3>
+              <div id="telegramLatencyTimeline" class="mini-chart empty">Sin datos</div>
+            </article>
+            <article>
+              <h3>Media latency_ms por modelo</h3>
+              <div id="telegramLatencyByModel" class="bar-chart empty">Sin datos</div>
+            </article>
+            <article>
+              <h3>Media tokens/s por modelo</h3>
+              <div id="telegramTokensByModel" class="bar-chart empty">Sin datos</div>
+            </article>
+            <article>
+              <h3>Conteo por retrieval_status</h3>
+              <div id="telegramRetrievalCounts" class="bar-chart empty">Sin datos</div>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Raw</h2>
+          <pre id="telegramEvalsRaw" class="output small">-</pre>
         </section>
       </div>
 
