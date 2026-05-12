@@ -169,6 +169,25 @@ class DocumentCreateResponse(BaseModel):
 DocumentCreateRequest = CreateDocumentRequest
 
 
+class TelegramEvalRunResponse(BaseModel):
+    trace_id: str | None = None
+    created_at: str | None = None
+    source: str | None = None
+    model: str | None = None
+    status: str | None = None
+    retrieval_status: str | None = None
+    latency_ms: float | None = None
+    tokens_input: float | None = None
+    tokens_output: float | None = None
+    tokens_total: float | None = None
+    output_tokens_per_second: float | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+    error_category: str | None = None
+    failed_phase: str | None = None
+    warnings: list | None = None
+
+
 class TelegramConfigUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

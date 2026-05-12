@@ -145,10 +145,13 @@ class TelegramRuntime:
             )
             self._thread.start()
 
+        backend_base_url = settings.backend_base_url()
         log_event(
             component="telegram.embedded",
             event="telegram.embedded.started",
             status="started",
+            BACKEND_BASE_URL=backend_base_url,
+            chat_url=f"{backend_base_url}/chat",
             provider=DEFAULT_PROVIDER,
             model=self._config.model,
             temperature=self._config.temperature,
@@ -194,6 +197,7 @@ class TelegramRuntime:
                 self._record_error(error_type, error_message)
 
         status_after = self.status()
+        backend_base_url = settings.backend_base_url()
         log_event(
             component="telegram.embedded",
             event="telegram_startup_attempted",
@@ -201,6 +205,8 @@ class TelegramRuntime:
             token_present=token_present,
             running=status_after["running"],
             was_running=status_before["running"],
+            BACKEND_BASE_URL=backend_base_url,
+            chat_url=f"{backend_base_url}/chat",
             error_type=error_type,
             error_message=error_message,
         )

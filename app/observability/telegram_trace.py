@@ -1,10 +1,13 @@
 import json
+import logging
 import os
 import re
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from app.observability.logging import log_event
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -198,6 +201,146 @@ def build_eval_record_from_trace(record: dict[str, Any]) -> dict[str, Any]:
             output[target_key] = output[source_key]
 
     return output
+
+
+def _nullable_str(value: Any) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _nullable_number(value: Any) -> int | float | None:
+    if isinstance(value, bool):
+        return None
+    return value if isinstance(value, (int, float)) else None
+
+
+def _normalized_token_total(
+    record: dict[str, Any],
+    tokens_input: int | float | None,
+    tokens_output: int | float | None,
+) -> int | float | None:
+    tokens_total = _nullable_number(record.get("tokens_total"))
+    if tokens_total is not None:
+        return tokens_total
+    if tokens_input is None or tokens_output is None:
+        return None
+    return tokens_input + tokens_output
+
+
+def _error_text(record: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for field_name in ("error_code", "error_type", "error_message", "exception", "traceback"):
+        value = record.get(field_name)
+        if isinstance(value, str):
+            parts.append(value)
+    return " ".join(parts).casefold()
+
+
+def classify_telegram_eval_error(record: dict[str, Any]) -> tuple[str, str | None]:
+    text = _error_text(record)
+
+    if any(
+        marker.casefold() in text
+        for marker in (
+            "ConnectTimeout",
+            "Max retries exceeded",
+            "Connection refused",
+            "Failed to establish a new connection",
+            "HTTPConnectionPool",
+        )
+    ):
+        return "backend_connectivity", "backend_request"
+
+    if any(marker in text for marker in ("ollama", "model", "generate", "chat/completions")):
+        return "model_runtime", "generation"
+
+    if any(marker in text for marker in ("retrieval", "sqlite", "chunks", "documents.sqlite")):
+        return "retrieval", "retrieval"
+
+    if any(marker.casefold() in text for marker in ("JSONDecodeError", "validation", "schema", "parsing")):
+        return "parsing", "response_parsing"
+
+    return "unknown", None
+
+
+def normalize_telegram_eval_run(record: dict[str, Any]) -> dict[str, Any]:
+    tokens_input = _nullable_number(record.get("tokens_input"))
+    if tokens_input is None:
+        tokens_input = _nullable_number(record.get("prompt_eval_count"))
+
+    tokens_output = _nullable_number(record.get("tokens_output"))
+    if tokens_output is None:
+        tokens_output = _nullable_number(record.get("eval_count"))
+
+    warnings = record.get("warnings") if "warnings" in record else None
+    if warnings is not None and not isinstance(warnings, list):
+        warnings = []
+
+    error_category, failed_phase = classify_telegram_eval_error(record)
+
+    return {
+        "trace_id": _nullable_str(record.get("trace_id")),
+        "created_at": _nullable_str(record.get("created_at")),
+        "source": _nullable_str(record.get("source")),
+        "model": _nullable_str(record.get("model")),
+        "status": _nullable_str(record.get("status")),
+        "retrieval_status": _nullable_str(record.get("retrieval_status")),
+        "latency_ms": _nullable_number(record.get("latency_ms")),
+        "tokens_input": tokens_input,
+        "tokens_output": tokens_output,
+        "tokens_total": _normalized_token_total(record, tokens_input, tokens_output),
+        "output_tokens_per_second": _nullable_number(record.get("output_tokens_per_second")),
+        "error_code": _nullable_str(record.get("error_code")),
+        "error_message": _nullable_str(record.get("error_message")),
+        "error_category": error_category,
+        "failed_phase": failed_phase,
+        "warnings": warnings,
+    }
+
+
+def _telegram_eval_sort_key(record: dict[str, Any]) -> tuple[int, str]:
+    created_at = record.get("created_at")
+    if isinstance(created_at, str) and created_at:
+        return (1, created_at)
+    return (0, "")
+
+
+def load_telegram_eval_runs(
+    *,
+    limit: int = 100,
+    base_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    resolved_base_dir = base_dir or TELEGRAM_EVAL_RUNS_DIR
+    records: list[dict[str, Any]] = []
+
+    for path in resolved_base_dir.glob("chat_eval_*.json"):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            log_event(
+                component="telegram.evals",
+                event="telegram_eval_json_skipped",
+                level=logging.WARNING,
+                path=str(path),
+                error_type=exc.__class__.__name__,
+                error_message=str(exc),
+            )
+            continue
+
+        if not isinstance(payload, dict):
+            log_event(
+                component="telegram.evals",
+                event="telegram_eval_json_skipped",
+                level=logging.WARNING,
+                path=str(path),
+                error_type="invalid_json_shape",
+                error_message="telegram eval JSON must be an object",
+            )
+            continue
+
+        records.append(normalize_telegram_eval_run(payload))
+
+    records.sort(key=_telegram_eval_sort_key, reverse=True)
+    return records[:limit]
 
 
 def safe_model_name(model: str | None) -> str:

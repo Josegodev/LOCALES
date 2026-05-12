@@ -2,15 +2,15 @@ import re
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from DB.chunks.document_context import build_document_prompt, detect_source_intent, normalize_terms
 from app.config import settings
 from app.rag_client import query_remote_rag
-from app.observability import new_trace_id
+from app.observability import load_telegram_eval_runs, new_trace_id
 from app.observability import log_event
 from app.llm_client import LLMClientError, ask_chat, resolve_provider_model
-from app.schemas import ChatRequest, ChatResponse
+from app.schemas import ChatRequest, ChatResponse, TelegramEvalRunResponse
 from app.schemas import CreateDocumentRequest, DocumentCreateResponse
 from app.schemas import TelegramConfigUpdateRequest
 from app.document_writer import create_document, DocumentWriteError
@@ -405,6 +405,11 @@ def _extract_chunk_response_data(chunks: list[dict]) -> tuple[list[str], list[in
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/api/evals/telegram", response_model=list[TelegramEvalRunResponse])
+def telegram_eval_runs(limit: int = Query(default=100, ge=1, le=1000)) -> list[dict]:
+    return load_telegram_eval_runs(limit=limit)
 
 
 @app.on_event("startup")
