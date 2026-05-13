@@ -50,6 +50,36 @@ class BackendConfigTests(unittest.TestCase):
         self.assertEqual(captured["url"], "http://192.168.1.20:8000/chat")
         self.assertEqual(response["answer"], "ok")
 
+    def test_backend_client_includes_provider_when_explicitly_provided(self):
+        captured: dict = {}
+
+        class DummyResponse:
+            status_code = 200
+
+            @staticmethod
+            def json() -> dict:
+                return {"status": "ok", "provider": "openai", "model": "gpt-5.5", "answer": "ok"}
+
+        class DummyRequests:
+            @staticmethod
+            def post(url: str, json: dict, timeout: int):
+                captured["url"] = url
+                captured["json"] = json
+                captured["timeout"] = timeout
+                return DummyResponse()
+
+        backend_client.ask_chat(
+            "hola",
+            provider="openai",
+            model="gpt-5.5",
+            requests_module=DummyRequests,
+            base_url="http://127.0.0.1:8000",
+            timeout_seconds=90,
+        )
+
+        self.assertEqual(captured["json"]["provider"], "openai")
+        self.assertEqual(captured["json"]["model"], "gpt-5.5")
+
 
 if __name__ == "__main__":
     unittest.main()

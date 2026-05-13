@@ -560,6 +560,52 @@ class TelegramTracePersistenceTests(unittest.TestCase):
         self.assertEqual(payload["query_original"], "¿que es un mecanismo de atencion?")
         self.assertTrue(payload["use_rag"])
 
+    def test_backend_failure_persists_provider_model_when_backend_error_carries_selection(self):
+        sent_messages: list[tuple[int, str]] = []
+
+        def fake_send(chat_id: int, text: str) -> None:
+            sent_messages.append((chat_id, text))
+
+        backend_error = bot_service.backend_client.BackendClientError(
+            code="invalid_provider_model_pair",
+            message="backend_chat_error",
+            status_code=400,
+        )
+        backend_error.provider = "openai"
+        backend_error.model = "gpt-5.5"
+        backend_error.temperature = 0.5
+        backend_error.use_rag = True
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(telegram_trace_module, "TELEGRAM_RUNS_DIR", Path(tmpdir) / "telegram_runs"):
+                with patch.object(telegram_trace_module, "TELEGRAM_EVAL_RUNS_DIR", Path(tmpdir) / "eval_runs"):
+                    with patch.object(telegram_trace_module, "TELEGRAM_CONVERSATION_RUNS_DIR", Path(tmpdir) / "conversation_runs"):
+                        bot_service.handle_message(
+                            {
+                                "chat": {"id": 456},
+                                "from": {"id": 123},
+                                "text": "hola",
+                            },
+                            send_message_fn=fake_send,
+                            ask_chat_fn=lambda *args, **kwargs: (_ for _ in ()).throw(backend_error),
+                            trace_id_factory=lambda: TRACE_ID,
+                        )
+
+            jsonl_path = next((Path(tmpdir) / "telegram_runs").glob("telegram_chat_*.jsonl"))
+            eval_path = next((Path(tmpdir) / "eval_runs").glob("chat_eval_*.json"))
+            payload = json.loads(jsonl_path.read_text(encoding="utf-8").strip())
+            eval_payload = json.loads(eval_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(sent_messages, [(456, f"No se pudo procesar el mensaje. (request_id={TRACE_ID})")])
+        self.assertEqual(payload["provider"], "openai")
+        self.assertEqual(payload["model"], "gpt-5.5")
+        self.assertEqual(payload["temperature"], 0.5)
+        self.assertEqual(payload["error_code"], "invalid_provider_model_pair")
+        self.assertEqual(eval_payload["provider"], "openai")
+        self.assertEqual(eval_payload["model"], "gpt-5.5")
+        self.assertEqual(eval_payload["temperature"], 0.5)
+        self.assertNotIn("unknown_model", eval_path.name)
+
     def test_build_eval_record_from_trace_preserves_all_fields(self):
         trace_record = {
             "chunk_ids": [206, 277, 285],

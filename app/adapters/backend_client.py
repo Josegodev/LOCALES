@@ -79,6 +79,7 @@ def ask_chat(
     active_document_title: str | None = None,
     active_corpus: str | None = None,
     last_source_intent: str | None = None,
+    provider: str | None = None,
     model: str | None = None,
     max_tokens: int | None = None,
     temperature: float | None = None,
@@ -98,6 +99,7 @@ def ask_chat(
         "active_document_title": active_document_title,
         "active_corpus": active_corpus,
         "last_source_intent": last_source_intent,
+        "provider": provider,
         "model": model,
         "max_tokens": max_tokens,
         "temperature": temperature,
@@ -120,6 +122,11 @@ def ask_chat(
             message="backend_chat_error",
             status_code=response.status_code,
         )
+        error.provider = provider
+        error.model = model
+        error.temperature = temperature
+        error.use_rag = use_rag
+        error.top_k = top_k
         detail = _response_detail(response)
         for field_name in (
             "trace_id",

@@ -1,6 +1,21 @@
-python3 -m venv .venv 
+
+
+cd /home/jose-gonzalez-oliva/LOCALES
 source .venv/bin/activate
 
+export TELEGRAM_ENABLED=true
+export TELEGRAM_BOT_TOKEN="8798899018:AAFhZml6r1rzf1iGj3ZAv19gasvLnQYqxa4"
+export TELEGRAM_DEFAULT_MODEL="granite4.1:8b"
+export TELEGRAM_DEFAULT_TEMPERATURE="0.2"
+export TELEGRAM_DEFAULT_RAG_ENABLED=true
+export OLLAMA_BASE_URL=http://127.0.0.1:11434
+export USE_REMOTE_RAG=false
+export DOCUMENTS_DB_PATH=/home/jose-gonzalez-oliva/LOCALES/DB/chunks/documents.sqlite
 
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+---------------------
 
+cd /home/jose-gonzalez-oliva/LOCALES
+source .venv/bin/activate
+export BACKEND_URL=http://127.0.0.1:8000
+python scripts/run_telegram.py

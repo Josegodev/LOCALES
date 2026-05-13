@@ -7,9 +7,14 @@ from typing import Any
 
 import requests
 
+from app.adapters.openai_client import (
+    DEFAULT_OPENAI_MODEL,
+    SUPPORTED_MODELS as OPENAI_SUPPORTED_MODELS,
+    resolve_model as resolve_openai_model,
+)
 from app.adapters import backend_client, telegram_api
 from app.config import settings
-from app.llm_client import generate_markdown
+from app.llm_client import LLMClientError, generate_markdown, resolve_provider_model
 from app.observability import log_event
 from app.schemas import CreateDocumentRequest
 from app.services import bot_service
@@ -17,17 +22,65 @@ from app.telegram_permissions import is_telegram_user_allowed
 
 DEFAULT_PROVIDER = "ollama"
 DEFAULT_TOP_K = 3
+TELEGRAM_MODEL_ALIASES: dict[str, tuple[str, str]] = {
+    "gpt": ("openai", DEFAULT_OPENAI_MODEL),
+    "granite": ("ollama", "granite4.1:8b"),
+    "granite4.1:8b": ("ollama", "granite4.1:8b"),
+    "qwen": ("ollama", "qwen2.5-coder:7b"),
+    "qwen2.5-coder:7b": ("ollama", "qwen2.5-coder:7b"),
+}
 
 
 @dataclass
 class TelegramRuntimeConfig:
+    provider: str
     model: str
     temperature: float
     use_rag: bool
 
 
+def resolve_telegram_provider_model(
+    model: str | None,
+    provider: str | None = None,
+) -> tuple[str, str]:
+    requested_provider = (provider or "").strip().lower() or None
+    requested_model = (model or "").strip()
+
+    if not requested_model:
+        return DEFAULT_PROVIDER, settings.effective_ollama_model()
+
+    normalized_model = requested_model.casefold()
+    alias_pair = TELEGRAM_MODEL_ALIASES.get(normalized_model)
+
+    if requested_provider is not None:
+        if alias_pair is not None:
+            alias_provider, alias_model = alias_pair
+            if alias_provider != requested_provider:
+                raise LLMClientError(
+                    "invalid_provider_model_pair",
+                    f"provider_model_pair_invalido: provider={requested_provider}, model={requested_model}",
+                )
+            requested_model = alias_model
+        return resolve_provider_model(requested_provider, requested_model)
+
+    if alias_pair is not None:
+        return alias_pair
+
+    if normalized_model.startswith("gpt-") or normalized_model in OPENAI_SUPPORTED_MODELS:
+        return "openai", resolve_openai_model(requested_model)
+
+    return DEFAULT_PROVIDER, requested_model
+
+
+def telegram_default_provider_model() -> tuple[str, str]:
+    return DEFAULT_PROVIDER, settings.effective_ollama_model()
+
+
 class TelegramRuntime:
     def __init__(self) -> None:
+        initial_provider, initial_model = resolve_telegram_provider_model(
+            settings.telegram_default_model,
+        )
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
@@ -35,7 +88,8 @@ class TelegramRuntime:
         self._started_at: str | None = None
         self._last_error: dict[str, Any] | None = None
         self._config = TelegramRuntimeConfig(
-            model=settings.telegram_default_model,
+            provider=initial_provider,
+            model=initial_model,
             temperature=settings.telegram_default_temperature,
             use_rag=settings.telegram_default_rag_enabled,
         )
@@ -47,8 +101,10 @@ class TelegramRuntime:
         return self._thread is not None and self._thread.is_alive()
 
     def config(self) -> dict[str, Any]:
+        default_provider, default_model = telegram_default_provider_model()
         with self._lock:
             runtime_config = TelegramRuntimeConfig(
+                provider=self._config.provider,
                 model=self._config.model,
                 temperature=self._config.temperature,
                 use_rag=self._config.use_rag,
@@ -60,28 +116,38 @@ class TelegramRuntime:
             "telegram_enabled_env": settings.telegram_enabled,
             "token_present": self.token_configured(),
             "token_configured": self.token_configured(),
-            "default_provider": DEFAULT_PROVIDER,
-            "provider": DEFAULT_PROVIDER,
+            "default_provider": default_provider,
+            "provider": runtime_config.provider,
             "model": runtime_config.model,
-            "default_model": runtime_config.model,
+            "default_model": default_model,
             "temperature": runtime_config.temperature,
-            "default_temperature": runtime_config.temperature,
+            "default_temperature": settings.telegram_default_temperature,
             "rag_enabled": runtime_config.use_rag,
-            "default_rag_enabled": runtime_config.use_rag,
+            "default_rag_enabled": settings.telegram_default_rag_enabled,
         }
 
     def update_config(
         self,
         *,
         model: str | None = None,
+        provider: str | None = None,
         temperature: float | None = None,
         rag_enabled: bool | None = None,
     ) -> dict[str, Any]:
         with self._lock:
-            if model is not None:
-                normalized_model = model.strip()
-                if normalized_model:
-                    self._config.model = normalized_model
+            requested_model = self._config.model if model is None else model
+            if provider is not None:
+                requested_provider = provider
+            elif model is None:
+                requested_provider = self._config.provider
+            else:
+                requested_provider = None
+            resolved_provider, resolved_model = resolve_telegram_provider_model(
+                requested_model,
+                requested_provider,
+            )
+            self._config.provider = resolved_provider
+            self._config.model = resolved_model
             if temperature is not None:
                 self._config.temperature = float(temperature)
             if rag_enabled is not None:
@@ -90,6 +156,7 @@ class TelegramRuntime:
         return self.config()
 
     def status(self) -> dict[str, Any]:
+        default_provider, default_model = telegram_default_provider_model()
         with self._lock:
             running = self._is_running_locked()
             return {
@@ -101,18 +168,19 @@ class TelegramRuntime:
                 "token_configured": self.token_configured(),
                 "last_update_id": self._last_update_id,
                 "last_error": self._last_error,
+                "provider": self._config.provider,
                 "model": self._config.model,
                 "temperature": self._config.temperature,
                 "rag_enabled": self._config.use_rag,
                 "config": {
-                    "default_provider": DEFAULT_PROVIDER,
-                    "provider": DEFAULT_PROVIDER,
+                    "default_provider": default_provider,
+                    "provider": self._config.provider,
                     "model": self._config.model,
-                    "default_model": self._config.model,
+                    "default_model": default_model,
                     "temperature": self._config.temperature,
-                    "default_temperature": self._config.temperature,
+                    "default_temperature": settings.telegram_default_temperature,
                     "rag_enabled": self._config.use_rag,
-                    "default_rag_enabled": self._config.use_rag,
+                    "default_rag_enabled": settings.telegram_default_rag_enabled,
                 },
             }
 
@@ -152,7 +220,7 @@ class TelegramRuntime:
             status="started",
             BACKEND_BASE_URL=backend_base_url,
             chat_url=f"{backend_base_url}/chat",
-            provider=DEFAULT_PROVIDER,
+            provider=self._config.provider,
             model=self._config.model,
             temperature=self._config.temperature,
             use_rag=self._config.use_rag,
@@ -214,6 +282,7 @@ class TelegramRuntime:
     def _runtime_config(self) -> TelegramRuntimeConfig:
         with self._lock:
             return TelegramRuntimeConfig(
+                provider=self._config.provider,
                 model=self._config.model,
                 temperature=self._config.temperature,
                 use_rag=self._config.use_rag,
@@ -299,6 +368,7 @@ class TelegramRuntime:
             active_document_title=active_document_title,
             active_corpus=active_corpus,
             last_source_intent=last_source_intent,
+            provider=runtime_config.provider,
             model=runtime_config.model,
             temperature=runtime_config.temperature,
             use_rag=runtime_config.use_rag,
