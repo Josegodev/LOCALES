@@ -254,6 +254,11 @@ class TelegramRuntime:
         error_message = None
 
         if settings.telegram_enabled:
+            if not token_present:
+                error_type = "telegram_token_missing"
+                error_message = "TELEGRAM_BOT_TOKEN no definido."
+                self._record_error(error_type, error_message)
+                raise RuntimeError(error_message)
             try:
                 result = self.start()
                 if result.get("status") == "error":

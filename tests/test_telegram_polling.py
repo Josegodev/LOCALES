@@ -37,6 +37,7 @@ class TelegramPollingTests(unittest.TestCase):
         response = FakeTelegramResponse(
             status_code=401,
             text='{"ok":false,"description":"Unauthorized"}',
+            url="https://api.telegram.org/bot1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZabcd/sendMessage",
         )
 
         classified = telegram_api.classify_telegram_http_error(
@@ -47,6 +48,7 @@ class TelegramPollingTests(unittest.TestCase):
         self.assertEqual(classified["code"], "invalid_token")
         self.assertEqual(classified["status_code"], 401)
         self.assertEqual(classified["endpoint"], "getUpdates")
+        self.assertEqual(classified["url"], "https://api.telegram.org/bot<redacted>/sendMessage")
 
     def test_classify_http_error_polling_conflict(self):
         response = FakeTelegramResponse(

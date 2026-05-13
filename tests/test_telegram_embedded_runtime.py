@@ -49,6 +49,16 @@ class TelegramEmbeddedRuntimeTests(unittest.TestCase):
         self.assertNotIn("telegram_bot_token", status)
         self.assertNotIn("bot_token", status)
 
+    def test_start_if_enabled_fails_fast_when_enabled_without_token(self):
+        runtime = TelegramRuntime()
+
+        with patch("app.telegram_runtime.settings.telegram_enabled", True):
+            with patch.object(runtime, "token_configured", return_value=False):
+                with self.assertRaises(RuntimeError) as ctx:
+                    runtime.start_if_enabled()
+
+        self.assertEqual(str(ctx.exception), "TELEGRAM_BOT_TOKEN no definido.")
+
     def test_telegram_config_endpoint_resolves_gpt_alias_to_openai(self):
         with patch("app.main.telegram_runtime.start_if_enabled"):
             with TestClient(app) as client:

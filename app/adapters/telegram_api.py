@@ -1,4 +1,5 @@
 import json
+import re
 
 import requests
 
@@ -36,6 +37,12 @@ def _bot_token(explicit_bot_token: str | None = None) -> str:
 
 def _base_url(explicit_bot_token: str | None = None) -> str:
     return f"https://api.telegram.org/bot{_bot_token(explicit_bot_token)}"
+
+
+def _redact_bot_token_in_url(url: str | None) -> str | None:
+    if not isinstance(url, str):
+        return url
+    return re.sub(r"/bot[0-9]{8,12}:[A-Za-z0-9_-]{30,}", "/bot<redacted>", url)
 
 
 def _truncate_response_body(body: str, max_chars: int = 500) -> str:
@@ -100,7 +107,7 @@ def classify_telegram_http_error(
     response = exc.response
     status_code = getattr(response, "status_code", None)
     response_body = _safe_response_body(response)
-    url = getattr(response, "url", None)
+    url = _redact_bot_token_in_url(getattr(response, "url", None))
     payload = _safe_response_json(response)
     retry_after = _extract_retry_after(response, payload)
 
@@ -197,7 +204,7 @@ def classify_telegram_request_error(
         message = "Error de red al llamar a Telegram."
 
     request = getattr(exc, "request", None)
-    url = getattr(request, "url", None)
+    url = _redact_bot_token_in_url(getattr(request, "url", None))
 
     return {
         "code": "network_error",
@@ -240,7 +247,7 @@ def get_updates(
             status_code=response.status_code,
             response_body=_safe_response_body(response),
             retry_after=_extract_retry_after(response, data),
-            url=getattr(response, "url", None),
+            url=_redact_bot_token_in_url(getattr(response, "url", None)),
         )
 
     return data.get("result", [])
@@ -270,5 +277,5 @@ def send_message(
             status_code=response.status_code,
             response_body=_safe_response_body(response),
             retry_after=_extract_retry_after(response, data),
-            url=getattr(response, "url", None),
+            url=_redact_bot_token_in_url(getattr(response, "url", None)),
         )
