@@ -13,16 +13,20 @@ from pydantic import ValidationError
 
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test-token")
 os.environ["TELEGRAM_ALLOWED_USER_IDS"] = "123"
+os.environ.setdefault("JOSE_DEV_TOKEN", "test-dev-token")
 
 import scripts.run_telegram as run_telegram
 from app import llm_client
 from app import document_writer
+from app.config import settings
 from app.document_writer import DocumentWriteError, create_document
 from app.main import app
 from app.schemas import CreateDocumentRequest
 
 REQUEST_ID = "12345678123456781234567812345678"
 REQUEST_ID_2 = "87654321876543218765432187654321"
+AUTH_HEADERS = {"Authorization": "Bearer test-dev-token"}
+settings.jose_dev_token = "test-dev-token"
 
 
 class FakeResponse:
@@ -346,7 +350,7 @@ class DocCommandTests(unittest.TestCase):
             document_writer.SAFE_ROOT = Path(tmpdir)
             try:
                 with patch.dict(os.environ, {"TELEGRAM_ALLOWED_USER_IDS": "123"}):
-                    client = TestClient(app)
+                    client = TestClient(app, headers=AUTH_HEADERS)
                     response = client.post(
                         "/documents",
                         json={
@@ -368,7 +372,7 @@ class DocCommandTests(unittest.TestCase):
 
     def test_fastapi_rejects_missing_request_id(self):
         with patch.dict(os.environ, {"TELEGRAM_ALLOWED_USER_IDS": "123"}):
-            client = TestClient(app)
+            client = TestClient(app, headers=AUTH_HEADERS)
             response = client.post(
                 "/documents",
                 json={
@@ -384,7 +388,7 @@ class DocCommandTests(unittest.TestCase):
 
     def test_fastapi_rejects_invalid_request_id(self):
         with patch.dict(os.environ, {"TELEGRAM_ALLOWED_USER_IDS": "123"}):
-            client = TestClient(app)
+            client = TestClient(app, headers=AUTH_HEADERS)
             response = client.post(
                 "/documents",
                 json={
@@ -401,7 +405,7 @@ class DocCommandTests(unittest.TestCase):
 
     def test_fastapi_rejects_overwrite_true(self):
         with patch.dict(os.environ, {"TELEGRAM_ALLOWED_USER_IDS": "123"}):
-            client = TestClient(app)
+            client = TestClient(app, headers=AUTH_HEADERS)
             response = client.post(
                 "/documents",
                 json={
@@ -418,7 +422,7 @@ class DocCommandTests(unittest.TestCase):
 
     def test_fastapi_rejects_extra_fields(self):
         with patch.dict(os.environ, {"TELEGRAM_ALLOWED_USER_IDS": "123"}):
-            client = TestClient(app)
+            client = TestClient(app, headers=AUTH_HEADERS)
             response = client.post(
                 "/documents",
                 json={
@@ -440,7 +444,7 @@ class DocCommandTests(unittest.TestCase):
             document_writer.SAFE_ROOT = Path(tmpdir)
             try:
                 with patch.dict(os.environ, {"TELEGRAM_ALLOWED_USER_IDS": "123"}):
-                    client = TestClient(app)
+                    client = TestClient(app, headers=AUTH_HEADERS)
                     first_response = client.post(
                         "/documents",
                         json={
@@ -546,7 +550,7 @@ class DocCommandTests(unittest.TestCase):
 
     def test_fastapi_passes_same_request_id_to_writer_and_response(self):
         with patch.dict(os.environ, {"TELEGRAM_ALLOWED_USER_IDS": "123"}):
-            client = TestClient(app)
+            client = TestClient(app, headers=AUTH_HEADERS)
             output = io.StringIO()
             with redirect_stdout(output):
                 with patch(
@@ -614,10 +618,15 @@ class DocCommandTests(unittest.TestCase):
             document_writer.SAFE_ROOT = Path(tmpdir)
             try:
                 with patch.dict(os.environ, {"TELEGRAM_ALLOWED_USER_IDS": "123"}):
-                    client = TestClient(app)
+                    client = TestClient(app, headers=AUTH_HEADERS)
                     seen_payload = {}
 
-                    def post_to_fastapi(url: str, json: dict, timeout: int) -> FakeResponse:
+                    def post_to_fastapi(
+                        url: str,
+                        json: dict,
+                        timeout: int,
+                        headers: dict | None = None,
+                    ) -> FakeResponse:
                         seen_payload.update(json)
                         response = client.post("/documents", json=json)
                         return FakeResponse(

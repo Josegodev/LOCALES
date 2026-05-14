@@ -12,10 +12,12 @@ from fastapi.testclient import TestClient
 
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test-token")
 os.environ.setdefault("TELEGRAM_ALLOWED_USER_IDS", "123")
+os.environ.setdefault("JOSE_DEV_TOKEN", "test-dev-token")
 
 from app import llm_client
 from app.adapters.backend_client import BackendClientError
 from app.adapters import openai_client
+from app.config import settings
 from app.main import _extract_chunk_response_data
 from app.main import app
 from app.observability import log_event, new_trace_id
@@ -24,6 +26,8 @@ from app.services import bot_service
 from scripts import run_telegram
 
 REQUEST_ID = "12345678123456781234567812345678"
+AUTH_HEADERS = {"Authorization": "Bearer test-dev-token"}
+settings.jose_dev_token = "test-dev-token"
 
 
 class FakeResponse:
@@ -73,7 +77,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, "llm_invalid_response")
 
     def test_chat_endpoint_uses_ollama_facade(self):
-        client = TestClient(app)
+        client = TestClient(app, headers=AUTH_HEADERS)
         output = io.StringIO()
 
         with redirect_stdout(output):
@@ -119,7 +123,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         )
 
     def test_chat_endpoint_passes_openai_provider_to_llm(self):
-        client = TestClient(app)
+        client = TestClient(app, headers=AUTH_HEADERS)
 
         with patch(
             "app.main.build_document_prompt",
@@ -166,7 +170,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         )
 
     def test_chat_endpoint_passes_allowed_source_filenames_to_rag_builder(self):
-        client = TestClient(app)
+        client = TestClient(app, headers=AUTH_HEADERS)
 
         with patch(
             "app.main.build_document_prompt",
@@ -206,7 +210,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         )
 
     def test_chat_endpoint_uses_active_document_context_for_short_follow_up(self):
-        client = TestClient(app)
+        client = TestClient(app, headers=AUTH_HEADERS)
 
         with patch(
             "app.main.build_document_prompt",
@@ -268,7 +272,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         )
 
     def test_chat_endpoint_disables_active_document_context_when_query_explicitly_switches_corpus(self):
-        client = TestClient(app)
+        client = TestClient(app, headers=AUTH_HEADERS)
 
         with patch(
             "app.main.build_document_prompt",
@@ -328,7 +332,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         )
 
     def test_chat_endpoint_disables_rag_when_requested(self):
-        client = TestClient(app)
+        client = TestClient(app, headers=AUTH_HEADERS)
 
         with patch("app.main.build_document_prompt") as build_document_prompt_mock:
             with patch(
@@ -532,7 +536,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         self.assertEqual(response.source_filenames, ["ARCHITECTURE.md", "POLICY.md"])
 
     def test_chat_endpoint_returns_chunk_ids_and_source_filenames_without_breaking_response_validation(self):
-        client = TestClient(app)
+        client = TestClient(app, headers=AUTH_HEADERS)
 
         with patch(
             "app.main.build_document_prompt",
@@ -608,7 +612,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         self.assertNotIn("ask_lmstudio(", source)
 
     def test_chat_endpoint_returns_controlled_ollama_error(self):
-        client = TestClient(app)
+        client = TestClient(app, headers=AUTH_HEADERS)
 
         with patch(
             "app.main.build_document_prompt",
@@ -641,7 +645,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         )
 
     def test_chat_trace_id_appears_in_structured_logs(self):
-        client = TestClient(app)
+        client = TestClient(app, headers=AUTH_HEADERS)
         output = io.StringIO()
 
         with redirect_stdout(output):
@@ -691,7 +695,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         self.assertIn("latency_ms", chat_event)
 
     def test_chat_no_evidence_response_contains_exact_marker(self):
-        client = TestClient(app)
+        client = TestClient(app, headers=AUTH_HEADERS)
 
         with patch(
             "app.main.build_document_prompt",
@@ -739,7 +743,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         ask_chat_mock.assert_called_once()
 
     def test_chat_endpoint_strips_no_evidence_marker_from_documentary_answer(self):
-        client = TestClient(app)
+        client = TestClient(app, headers=AUTH_HEADERS)
         output = io.StringIO()
 
         with redirect_stdout(output):
@@ -807,7 +811,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         self.assertNotIn("NO_EVIDENCE_FOR_ANSWER", chat_event["final_message_preview"])
 
     def test_chat_endpoint_converts_marker_only_llm_answer_to_no_evidence(self):
-        client = TestClient(app)
+        client = TestClient(app, headers=AUTH_HEADERS)
 
         with patch(
             "app.main.build_document_prompt",
@@ -879,7 +883,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         )
 
     def test_chat_forces_no_evidence_when_anchor_term_is_absent_from_chunks(self):
-        client = TestClient(app)
+        client = TestClient(app, headers=AUTH_HEADERS)
 
         with patch(
             "app.main.build_document_prompt",
@@ -927,7 +931,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         self.assertTrue(body["fallback_used"])
 
     def test_chat_forces_no_evidence_for_missing_meaningful_alpha_term(self):
-        client = TestClient(app)
+        client = TestClient(app, headers=AUTH_HEADERS)
 
         with patch(
             "app.main.build_document_prompt",
@@ -975,7 +979,7 @@ class LocalesHardeningAuditTests(unittest.TestCase):
         self.assertTrue(body["fallback_used"])
 
     def test_chat_active_context_without_chunks_sets_specific_warning_and_flags(self):
-        client = TestClient(app)
+        client = TestClient(app, headers=AUTH_HEADERS)
 
         with patch(
             "app.main.build_document_prompt",

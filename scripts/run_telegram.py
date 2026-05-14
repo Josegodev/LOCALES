@@ -265,6 +265,7 @@ def ask_fastapi(
 
     response = requests.post(
         f"{FASTAPI_URL}/chat",
+        headers=backend_client._auth_headers(),
         json=payload,
         timeout=90,
     )

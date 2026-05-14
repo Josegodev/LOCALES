@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -6,7 +7,12 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.main import app
+
+os.environ.setdefault("JOSE_DEV_TOKEN", "test-dev-token")
+AUTH_HEADERS = {"Authorization": "Bearer test-dev-token"}
+settings.jose_dev_token = "test-dev-token"
 
 
 class TelegramEvalEndpointTests(unittest.TestCase):
@@ -43,7 +49,7 @@ class TelegramEvalEndpointTests(unittest.TestCase):
             (runs_dir / "chat_eval_corrupt.json").write_text("{", encoding="utf-8")
 
             with patch("app.observability.telegram_trace.TELEGRAM_EVAL_RUNS_DIR", runs_dir):
-                response = TestClient(app).get("/api/evals/telegram?limit=1")
+                response = TestClient(app, headers=AUTH_HEADERS).get("/api/evals/telegram?limit=1")
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()

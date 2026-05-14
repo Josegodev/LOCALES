@@ -51,6 +51,12 @@ TELEGRAM_DEFAULT_RAG_ENABLED=true
 TELEGRAM_ALLOWED_USER_IDS=123456789
 ```
 
+Variable mínima adicional para endpoints operacionales protegidos:
+
+```env
+JOSE_DEV_TOKEN=change_me
+```
+
 ## Recommended runtime: Linux all-in-one
 
 La ruta operativa recomendada ahora es ejecutar todo el runtime principal en Linux:
@@ -194,6 +200,65 @@ python3 -m pytest -q
 - El fallback LLM requiere Ollama.
 - El fallback LLM depende del workspace `Analyzer`.
 - Las reglas de exclusión están duplicadas localmente en `app/services/repo_tools.py`.
+
+## Dev token auth
+
+Los endpoints operacionales del backend requieren ahora:
+
+```text
+Authorization: Bearer <JOSE_DEV_TOKEN>
+```
+
+Rutas abiertas:
+
+- `/health`
+
+Rutas protegidas:
+
+- `/chat`
+- `/documents`
+- `/telegram/*`
+- `/api/evals/telegram`
+
+El flujo es simple:
+
+- el servidor lee `JOSE_DEV_TOKEN` desde su entorno
+- el frontend pide el token al usuario y lo envía en el header `Authorization`
+- clientes locales como Telegram o scripts de eval usan el mismo token desde entorno
+
+Esto es hardening de desarrollo, no autenticación completa de producción.
+
+## Manual curl tests
+
+Comprobar que `/health` sigue abierto:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+Comprobar que `/chat` sin token falla con `401`:
+
+```bash
+curl -X POST http://127.0.0.1:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"hola"}'
+```
+
+Comprobar que `/chat` con token correcto responde:
+
+```bash
+curl -X POST http://127.0.0.1:8000/chat \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer change_me" \
+  -d '{"message":"hola"}'
+```
+
+Comprobar evals protegidas:
+
+```bash
+curl http://127.0.0.1:8000/api/evals/telegram?limit=5 \
+  -H "Authorization: Bearer change_me"
+```
 
 ## Documentación ampliada
 

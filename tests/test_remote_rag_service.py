@@ -8,10 +8,13 @@ import requests
 from fastapi.testclient import TestClient
 
 from app import rag_client
+from app.config import settings
 from app.main import app as chat_app
 from rag_service.main import app as rag_app
 
 REQUEST_ID = "12345678123456781234567812345678"
+AUTH_HEADERS = {"Authorization": "Bearer test-dev-token"}
+settings.jose_dev_token = "test-dev-token"
 
 
 def _create_documents_db(db_path: Path) -> None:
@@ -101,7 +104,7 @@ def _create_documents_db(db_path: Path) -> None:
 
 class RemoteRagServiceTests(unittest.TestCase):
     def test_chat_uses_local_rag_when_remote_rag_is_disabled(self):
-        client = TestClient(chat_app)
+        client = TestClient(chat_app, headers=AUTH_HEADERS)
 
         with patch("app.main.settings.use_remote_rag", False):
             with patch(
@@ -139,7 +142,7 @@ class RemoteRagServiceTests(unittest.TestCase):
         query_remote_rag_mock.assert_not_called()
 
     def test_chat_uses_remote_rag_when_enabled(self):
-        client = TestClient(chat_app)
+        client = TestClient(chat_app, headers=AUTH_HEADERS)
 
         with patch("app.main.settings.use_remote_rag", True):
             with patch("app.main.build_document_prompt") as build_document_prompt_mock:
@@ -300,7 +303,7 @@ class RemoteRagServiceTests(unittest.TestCase):
         self.assertFalse(body["evidence_used"])
         self.assertTrue(body["fallback_used"])
         self.assertEqual(body["chunks_found"], 0)
-        self.assertEqual(body["warnings"][0]["code"], "RAG_DB_INVALID")
+        self.assertEqual(body["warnings"][0]["code"], "RAG_DB_SCHEMA_INVALID")
 
     def test_rag_query_returns_chunks_without_absolute_source_path(self):
         client = TestClient(rag_app)

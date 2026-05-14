@@ -203,6 +203,11 @@ pre {
   align-items: end;
 }
 
+.credentials-panel {
+  display: grid;
+  gap: 16px;
+}
+
 label {
   display: block;
   color: var(--muted);
@@ -211,6 +216,9 @@ label {
 }
 
 input[type="url"],
+input[type="password"],
+input[type="text"],
+input[type="number"],
 textarea {
   width: 100%;
   border: 1px solid var(--line);

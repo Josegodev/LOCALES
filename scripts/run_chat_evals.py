@@ -33,6 +33,13 @@ BASELINE_PATH = REPO_ROOT / "evals" / "baselines" / "chat_baseline.json"
 RUNS_DIR = REPO_ROOT / "evals" / "runs"
 
 
+def build_auth_headers() -> dict[str, str]:
+    token = os.environ.get("JOSE_DEV_TOKEN", "").strip()
+    if not token:
+        return {}
+    return {"Authorization": f"Bearer {token}"}
+
+
 def load_cases(path: Path = CASES_PATH) -> list[dict[str, Any]]:
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, list):
@@ -252,6 +259,7 @@ def run_case(
     try:
         response = requests.post(
             f"{backend_url.rstrip('/')}/chat",
+            headers=build_auth_headers(),
             json={
                 "message": case["input"],
                 "trace_id": trace_id,

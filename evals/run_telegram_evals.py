@@ -14,7 +14,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from app.schemas import ChatRequest
-from app.config import BACKEND_URL
+from app.config import BACKEND_URL, settings
 
 
 DEFAULT_TEMPERATURES = [0.2, 0.7, 1.0]
@@ -70,6 +70,13 @@ HEAVY_RAG_FIELDS = {
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def build_auth_headers() -> dict[str, str]:
+    token = settings.jose_dev_token
+    if not token:
+        return {}
+    return {"Authorization": f"Bearer {token}"}
 
 
 def build_timestamp(now: datetime | None = None) -> str:
@@ -502,7 +509,12 @@ def call_chat_endpoint(
 ) -> tuple[int, dict[str, Any]]:
     started_at = time.perf_counter()
     try:
-        response = post_fn(endpoint, json=payload, timeout=timeout_seconds)
+        response = post_fn(
+            endpoint,
+            headers=build_auth_headers(),
+            json=payload,
+            timeout=timeout_seconds,
+        )
         http_status = int(getattr(response, "status_code", 0))
         try:
             response_payload = response.json()

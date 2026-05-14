@@ -34,10 +34,11 @@ class BackendConfigTests(unittest.TestCase):
 
         class DummyRequests:
             @staticmethod
-            def post(url: str, json: dict, timeout: int):
+            def post(url: str, json: dict, timeout: int, headers: dict | None = None):
                 captured["url"] = url
                 captured["json"] = json
                 captured["timeout"] = timeout
+                captured["headers"] = headers
                 return DummyResponse()
 
         response = backend_client.ask_chat(
@@ -62,10 +63,11 @@ class BackendConfigTests(unittest.TestCase):
 
         class DummyRequests:
             @staticmethod
-            def post(url: str, json: dict, timeout: int):
+            def post(url: str, json: dict, timeout: int, headers: dict | None = None):
                 captured["url"] = url
                 captured["json"] = json
                 captured["timeout"] = timeout
+                captured["headers"] = headers
                 return DummyResponse()
 
         backend_client.ask_chat(

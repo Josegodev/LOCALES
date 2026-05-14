@@ -1,10 +1,15 @@
 const DEFAULT_BACKEND_URL = "";
+const DEV_TOKEN_STORAGE_KEY = "JOSE_DEV_TOKEN";
 
 const elements = {
   tabButtons: document.querySelectorAll("[data-tab-target]"),
   tabPanels: document.querySelectorAll("[data-tab-panel]"),
   backendUrl: document.querySelector("#backendUrl"),
   docsLink: document.querySelector("#docsLink"),
+  devTokenInput: document.querySelector("#devTokenInput"),
+  saveTokenButton: document.querySelector("#saveTokenButton"),
+  clearTokenButton: document.querySelector("#clearTokenButton"),
+  tokenStatus: document.querySelector("#tokenStatus"),
   healthButton: document.querySelector("#healthButton"),
   healthStatus: document.querySelector("#healthStatus"),
   healthState: document.querySelector("#healthState"),
@@ -93,6 +98,48 @@ function prettyJson(value) {
   return JSON.stringify(value, null, 2);
 }
 
+function storedDevToken() {
+  return (localStorage.getItem(DEV_TOKEN_STORAGE_KEY) || "").trim();
+}
+
+function setTokenStatus(text, kind) {
+  setStatus(elements.tokenStatus, text, kind);
+}
+
+function refreshTokenUi() {
+  const token = storedDevToken();
+  elements.devTokenInput.value = token;
+  setTokenStatus(token ? "Token guardado en localStorage" : "Sin token guardado", token ? "ok" : "muted");
+}
+
+function saveDevToken() {
+  const token = elements.devTokenInput.value.trim();
+  if (!token) {
+    setTokenStatus("Introduce JOSE_DEV_TOKEN antes de guardar", "error");
+    return;
+  }
+  localStorage.setItem(DEV_TOKEN_STORAGE_KEY, token);
+  refreshTokenUi();
+}
+
+function clearDevToken() {
+  localStorage.removeItem(DEV_TOKEN_STORAGE_KEY);
+  refreshTokenUi();
+}
+
+function buildProtectedHeaders(extraHeaders = {}) {
+  const token = storedDevToken();
+  if (!token) {
+    const error = new Error("Missing JOSE_DEV_TOKEN in credentials.");
+    error.code = "missing_dev_token";
+    throw error;
+  }
+  return {
+    ...extraHeaders,
+    Authorization: `Bearer ${token}`,
+  };
+}
+
 function truncateText(value, limit = 1200) {
   if (typeof value !== "string") {
     return valueOrDash(value);
@@ -141,6 +188,13 @@ async function fetchJsonWithLatency(url, options = {}) {
   return { data, latencyMs };
 }
 
+async function fetchProtectedJsonWithLatency(path, options = {}) {
+  return fetchJsonWithLatency(`${requireBackendBaseUrl()}${path}`, {
+    ...options,
+    headers: buildProtectedHeaders(options.headers || {}),
+  });
+}
+
 function applyTelegramConfig(data) {
   const config = data.config || data;
   const model = config.model || config.default_model;
@@ -164,13 +218,13 @@ async function callTelegramEndpoint(path, options = {}) {
   elements.telegramRaw.textContent = "-";
 
   try {
-    const { data, latencyMs } = await fetchJsonWithLatency(`${requireBackendBaseUrl()}${path}`, options);
+    const { data, latencyMs } = await fetchProtectedJsonWithLatency(path, options);
     setStatus(elements.telegramStatus, `OK ${path} (${latencyMs} ms)`, "ok");
     elements.telegramRaw.textContent = prettyJson(data);
     applyTelegramConfig(data);
   } catch (error) {
     setStatus(elements.telegramStatus, `Error ${path}`, "error");
-    elements.telegramRaw.textContent = error.data ? prettyJson(error.data) : error.message;
+    elements.telegramRaw.textContent = error.data ? prettyJson(error.data) : visibleProtectedErrorMessage(error);
   }
 }
 
@@ -498,7 +552,7 @@ async function loadTelegramEvals() {
   elements.telegramEvalsRaw.textContent = "-";
 
   try {
-    const { data, latencyMs } = await fetchJsonWithLatency(`${requireBackendBaseUrl()}/api/evals/telegram?limit=${limit}`);
+    const { data, latencyMs } = await fetchProtectedJsonWithLatency(`/api/evals/telegram?limit=${limit}`);
     const items = normalizeTelegramEvalsPayload(data);
     renderTelegramEvalsKpis(items);
     renderTelegramEvalsTable(items);
@@ -509,7 +563,7 @@ async function loadTelegramEvals() {
   } catch (error) {
     setStatus(elements.telegramEvalsStatus, "Error cargando evals", "error");
     elements.telegramEvalsTableBody.innerHTML = '<tr><td colspan="11">No se pudo cargar el endpoint de evals.</td></tr>';
-    elements.telegramEvalsRaw.textContent = error.data ? prettyJson(error.data) : error.message;
+    elements.telegramEvalsRaw.textContent = error.data ? prettyJson(error.data) : visibleProtectedErrorMessage(error);
     renderTelegramEvalsKpis([]);
     renderTelegramEvalsCharts([]);
     renderTelegramEvalsErrorKpis([]);
@@ -535,6 +589,12 @@ function setChatPending(isPending) {
 }
 
 function visibleChatErrorMessage(error) {
+  if (error?.message === "HTTP 401") {
+    return "Unauthorized. Check JOSE_DEV_TOKEN in credentials.";
+  }
+  if (error?.code === "missing_dev_token") {
+    return "Missing JOSE_DEV_TOKEN in credentials.";
+  }
   const detail = error?.data?.detail;
   if (detail && typeof detail === "object") {
     const detailMessage = detail.message || detail.code;
@@ -547,6 +607,20 @@ function visibleChatErrorMessage(error) {
   }
   if (error?.message === "Failed to fetch") {
     return "Failed to fetch. Revisa Backend base URL, CORS y que FastAPI este accesible desde el navegador.";
+  }
+  return error?.message || "Error inesperado llamando al backend.";
+}
+
+function visibleProtectedErrorMessage(error) {
+  if (error?.message === "HTTP 401") {
+    return "Unauthorized. Check JOSE_DEV_TOKEN in credentials.";
+  }
+  if (error?.code === "missing_dev_token") {
+    return "Missing JOSE_DEV_TOKEN in credentials.";
+  }
+  const detail = error?.data?.detail;
+  if (detail && typeof detail === "object" && detail.message) {
+    return String(detail.message);
   }
   return error?.message || "Error inesperado llamando al backend.";
 }
@@ -606,7 +680,7 @@ async function sendChat() {
   renderEvidence({});
 
   try {
-    const { data, latencyMs } = await fetchJsonWithLatency(`${requireBackendBaseUrl()}/chat`, {
+    const { data, latencyMs } = await fetchProtectedJsonWithLatency("/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -643,6 +717,7 @@ if (savedBackendUrl) {
 }
 
 updateBackendLinks();
+refreshTokenUi();
 setActiveTab("principal");
 elements.tabButtons.forEach((button) => {
   button.addEventListener("click", () => setActiveTab(button.dataset.tabTarget));
@@ -655,6 +730,8 @@ elements.docsLink.addEventListener("click", (event) => {
     setStatus(elements.healthStatus, "Configura Backend base URL antes de abrir /docs", "error");
   }
 });
+elements.saveTokenButton.addEventListener("click", saveDevToken);
+elements.clearTokenButton.addEventListener("click", clearDevToken);
 elements.healthButton.addEventListener("click", checkHealth);
 elements.chatButton.addEventListener("click", sendChat);
 elements.telegramStatusButton.addEventListener("click", () => callTelegramEndpoint("/telegram/status"));

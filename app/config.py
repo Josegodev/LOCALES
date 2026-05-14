@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     rag_service_url: str = "http://127.0.0.1:9000"
     rag_timeout_seconds: float = 10.0
     rag_top_k: int = 5
+    jose_dev_token: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

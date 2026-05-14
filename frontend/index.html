@@ -64,6 +64,20 @@
         </div>
       </section>
 
+      <section class="panel credentials-panel">
+        <div>
+          <h2>Credenciales desarrollo</h2>
+          <label for="devTokenInput">JOSE_DEV_TOKEN</label>
+          <input id="devTokenInput" type="password" placeholder="Introduce tu token dev" autocomplete="off" />
+          <p class="muted-text">El token lo introduce el usuario. El frontend solo puede guardarlo localmente para desarrollo.</p>
+        </div>
+        <div class="button-row">
+          <button id="saveTokenButton" type="button">Save token</button>
+          <button id="clearTokenButton" class="secondary-button" type="button">Clear token</button>
+        </div>
+        <div id="tokenStatus" class="status muted">Sin token guardado</div>
+      </section>
+
       <section class="grid-two">
         <article class="panel">
           <h2>Health panel</h2>

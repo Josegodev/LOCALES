@@ -1,6 +1,6 @@
 import requests
 
-from app.config import BACKEND_URL
+from app.config import BACKEND_URL, settings
 from app.schemas import CreateDocumentRequest
 
 FASTAPI_URL = BACKEND_URL
@@ -17,6 +17,13 @@ class BackendClientError(Exception):
         self.message = message
         self.status_code = status_code
         super().__init__(message)
+
+
+def _auth_headers() -> dict[str, str]:
+    token = settings.jose_dev_token
+    if not token:
+        return {}
+    return {"Authorization": f"Bearer {token}"}
 
 
 def _response_detail(response: requests.Response) -> dict:
@@ -48,6 +55,7 @@ def create_document(
     normalized_base_url = _normalize_base_url(base_url)
     response = requests_module.post(
         f"{normalized_base_url}/documents",
+        headers=_auth_headers(),
         json=request.model_dump(),
         timeout=timeout_seconds,
     )
@@ -112,6 +120,7 @@ def ask_chat(
 
     response = requests_module.post(
         f"{normalized_base_url}/chat",
+        headers=_auth_headers(),
         json=payload,
         timeout=timeout_seconds,
     )

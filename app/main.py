@@ -2,9 +2,11 @@ import re
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials
 from DB.chunks.document_context import build_document_prompt, detect_source_intent, normalize_terms
+from app.auth import bearer_scheme, require_dev_token
 from app.config import settings
 from app.rag_client import query_remote_rag
 from app.observability import load_telegram_eval_runs, new_trace_id
@@ -71,7 +73,7 @@ app.add_middleware(
     allow_origins=FRONTEND_DEV_ORIGINS,
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 
@@ -408,7 +410,11 @@ def health() -> dict:
 
 
 @app.get("/api/evals/telegram", response_model=list[TelegramEvalRunResponse])
-def telegram_eval_runs(limit: int = Query(default=100, ge=1, le=1000)) -> list[dict]:
+def telegram_eval_runs(
+    limit: int = Query(default=100, ge=1, le=1000),
+    _: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> list[dict]:
+    require_dev_token(_)
     return load_telegram_eval_runs(limit=limit)
 
 
@@ -423,17 +429,23 @@ def stop_embedded_telegram_on_shutdown() -> None:
 
 
 @app.get("/telegram/status")
-def telegram_status() -> dict:
+def telegram_status(_: HTTPAuthorizationCredentials | None = Depends(bearer_scheme)) -> dict:
+    require_dev_token(_)
     return telegram_runtime.status()
 
 
 @app.get("/telegram/config")
-def telegram_config() -> dict:
+def telegram_config(_: HTTPAuthorizationCredentials | None = Depends(bearer_scheme)) -> dict:
+    require_dev_token(_)
     return telegram_runtime.config()
 
 
 @app.post("/telegram/config")
-def telegram_update_config(request: TelegramConfigUpdateRequest) -> dict:
+def telegram_update_config(
+    request: TelegramConfigUpdateRequest,
+    _: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> dict:
+    require_dev_token(_)
     return telegram_runtime.update_config(
         model=request.model,
         temperature=request.temperature,
@@ -442,17 +454,23 @@ def telegram_update_config(request: TelegramConfigUpdateRequest) -> dict:
 
 
 @app.post("/telegram/start")
-def telegram_start() -> dict:
+def telegram_start(_: HTTPAuthorizationCredentials | None = Depends(bearer_scheme)) -> dict:
+    require_dev_token(_)
     return telegram_runtime.start()
 
 
 @app.post("/telegram/stop")
-def telegram_stop() -> dict:
+def telegram_stop(_: HTTPAuthorizationCredentials | None = Depends(bearer_scheme)) -> dict:
+    require_dev_token(_)
     return telegram_runtime.stop()
 
 
 @app.post("/documents", response_model=DocumentCreateResponse)
-def create_document_endpoint(request: CreateDocumentRequest) -> DocumentCreateResponse:
+def create_document_endpoint(
+    request: CreateDocumentRequest,
+    _: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> DocumentCreateResponse:
+    require_dev_token(_)
     started_at = time.perf_counter()
     status = "error"
     reason = "unexpected_error"
@@ -533,7 +551,11 @@ def create_document_endpoint(request: CreateDocumentRequest) -> DocumentCreateRe
         )
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(request: ChatRequest) -> ChatResponse:
+def chat(
+    request: ChatRequest,
+    _: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> ChatResponse:
+    require_dev_token(_)
     trace_id = request.trace_id or new_trace_id()
     started_at = time.perf_counter()
     status = "error"
