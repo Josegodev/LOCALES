@@ -168,7 +168,7 @@ function selectedChatEvalsLimit() {
   return [10, 25, 50].includes(limit) ? limit : 25;
 }
 
-function normalizeChatEvalsPayload(data) {
+function normalizeChatTracesPayload(data) {
   if (Array.isArray(data)) {
     return data;
   }
@@ -181,10 +181,10 @@ function normalizeChatEvalsPayload(data) {
   return [];
 }
 
-function renderChatEvals(items) {
+function renderChatTraces(items) {
   elements.chatEvalsTableBody.innerHTML = "";
   if (!items.length) {
-    elements.chatEvalsTableBody.innerHTML = '<tr><td colspan="9">No hay trazas disponibles.</td></tr>';
+    elements.chatEvalsTableBody.innerHTML = '<tr><td colspan="12">No hay trazas disponibles.</td></tr>';
     return;
   }
 
@@ -195,14 +195,17 @@ function renderChatEvals(items) {
     }
     [
       item.created_at,
-      item.trace_id,
-      item.source,
-      item.model,
       item.status,
+      item.provider,
+      item.model,
+      item.trace_id,
+      truncateText(item.input, 120),
+      truncateText(item.response, 120),
       item.retrieval_status,
+      Array.isArray(item.chunk_ids) ? item.chunk_ids.join(", ") : item.chunk_ids,
       item.latency_ms,
-      item.tokens_total,
       item.error_code,
+      truncateText(item.error_message, 120),
     ].forEach((cellValue) => {
       const cell = document.createElement("td");
       cell.textContent = valueOrDash(cellValue);
@@ -212,23 +215,23 @@ function renderChatEvals(items) {
   }
 }
 
-async function loadChatEvals() {
+async function loadChatTraces() {
   updateBackendLinks();
   const limit = selectedChatEvalsLimit();
   setStatus(elements.chatEvalsStatus, "Cargando trazas /chat...", "muted");
   elements.chatEvalsLoadButton.disabled = true;
-  elements.chatEvalsTableBody.innerHTML = '<tr><td colspan="9">Cargando...</td></tr>';
+  elements.chatEvalsTableBody.innerHTML = '<tr><td colspan="12">Cargando...</td></tr>';
   elements.chatEvalsRaw.textContent = "-";
 
   try {
-    const { data, latencyMs } = await backendFetch(`/api/evals/chat?limit=${limit}`);
-    const items = normalizeChatEvalsPayload(data);
-    renderChatEvals(items);
+    const { data, latencyMs } = await backendFetch(`/api/traces/chat?limit=${limit}`);
+    const items = normalizeChatTracesPayload(data);
+    renderChatTraces(items);
     elements.chatEvalsRaw.textContent = prettyJson(data);
     setStatus(elements.chatEvalsStatus, `Trazas cargadas: ${items.length} (${latencyMs} ms)`, "ok");
   } catch (error) {
     setStatus(elements.chatEvalsStatus, "Error cargando trazas /chat", "error");
-    elements.chatEvalsTableBody.innerHTML = '<tr><td colspan="9">No se pudo cargar el endpoint de trazas.</td></tr>';
+    elements.chatEvalsTableBody.innerHTML = '<tr><td colspan="12">No se pudo cargar el endpoint de trazas.</td></tr>';
     elements.chatEvalsRaw.textContent = error.data ? prettyJson(error.data) : visibleProtectedErrorMessage(error);
   } finally {
     elements.chatEvalsLoadButton.disabled = false;
@@ -752,7 +755,6 @@ async function sendChat() {
     elements.warningsText.textContent = Array.isArray(data.warnings) && data.warnings.length ? data.warnings.join("\n") : "-";
     elements.chatRaw.textContent = prettyJson(summarizeChatPayload(data));
     renderEvidence(data);
-    loadChatEvals().catch(() => {});
   } catch (error) {
     setStatus(elements.chatStatus, "Error llamando a /chat", "error");
     clearChatOutput();
@@ -762,6 +764,7 @@ async function sendChat() {
     elements.chatRaw.textContent = error.data ? prettyJson(error.data) : error.message;
     renderEvidence({});
   } finally {
+    loadChatTraces().catch(() => {});
     setChatPending(false);
   }
 }
@@ -786,10 +789,11 @@ elements.docsLink.addEventListener("click", (event) => {
 });
 elements.healthButton.addEventListener("click", checkHealth);
 elements.chatButton.addEventListener("click", sendChat);
-elements.chatEvalsLoadButton.addEventListener("click", loadChatEvals);
+elements.chatEvalsLoadButton.addEventListener("click", loadChatTraces);
 elements.telegramStatusButton.addEventListener("click", () => callTelegramEndpoint("/telegram/status"));
 elements.telegramConfigButton.addEventListener("click", () => callTelegramEndpoint("/telegram/config"));
 elements.telegramStartButton.addEventListener("click", () => callTelegramEndpoint("/telegram/start", { method: "POST" }));
 elements.telegramStopButton.addEventListener("click", () => callTelegramEndpoint("/telegram/stop", { method: "POST" }));
 elements.telegramSaveConfigButton.addEventListener("click", saveTelegramConfig);
 elements.telegramEvalsLoadButton.addEventListener("click", loadTelegramEvals);
+loadChatTraces().catch(() => {});

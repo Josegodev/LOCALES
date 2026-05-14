@@ -123,12 +123,12 @@ class DevTokenAuthTests(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json()["detail"]["code"], "invalid_token")
 
-    def test_chat_eval_endpoint_is_open_in_local_open_mode(self):
+    def test_chat_trace_endpoint_is_open_in_local_open_mode(self):
         with patch("app.auth.settings.chat_auth_mode", "local_open"):
-            response = TestClient(app).get("/api/evals/chat?limit=1")
+            response = TestClient(app).get("/api/traces/chat?limit=1")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIsInstance(response.json(), list)
+        self.assertEqual(response.json()["status"], "ok")
 
     def test_frontend_files_do_not_reference_operational_token_name(self):
         frontend_js = Path("/home/jose-gonzalez-oliva/LOCALES/frontend/app.js").read_text(encoding="utf-8")

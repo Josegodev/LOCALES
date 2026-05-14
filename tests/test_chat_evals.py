@@ -7,46 +7,133 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.llm_client import LLMClientError
 import scripts.run_chat_evals as run_chat_evals
 
 
 class ChatEvalsTests(unittest.TestCase):
-    def test_chat_eval_endpoint_returns_frontend_runs_only(self):
+    def test_chat_trace_endpoint_returns_frontend_runs_only(self):
         with TemporaryDirectory() as tmpdir:
-            runs_dir = Path(tmpdir)
-            frontend_run = {
-                "trace_id": "frontend-trace",
-                "created_at": "2026-05-14T10:00:00+00:00",
-                "source": "frontend",
-                "input": "hola",
-                "response": "ok",
-                "provider": "ollama",
-                "model": "granite4.1:8b",
-                "status": "ok",
-                "retrieval_status": "EVIDENCE_FOUND",
-                "chunk_ids": [1],
-                "tokens_input": 10,
-                "tokens_output": 5,
-                "tokens_total": 15,
-                "latency_ms": 123,
-                "warnings": [],
-            }
-            telegram_run = {
-                "trace_id": "telegram-trace",
-                "created_at": "2026-05-14T11:00:00+00:00",
-                "source": "telegram",
-            }
-            (runs_dir / "chat_frontend_eval_frontend.json").write_text(json.dumps(frontend_run), encoding="utf-8")
-            (runs_dir / "chat_frontend_eval_telegram.json").write_text(json.dumps(telegram_run), encoding="utf-8")
+            trace_path = Path(tmpdir) / "chat_traces.jsonl"
+            trace_path.write_text(
+                "\n".join(
+                    [
+                        json.dumps(
+                            {
+                                "trace_id": "frontend-trace",
+                                "created_at": "2026-05-14T10:00:00+00:00",
+                                "source": "frontend",
+                                "endpoint": "/chat",
+                                "input": "hola",
+                                "response": "ok",
+                                "provider": "ollama",
+                                "model": "granite4.1:8b",
+                                "status": "ok",
+                                "retrieval_status": "EVIDENCE_FOUND",
+                                "chunk_ids": [1],
+                                "document_ids": [7],
+                                "source_filenames": ["doc.md"],
+                                "tokens_input": 10,
+                                "tokens_output": 5,
+                                "tokens_total": 15,
+                                "latency_ms": 123,
+                                "warnings": [],
+                            }
+                        ),
+                        json.dumps(
+                            {
+                                "trace_id": "telegram-trace",
+                                "created_at": "2026-05-14T11:00:00+00:00",
+                                "source": "telegram",
+                                "endpoint": "/chat",
+                                "input": "legacy",
+                                "status": "ok",
+                            }
+                        ),
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
 
-            with patch("app.observability.chat_trace.CHAT_EVAL_RUNS_DIR", runs_dir):
-                response = TestClient(app).get("/api/evals/chat?limit=10")
+            with patch("app.config.settings.chat_trace_path", str(trace_path)):
+                response = TestClient(app).get("/api/traces/chat?limit=10")
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertEqual(len(payload), 1)
-        self.assertEqual(payload[0]["trace_id"], "frontend-trace")
-        self.assertEqual(payload[0]["source"], "frontend")
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["count"], 1)
+        self.assertEqual(payload["items"][0]["trace_id"], "frontend-trace")
+        self.assertEqual(payload["items"][0]["source"], "frontend")
+
+    def test_chat_post_generates_trace_in_local_open_mode(self):
+        with TemporaryDirectory() as tmpdir:
+            trace_path = Path(tmpdir) / "chat_traces.jsonl"
+            with patch("app.auth.settings.chat_auth_mode", "local_open"):
+                with patch("app.config.settings.chat_trace_path", str(trace_path)):
+                    with patch(
+                        "app.main.build_document_prompt",
+                        return_value={
+                            "status": "EVIDENCE_FOUND",
+                            "prompt": "context prompt",
+                            "chunks": [{"id": 3, "document_id": 9, "filename": "orchestrator.md", "text": "context"}],
+                            "source_filenames": ["orchestrator.md"],
+                            "document_ids": [9],
+                        },
+                    ):
+                        with patch(
+                            "app.main.ask_chat",
+                            return_value={
+                                "status": "ok",
+                                "provider": "ollama",
+                                "model": "granite4.1:8b",
+                                "temperature": 0.2,
+                                "use_rag": True,
+                                "answer": "ok",
+                                "prompt_eval_count": 12,
+                                "eval_count": 6,
+                            },
+                        ):
+                            response = TestClient(app).post("/chat", json={"message": "hola", "use_rag": True})
+
+            self.assertEqual(response.status_code, 200)
+            trace_lines = trace_path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(trace_lines), 1)
+            trace_payload = json.loads(trace_lines[0])
+
+        self.assertTrue(trace_payload["trace_id"])
+        self.assertEqual(trace_payload["endpoint"], "/chat")
+        self.assertEqual(trace_payload["input"], "hola")
+        self.assertEqual(trace_payload["status"], "ok")
+        self.assertIsInstance(trace_payload["latency_ms"], int)
+        self.assertEqual(trace_payload["chunk_ids"], [3])
+        self.assertEqual(trace_payload["document_ids"], [9])
+        self.assertEqual(trace_payload["source_filenames"], ["orchestrator.md"])
+
+    def test_chat_failure_generates_error_trace(self):
+        with TemporaryDirectory() as tmpdir:
+            trace_path = Path(tmpdir) / "chat_traces.jsonl"
+            with patch("app.auth.settings.chat_auth_mode", "local_open"):
+                with patch("app.config.settings.chat_trace_path", str(trace_path)):
+                    with patch(
+                        "app.main.build_document_prompt",
+                        return_value={"status": "EVIDENCE_FOUND", "prompt": "context prompt", "chunks": []},
+                    ):
+                        with patch(
+                            "app.main.ask_chat",
+                            side_effect=LLMClientError("llm_timeout", "timeout"),
+                        ):
+                            response = TestClient(app).post("/chat", json={"message": "hola", "use_rag": True})
+
+            self.assertEqual(response.status_code, 504)
+            trace_lines = trace_path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(trace_lines), 1)
+            trace_payload = json.loads(trace_lines[0])
+
+        self.assertEqual(trace_payload["status"], "error")
+        self.assertEqual(trace_payload["error_code"], "llm_timeout")
+        self.assertEqual(trace_payload["input"], "hola")
+        self.assertTrue(trace_payload["trace_id"])
 
     def test_load_cases_returns_required_fields(self):
         cases = run_chat_evals.load_cases()

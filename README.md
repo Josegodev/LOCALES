@@ -14,7 +14,7 @@ El objetivo práctico actual es:
 ## Estado actual
 
 - Frontend principal y `/chat` operativos.
-- Trazas de `/chat` consultables en `/api/evals/chat`.
+- Trazas de `/chat` consultables en `/api/traces/chat`.
 - Bot Telegram conservado como legacy opcional.
 - `/repo` experimental para analizar únicamente `REPO_ANALYZER_PATH`.
 - Herramientas deterministas para lectura y búsqueda en repositorio.
@@ -25,7 +25,7 @@ El objetivo práctico actual es:
 
 | Componente | Ruta | Función |
 | --- | --- | --- |
-| Frontend principal | `frontend/app.js` | Cliente navegador de `/health`, `/chat` y `/api/evals/chat` |
+| Frontend principal | `frontend/app.js` | Cliente navegador de `/health`, `/chat` y `/api/traces/chat` |
 | FastAPI principal | `app/main.py` | Contrato HTTP principal, auth, `/chat`, `/health` y trazas consultables |
 | Trazas `/chat` | `app/observability/chat_trace.py` | Persiste y carga ejecuciones del frontend principal |
 | Bot Telegram legacy | `app/services/bot_service.py` | Orquesta mensajes Telegram y persistencia legacy |
@@ -51,6 +51,7 @@ Variables mínimas del runtime principal:
 APP_ENV=local
 BACKEND_BASE_URL=http://127.0.0.1:8000
 CHAT_AUTH_MODE=local_open
+CHAT_TRACE_PATH=data/chat_traces.jsonl
 OLLAMA_BASE_URL=http://127.0.0.1:11434
 USE_REMOTE_RAG=false
 DOCUMENTS_DB_PATH=/home/jose-gonzalez-oliva/LOCALES/DB/chunks/documents.sqlite
@@ -193,7 +194,7 @@ Abrir:
 http://localhost:3000
 ```
 
-La consola usa `http://127.0.0.1:8000` como valor inicial de `Backend base URL`, permite cambiarlo manualmente y lo recuerda en `localStorage`. Prueba `/health`, `/chat`, `/api/evals/chat` y deja Telegram en secciones legacy separadas. Mas detalle en `docs/frontend_console.md` y `docs/telegram_embedded_fastapi.md`.
+La consola usa `http://127.0.0.1:8000` como valor inicial de `Backend base URL`, permite cambiarlo manualmente y lo recuerda en `localStorage`. Prueba `/health`, `/chat`, `/api/traces/chat` y deja Telegram en secciones legacy separadas. Mas detalle en `docs/frontend_console.md` y `docs/telegram_embedded_fastapi.md`.
 
 Ejemplos de `/repo` en Telegram:
 
@@ -237,6 +238,7 @@ Rutas abiertas:
 
 - `/health`
 - `/chat` cuando `CHAT_AUTH_MODE=local_open`
+- `/api/traces/chat` cuando `CHAT_AUTH_MODE=local_open`
 
 Rutas protegidas:
 
@@ -250,7 +252,14 @@ Contrato especifico de `/chat`:
 - `CHAT_AUTH_MODE=bearer_required`: exige `Authorization: Bearer <JOSE_DEV_TOKEN>`.
 - `CHAT_AUTH_MODE=disabled`: responde `403`.
 
-Contrato de `/api/evals/chat`:
+Contrato de `/api/traces/chat`:
+
+- usa el mismo gate que `/chat`
+- expone solo ejecuciones `source=frontend` o `source=chat`
+- devuelve `{ "status": "ok", "items": [...], "count": N }`
+- no mezcla trazas Telegram
+
+Contrato legacy de `/api/evals/chat`:
 
 - usa el mismo gate que `/chat`
 - expone solo ejecuciones `source=frontend` o `source=chat`
@@ -278,6 +287,12 @@ Comprobar que `/chat` local abierto responde sin token:
 curl -X POST http://127.0.0.1:8000/chat \
   -H "Content-Type: application/json" \
   -d '{"message":"hola"}'
+```
+
+Comprobar las trazas reales de `/chat`:
+
+```bash
+curl http://127.0.0.1:8000/api/traces/chat?limit=10
 ```
 
 Comprobar que `/chat` con `CHAT_AUTH_MODE=bearer_required` responde con token correcto:

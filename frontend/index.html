@@ -68,7 +68,7 @@
         <h2>Autenticacion navegador</h2>
         <p class="muted-text">
           El navegador no gestiona tokens operacionales. El acceso a <code>/chat</code> y
-          <code>/api/evals/chat</code> depende del modo configurado en el backend.
+          <code>/api/traces/chat</code> depende del modo configurado en el backend.
         </p>
       </section>
 
@@ -157,18 +157,21 @@
             <thead>
               <tr>
                 <th>created_at</th>
-                <th>trace_id</th>
-                <th>source</th>
-                <th>model</th>
                 <th>status</th>
+                <th>provider</th>
+                <th>model</th>
+                <th>trace_id</th>
+                <th>input</th>
+                <th>response</th>
                 <th>retrieval_status</th>
+                <th>chunk_ids</th>
                 <th>latency_ms</th>
-                <th>tokens_total</th>
                 <th>error_code</th>
+                <th>error_message</th>
               </tr>
             </thead>
             <tbody id="chatEvalsTableBody">
-              <tr><td colspan="9">Pulsa Cargar trazas.</td></tr>
+              <tr><td colspan="12">Pulsa Cargar trazas.</td></tr>
             </tbody>
           </table>
         </div>

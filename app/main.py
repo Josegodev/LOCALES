@@ -11,10 +11,10 @@ from DB.chunks.document_context import build_document_prompt, detect_source_inte
 from app.auth import bearer_scheme, require_chat_access, require_dev_token
 from app.config import settings
 from app.rag_client import query_remote_rag
-from app.observability import load_chat_eval_runs, load_telegram_eval_runs, new_trace_id, write_chat_eval_run
+from app.observability import list_chat_traces, load_telegram_eval_runs, new_trace_id, write_chat_eval_run
 from app.observability import get_logger, log_event
 from app.llm_client import LLMClientError, ask_chat, resolve_provider_model
-from app.schemas import ChatEvalRunResponse, ChatRequest, ChatResponse, TelegramEvalRunResponse
+from app.schemas import ChatEvalRunResponse, ChatRequest, ChatResponse, ChatTraceListResponse, TelegramEvalRunResponse
 from app.schemas import CreateDocumentRequest, DocumentCreateResponse
 from app.schemas import TelegramConfigUpdateRequest
 from app.document_writer import create_document, DocumentWriteError
@@ -443,6 +443,8 @@ def _persist_chat_eval_run(
     status: str,
     retrieval_status: str,
     chunk_ids: list[int],
+    document_ids: list[int],
+    source_filenames: list[str],
     latency_ms: int,
     error_code: str | None,
     error_message: str | None,
@@ -465,6 +467,8 @@ def _persist_chat_eval_run(
         status=status,
         retrieval_status=retrieval_status,
         chunk_ids=chunk_ids,
+        document_ids=document_ids,
+        source_filenames=source_filenames,
         latency_ms=latency_ms,
         error_code=error_code,
         error_message=error_message,
@@ -477,6 +481,7 @@ def _persist_chat_eval_run(
         evidence_used=evidence_used,
         fallback_used=fallback_used,
         answer_mode=answer_mode,
+        endpoint="/chat",
     )
 
 
@@ -494,14 +499,25 @@ def telegram_eval_runs(
     return load_telegram_eval_runs(limit=limit)
 
 
+@app.get("/api/traces/chat", response_model=ChatTraceListResponse)
+def chat_trace_runs(
+    limit: int = Query(default=50, ge=1, le=200),
+    _: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    authorization: str | None = Header(default=None),
+) -> dict:
+    require_chat_access(_, auth_header_present=authorization is not None)
+    items = [record.model_dump() for record in list_chat_traces(limit=limit)]
+    return {"status": "ok", "items": items, "count": len(items)}
+
+
 @app.get("/api/evals/chat", response_model=list[ChatEvalRunResponse])
-def chat_eval_runs(
+def chat_eval_runs_legacy(
     limit: int = Query(default=50, ge=1, le=200),
     _: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     authorization: str | None = Header(default=None),
 ) -> list[dict]:
     require_chat_access(_, auth_header_present=authorization is not None)
-    return load_chat_eval_runs(limit=limit)
+    return [record.model_dump() for record in list_chat_traces(limit=limit)]
 
 
 @app.on_event("startup")
@@ -1003,6 +1019,8 @@ def chat(
                 status=status,
                 retrieval_status=retrieval_status,
                 chunk_ids=trace_chunk_ids,
+                document_ids=context.get("document_ids", []),
+                source_filenames=context.get("source_filenames", []),
                 latency_ms=trace_latency_ms,
                 error_code=error_code,
                 error_message=error_message,

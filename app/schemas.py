@@ -193,6 +193,7 @@ class ChatEvalRunResponse(BaseModel):
     trace_id: str | None = None
     created_at: str | None = None
     source: str | None = None
+    endpoint: str | None = None
     input: str | None = None
     response: str | None = None
     provider: str | None = None
@@ -200,6 +201,8 @@ class ChatEvalRunResponse(BaseModel):
     status: str | None = None
     retrieval_status: str | None = None
     chunk_ids: list[int] = Field(default_factory=list)
+    document_ids: list[int] = Field(default_factory=list)
+    source_filenames: list[str] = Field(default_factory=list)
     tokens_input: float | None = None
     tokens_output: float | None = None
     tokens_total: float | None = None
@@ -211,6 +214,12 @@ class ChatEvalRunResponse(BaseModel):
     evidence_used: bool | None = None
     fallback_used: bool | None = None
     answer_mode: str | None = None
+
+
+class ChatTraceListResponse(BaseModel):
+    status: str
+    items: list[ChatEvalRunResponse] = Field(default_factory=list)
+    count: int
 
 
 class TelegramConfigUpdateRequest(BaseModel):
