@@ -15,6 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from app.adapters.backend_client import build_internal_auth_headers
 from app.config import BACKEND_URL
 
 
@@ -34,10 +35,7 @@ RUNS_DIR = REPO_ROOT / "evals" / "runs"
 
 
 def build_auth_headers() -> dict[str, str]:
-    token = os.environ.get("JOSE_DEV_TOKEN", "").strip()
-    if not token:
-        return {}
-    return {"Authorization": f"Bearer {token}"}
+    return build_internal_auth_headers()
 
 
 def load_cases(path: Path = CASES_PATH) -> list[dict[str, Any]]:

@@ -1,23 +1,24 @@
 import re
 import time
+from datetime import datetime, timezone
+from importlib import import_module
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials
 from DB.chunks.document_context import build_document_prompt, detect_source_intent, normalize_terms
-from app.auth import bearer_scheme, require_dev_token
+from app.auth import bearer_scheme, require_chat_access, require_dev_token
 from app.config import settings
 from app.rag_client import query_remote_rag
-from app.observability import load_telegram_eval_runs, new_trace_id
-from app.observability import log_event
+from app.observability import load_chat_eval_runs, load_telegram_eval_runs, new_trace_id, write_chat_eval_run
+from app.observability import get_logger, log_event
 from app.llm_client import LLMClientError, ask_chat, resolve_provider_model
-from app.schemas import ChatRequest, ChatResponse, TelegramEvalRunResponse
+from app.schemas import ChatEvalRunResponse, ChatRequest, ChatResponse, TelegramEvalRunResponse
 from app.schemas import CreateDocumentRequest, DocumentCreateResponse
 from app.schemas import TelegramConfigUpdateRequest
 from app.document_writer import create_document, DocumentWriteError
 from app.telegram_permissions import TelegramPermissionConfigError, is_telegram_user_allowed
-from app.telegram_runtime import telegram_runtime
 
 NO_EVIDENCE_MARKER = "NO_EVIDENCE_FOR_ANSWER"
 NO_EVIDENCE_EXPLANATION = "No hay evidencia documental suficiente para responder."
@@ -59,6 +60,7 @@ COMMON_QUERY_TERMS = {
 
 
 app = FastAPI(title="Local LLM Gateway")
+_telegram_runtime = None
 
 FRONTEND_DEV_ORIGINS = [
     "http://localhost:3000",
@@ -86,6 +88,31 @@ def _message_preview(text: str, limit: int = 200) -> str:
     if len(normalized) <= limit:
         return normalized
     return normalized[:limit].rstrip() + "..."
+
+
+def _load_telegram_runtime():
+    module = import_module("app.telegram_runtime")
+    return module.telegram_runtime
+
+
+def _get_telegram_runtime():
+    global _telegram_runtime
+    if _telegram_runtime is None:
+        _telegram_runtime = _load_telegram_runtime()
+    return _telegram_runtime
+
+
+def _maybe_stop_telegram_runtime() -> None:
+    global _telegram_runtime
+    if _telegram_runtime is None:
+        return
+    _telegram_runtime.stop()
+
+
+def _chat_trace_source(user_id: int | None, chat_id: int | None) -> str:
+    if user_id is None and chat_id is None:
+        return "frontend"
+    return "chat"
 
 
 def _strip_no_evidence_markers(answer: str) -> str:
@@ -153,6 +180,7 @@ def _finalize_model_internal_answer(raw_answer: str | None) -> str:
 
 def _build_model_internal_chat_response(
     *,
+    trace_id: str,
     result: dict,
     context: dict,
     provider: str,
@@ -182,6 +210,7 @@ def _build_model_internal_chat_response(
     _clear_evidence_trace(context)
 
     return ChatResponse(
+        trace_id=trace_id,
         **response_payload,
         retrieval_status=NO_EVIDENCE_MARKER,
         answer_mode=ANSWER_MODE_MODEL_INTERNAL,
@@ -404,6 +433,53 @@ def _extract_chunk_response_data(chunks: list[dict]) -> tuple[list[str], list[in
     return chunk_texts, chunk_ids, document_ids, sorted(source_filenames)
 
 
+def _persist_chat_eval_run(
+    *,
+    trace_id: str,
+    request: ChatRequest,
+    final_answer: str,
+    provider: str,
+    model: str,
+    status: str,
+    retrieval_status: str,
+    chunk_ids: list[int],
+    latency_ms: int,
+    error_code: str | None,
+    error_message: str | None,
+    warnings: list[str],
+    use_rag: bool,
+    evidence_used: bool,
+    fallback_used: bool,
+    answer_mode: str | None,
+    tokens_input: int | float | None,
+    tokens_output: int | float | None,
+    tokens_total: int | float | None,
+) -> None:
+    write_chat_eval_run(
+        trace_id=trace_id,
+        source=_chat_trace_source(request.user_id, request.chat_id),
+        input_text=request.message,
+        response_text=final_answer or None,
+        provider=provider,
+        model=model,
+        status=status,
+        retrieval_status=retrieval_status,
+        chunk_ids=chunk_ids,
+        latency_ms=latency_ms,
+        error_code=error_code,
+        error_message=error_message,
+        warnings=warnings,
+        created_at=datetime.now(timezone.utc),
+        tokens_input=tokens_input,
+        tokens_output=tokens_output,
+        tokens_total=tokens_total,
+        use_rag=use_rag,
+        evidence_used=evidence_used,
+        fallback_used=fallback_used,
+        answer_mode=answer_mode,
+    )
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
@@ -418,26 +494,41 @@ def telegram_eval_runs(
     return load_telegram_eval_runs(limit=limit)
 
 
+@app.get("/api/evals/chat", response_model=list[ChatEvalRunResponse])
+def chat_eval_runs(
+    limit: int = Query(default=50, ge=1, le=200),
+    _: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    authorization: str | None = Header(default=None),
+) -> list[dict]:
+    require_chat_access(_, auth_header_present=authorization is not None)
+    return load_chat_eval_runs(limit=limit)
+
+
 @app.on_event("startup")
-def start_embedded_telegram_if_enabled() -> None:
-    telegram_runtime.start_if_enabled()
+def log_runtime_configuration() -> None:
+    configured = str(bool(settings.jose_dev_token)).lower()
+    get_logger().info("JOSE_DEV_TOKEN configured: %s", configured)
+    get_logger().info(
+        "Telegram legacy runtime auto-start disabled in main app: %s",
+        str(bool(settings.telegram_enabled)).lower(),
+    )
 
 
 @app.on_event("shutdown")
 def stop_embedded_telegram_on_shutdown() -> None:
-    telegram_runtime.stop()
+    _maybe_stop_telegram_runtime()
 
 
 @app.get("/telegram/status")
 def telegram_status(_: HTTPAuthorizationCredentials | None = Depends(bearer_scheme)) -> dict:
     require_dev_token(_)
-    return telegram_runtime.status()
+    return _get_telegram_runtime().status()
 
 
 @app.get("/telegram/config")
 def telegram_config(_: HTTPAuthorizationCredentials | None = Depends(bearer_scheme)) -> dict:
     require_dev_token(_)
-    return telegram_runtime.config()
+    return _get_telegram_runtime().config()
 
 
 @app.post("/telegram/config")
@@ -446,7 +537,7 @@ def telegram_update_config(
     _: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
 ) -> dict:
     require_dev_token(_)
-    return telegram_runtime.update_config(
+    return _get_telegram_runtime().update_config(
         model=request.model,
         temperature=request.temperature,
         rag_enabled=request.rag_enabled,
@@ -456,13 +547,13 @@ def telegram_update_config(
 @app.post("/telegram/start")
 def telegram_start(_: HTTPAuthorizationCredentials | None = Depends(bearer_scheme)) -> dict:
     require_dev_token(_)
-    return telegram_runtime.start()
+    return _get_telegram_runtime().start()
 
 
 @app.post("/telegram/stop")
 def telegram_stop(_: HTTPAuthorizationCredentials | None = Depends(bearer_scheme)) -> dict:
     require_dev_token(_)
-    return telegram_runtime.stop()
+    return _get_telegram_runtime().stop()
 
 
 @app.post("/documents", response_model=DocumentCreateResponse)
@@ -554,8 +645,9 @@ def create_document_endpoint(
 def chat(
     request: ChatRequest,
     _: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    authorization: str | None = Header(default=None),
 ) -> ChatResponse:
-    require_dev_token(_)
+    require_chat_access(_, auth_header_present=authorization is not None)
     trace_id = request.trace_id or new_trace_id()
     started_at = time.perf_counter()
     status = "error"
@@ -568,6 +660,13 @@ def chat(
     use_rag = request.use_rag
     answer_mode = "unknown"
     final_answer = ""
+    error_message: str | None = None
+    response_chunk_ids: list[int] = []
+    llm_metrics: dict[str, int | float | None] = {
+        "tokens_input": None,
+        "tokens_output": None,
+        "tokens_total": None,
+    }
     warnings: list[str] = []
     context = {
         "status": "DISABLED" if not use_rag else "unknown",
@@ -671,6 +770,18 @@ def chat(
             use_rag=llm_use_rag,
         )
         result["latency_ms"] = int((time.perf_counter() - llm_started_at) * 1000)
+        llm_metrics["tokens_input"] = result.get("prompt_eval_count")
+        llm_metrics["tokens_output"] = result.get("eval_count")
+        llm_metrics["tokens_total"] = (
+            result.get("tokens_total")
+            if isinstance(result.get("tokens_total"), (int, float))
+            else None
+        )
+        if llm_metrics["tokens_total"] is None:
+            prompt_eval_count = llm_metrics["tokens_input"]
+            eval_count = llm_metrics["tokens_output"]
+            if isinstance(prompt_eval_count, (int, float)) and isinstance(eval_count, (int, float)):
+                llm_metrics["tokens_total"] = prompt_eval_count + eval_count
         response_provider = result.get("provider")
         if isinstance(response_provider, str) and response_provider.strip():
             provider = response_provider.strip().lower()
@@ -687,6 +798,7 @@ def chat(
             warnings = [_no_evidence_warning_for_context(context)]
             context["warnings"] = warnings
             internal_response = _build_model_internal_chat_response(
+                trace_id=trace_id,
                 result=result,
                 context=context,
                 provider=provider,
@@ -698,6 +810,8 @@ def chat(
             )
             final_answer = internal_response.answer
             answer_mode = internal_response.answer_mode or ANSWER_MODE_MODEL_INTERNAL
+            response_chunk_ids = list(internal_response.chunk_ids)
+            warnings = [item for item in internal_response.warnings if isinstance(item, str)]
             return internal_response
 
         chunk_texts, chunk_ids, document_ids, source_filenames = _extract_chunk_response_data(context.get("chunks", [])) if use_rag else ([], [], [], [])
@@ -733,7 +847,20 @@ def chat(
             )
             internal_result["latency_ms"] = int((time.perf_counter() - fallback_started_at) * 1000)
             internal_result["warnings"] = warnings
+            llm_metrics["tokens_input"] = internal_result.get("prompt_eval_count")
+            llm_metrics["tokens_output"] = internal_result.get("eval_count")
+            llm_metrics["tokens_total"] = (
+                internal_result.get("tokens_total")
+                if isinstance(internal_result.get("tokens_total"), (int, float))
+                else None
+            )
+            if llm_metrics["tokens_total"] is None:
+                prompt_eval_count = llm_metrics["tokens_input"]
+                eval_count = llm_metrics["tokens_output"]
+                if isinstance(prompt_eval_count, (int, float)) and isinstance(eval_count, (int, float)):
+                    llm_metrics["tokens_total"] = prompt_eval_count + eval_count
             internal_response = _build_model_internal_chat_response(
+                trace_id=trace_id,
                 result=internal_result,
                 context=context,
                 provider=provider,
@@ -745,6 +872,8 @@ def chat(
             )
             final_answer = internal_response.answer
             answer_mode = internal_response.answer_mode or ANSWER_MODE_MODEL_INTERNAL
+            response_chunk_ids = list(internal_response.chunk_ids)
+            warnings = [item for item in internal_response.warnings if isinstance(item, str)]
             return internal_response
 
         final_answer, answer_mode = _finalize_rag_answer(
@@ -763,7 +892,8 @@ def chat(
             evidence_used=evidence_used,
         )
 
-        return ChatResponse(
+        chat_response = ChatResponse(
+            trace_id=trace_id,
             **response_payload,
             retrieval_status=retrieval_status,
             answer_mode=answer_mode,
@@ -791,9 +921,14 @@ def chat(
             scores=context.get("scores", []),
             warnings=context.get("warnings", []),
         )
+        final_answer = chat_response.answer
+        warnings = [item for item in chat_response.warnings if isinstance(item, str)]
+        response_chunk_ids = list(chat_response.chunk_ids)
+        return chat_response
 
     except LLMClientError as exc:
         error_code = exc.code
+        error_message = str(exc)
         http_status = 502
         if exc.code == "invalid_provider_model_pair":
             http_status = 400
@@ -823,7 +958,71 @@ def chat(
                 "warnings": context.get("warnings", []),
             },
         )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        error_code = "chat_internal_error"
+        error_message = str(exc)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "trace_id": trace_id,
+                "status": "error",
+                "code": "chat_internal_error",
+                "message": str(exc),
+                "retrieval_status": retrieval_status,
+                "chunk_ids": context.get("chunk_ids", []),
+                "document_ids": context.get("document_ids", []),
+                "source_filenames": context.get("source_filenames", []),
+                "query_original": context.get("query_original"),
+                "use_rag": use_rag,
+                "warnings": context.get("warnings", []),
+            },
+        )
     finally:
+        trace_chunk_ids = response_chunk_ids or list(context.get("chunk_ids", []))
+        evidence_used = _evidence_used_from_payload(
+            chunk_ids=trace_chunk_ids,
+            document_ids=context.get("document_ids", []),
+            source_filenames=context.get("source_filenames", []),
+        )
+        fallback_used = _fallback_used_from_state(
+            retrieval_status=retrieval_status,
+            answer_mode=answer_mode,
+            evidence_used=evidence_used,
+        )
+        trace_warnings = warnings or [item for item in context.get("warnings", []) if isinstance(item, str)]
+        trace_latency_ms = int((time.perf_counter() - started_at) * 1000)
+        try:
+            _persist_chat_eval_run(
+                trace_id=trace_id,
+                request=request,
+                final_answer=final_answer,
+                provider=provider,
+                model=model,
+                status=status,
+                retrieval_status=retrieval_status,
+                chunk_ids=trace_chunk_ids,
+                latency_ms=trace_latency_ms,
+                error_code=error_code,
+                error_message=error_message,
+                warnings=trace_warnings,
+                use_rag=use_rag,
+                evidence_used=evidence_used,
+                fallback_used=fallback_used,
+                answer_mode=answer_mode,
+                tokens_input=llm_metrics["tokens_input"],
+                tokens_output=llm_metrics["tokens_output"],
+                tokens_total=llm_metrics["tokens_total"],
+            )
+        except Exception as exc:
+            log_event(
+                component="fastapi.chat.trace",
+                event="fastapi.chat.trace.persist_failed",
+                trace_id=trace_id,
+                error_code="chat_eval_persist_failed",
+                error_message=str(exc),
+            )
         log_event(
             component="fastapi.chat",
             event="fastapi.chat.completed" if status == "ok" else "fastapi.chat.failed",
@@ -837,7 +1036,7 @@ def chat(
             temperature_ignored=temperature_ignored,
             use_rag=use_rag,
             status=status,
-            latency_ms=int((time.perf_counter() - started_at) * 1000),
+            latency_ms=trace_latency_ms,
             error_code=error_code,
             error_type=error_code,
             retrieval_status=retrieval_status,
@@ -854,30 +1053,18 @@ def chat(
             active_document_title=context.get("active_document_title"),
             active_context_used=bool(context.get("active_context_used")),
             active_context_reason=context.get("active_context_reason"),
-            evidence_used=_evidence_used_from_payload(
-                chunk_ids=context.get("chunk_ids", []),
-                document_ids=context.get("document_ids", []),
-                source_filenames=context.get("source_filenames", []),
-            ),
-            fallback_used=_fallback_used_from_state(
-                retrieval_status=retrieval_status,
-                answer_mode=answer_mode,
-                evidence_used=_evidence_used_from_payload(
-                    chunk_ids=context.get("chunk_ids", []),
-                    document_ids=context.get("document_ids", []),
-                    source_filenames=context.get("source_filenames", []),
-                ),
-            ),
+            evidence_used=evidence_used,
+            fallback_used=fallback_used,
             query_expansion_used=bool(context.get("query_expansion_used")),
             query_expansion_reason=context.get("query_expansion_reason"),
             expanded_query_terms=context.get("expanded_query_terms", []),
             candidate_filenames=context.get("candidate_filenames", []),
             selected_filenames=context.get("selected_filenames", []),
-            chunk_ids=context.get("chunk_ids", []),
+            chunk_ids=trace_chunk_ids,
             document_ids=context.get("document_ids", []),
             source_filenames=context.get("source_filenames", []),
             scores=context.get("scores", []),
             answer_mode=answer_mode,
-            warnings=context.get("warnings", []),
+            warnings=trace_warnings,
             final_message_preview=_message_preview(final_answer) if final_answer else "",
         )

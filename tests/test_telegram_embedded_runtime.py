@@ -5,9 +5,11 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.config import settings
-from app.main import app, telegram_runtime as live_telegram_runtime
+from app.adapters import backend_client
+from app.main import app
 from app.llm_client import LLMClientError
 from app.schemas import TelegramConfigUpdateRequest
+from app.telegram_runtime import telegram_runtime as live_telegram_runtime
 from app.telegram_runtime import TelegramRuntime, TelegramRuntimeConfig, resolve_telegram_provider_model
 
 AUTH_HEADERS = {"Authorization": "Bearer test-dev-token"}
@@ -31,12 +33,12 @@ class TelegramEmbeddedRuntimeTests(unittest.TestCase):
             use_rag=self._original_live_config.use_rag,
         )
 
-    def test_startup_lifecycle_invokes_auto_start_hook(self):
-        with patch("app.main.telegram_runtime.start_if_enabled") as start_if_enabled:
+    def test_startup_lifecycle_does_not_load_telegram_runtime(self):
+        with patch("app.main._load_telegram_runtime") as load_runtime:
             with TestClient(app):
                 pass
 
-        start_if_enabled.assert_called_once()
+        load_runtime.assert_not_called()
 
     def test_status_exposes_operational_fields_without_token(self):
         runtime = TelegramRuntime()
@@ -64,12 +66,11 @@ class TelegramEmbeddedRuntimeTests(unittest.TestCase):
         self.assertEqual(str(ctx.exception), "TELEGRAM_BOT_TOKEN no definido.")
 
     def test_telegram_config_endpoint_resolves_gpt_alias_to_openai(self):
-        with patch("app.main.telegram_runtime.start_if_enabled"):
-            with TestClient(app, headers=AUTH_HEADERS) as client:
-                response = client.post(
-                    "/telegram/config",
-                    json={"model": "gpt", "temperature": 0.2, "rag_enabled": True},
-                )
+        with TestClient(app, headers=AUTH_HEADERS) as client:
+            response = client.post(
+                "/telegram/config",
+                json={"model": "gpt", "temperature": 0.2, "rag_enabled": True},
+            )
 
         payload = response.json()
         self.assertEqual(response.status_code, 200)
@@ -79,12 +80,11 @@ class TelegramEmbeddedRuntimeTests(unittest.TestCase):
         self.assertEqual(payload["default_model"], "granite4.1:8b")
 
     def test_telegram_config_endpoint_resolves_explicit_gpt_model_to_openai(self):
-        with patch("app.main.telegram_runtime.start_if_enabled"):
-            with TestClient(app, headers=AUTH_HEADERS) as client:
-                response = client.post(
-                    "/telegram/config",
-                    json={"model": "gpt-5.5", "temperature": 0.2, "rag_enabled": True},
-                )
+        with TestClient(app, headers=AUTH_HEADERS) as client:
+            response = client.post(
+                "/telegram/config",
+                json={"model": "gpt-5.5", "temperature": 0.2, "rag_enabled": True},
+            )
 
         payload = response.json()
         self.assertEqual(response.status_code, 200)
@@ -92,12 +92,11 @@ class TelegramEmbeddedRuntimeTests(unittest.TestCase):
         self.assertEqual(payload["model"], "gpt-5.5")
 
     def test_telegram_config_endpoint_preserves_local_granite_pair(self):
-        with patch("app.main.telegram_runtime.start_if_enabled"):
-            with TestClient(app, headers=AUTH_HEADERS) as client:
-                response = client.post(
-                    "/telegram/config",
-                    json={"model": "granite4.1:8b", "temperature": 0.2, "rag_enabled": True},
-                )
+        with TestClient(app, headers=AUTH_HEADERS) as client:
+            response = client.post(
+                "/telegram/config",
+                json={"model": "granite4.1:8b", "temperature": 0.2, "rag_enabled": True},
+            )
 
         payload = response.json()
         self.assertEqual(response.status_code, 200)
@@ -105,9 +104,8 @@ class TelegramEmbeddedRuntimeTests(unittest.TestCase):
         self.assertEqual(payload["model"], "granite4.1:8b")
 
     def test_telegram_config_endpoint_defaults_remain_ollama_granite(self):
-        with patch("app.main.telegram_runtime.start_if_enabled"):
-            with TestClient(app, headers=AUTH_HEADERS) as client:
-                payload = client.get("/telegram/config").json()
+        with TestClient(app, headers=AUTH_HEADERS) as client:
+            payload = client.get("/telegram/config").json()
 
         self.assertEqual(payload["provider"], "ollama")
         self.assertEqual(payload["model"], "granite4.1:8b")
@@ -184,6 +182,15 @@ class TelegramEmbeddedRuntimeTests(unittest.TestCase):
 
         self.assertEqual(captured["kwargs"]["provider"], "openai")
         self.assertEqual(captured["kwargs"]["model"], "gpt-5.5")
+
+    def test_ask_backend_fails_fast_when_internal_token_missing(self):
+        runtime = TelegramRuntime()
+
+        with patch.object(backend_client.settings, "jose_dev_token", None):
+            with self.assertRaises(backend_client.BackendClientError) as ctx:
+                runtime._ask_backend("hola", trace_id="trace-1")
+
+        self.assertEqual(ctx.exception.code, "internal_auth_token_missing")
 
 
 if __name__ == "__main__":

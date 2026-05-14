@@ -26,8 +26,8 @@
     <main>
       <nav class="tab-list" aria-label="Modos operativos">
         <button class="tab-button active" type="button" data-tab-target="principal" aria-controls="tab-principal" aria-selected="true">Principal</button>
-        <button class="tab-button" type="button" data-tab-target="telegram" aria-controls="tab-telegram" aria-selected="false">Telegram</button>
-        <button class="tab-button" type="button" data-tab-target="telegram-evals" aria-controls="tab-telegram-evals" aria-selected="false">Telegram Evals</button>
+        <button class="tab-button" type="button" data-tab-target="telegram" aria-controls="tab-telegram" aria-selected="false">Telegram legacy</button>
+        <button class="tab-button" type="button" data-tab-target="telegram-evals" aria-controls="tab-telegram-evals" aria-selected="false">Telegram Evals legacy</button>
         <button class="tab-button" type="button" data-tab-target="lan" aria-controls="tab-lan" aria-selected="false">LAN opcional</button>
       </nav>
 
@@ -64,18 +64,12 @@
         </div>
       </section>
 
-      <section class="panel credentials-panel">
-        <div>
-          <h2>Credenciales desarrollo</h2>
-          <label for="devTokenInput">JOSE_DEV_TOKEN</label>
-          <input id="devTokenInput" type="password" placeholder="Introduce tu token dev" autocomplete="off" />
-          <p class="muted-text">El token lo introduce el usuario. El frontend solo puede guardarlo localmente para desarrollo.</p>
-        </div>
-        <div class="button-row">
-          <button id="saveTokenButton" type="button">Save token</button>
-          <button id="clearTokenButton" class="secondary-button" type="button">Clear token</button>
-        </div>
-        <div id="tokenStatus" class="status muted">Sin token guardado</div>
+      <section class="panel">
+        <h2>Autenticacion navegador</h2>
+        <p class="muted-text">
+          El navegador no gestiona tokens operacionales. El acceso a <code>/chat</code> y
+          <code>/api/evals/chat</code> depende del modo configurado en el backend.
+        </p>
       </section>
 
       <section class="grid-two">
@@ -139,6 +133,49 @@
       </section>
 
       <section class="panel">
+        <div class="section-heading-row">
+          <div>
+            <h2>Trazas /chat</h2>
+            <p class="muted-text">
+              Historial minimo del flujo principal. Solo devuelve fuentes <code>frontend</code>
+              o <code>chat</code>; no mezcla Telegram.
+            </p>
+          </div>
+          <div class="button-row">
+            <label for="chatEvalsLimit">Runs</label>
+            <select id="chatEvalsLimit">
+              <option value="10">10</option>
+              <option value="25" selected>25</option>
+              <option value="50">50</option>
+            </select>
+            <button id="chatEvalsLoadButton" type="button">Cargar trazas</button>
+          </div>
+        </div>
+        <div id="chatEvalsStatus" class="status muted">Sin ejecutar</div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>created_at</th>
+                <th>trace_id</th>
+                <th>source</th>
+                <th>model</th>
+                <th>status</th>
+                <th>retrieval_status</th>
+                <th>latency_ms</th>
+                <th>tokens_total</th>
+                <th>error_code</th>
+              </tr>
+            </thead>
+            <tbody id="chatEvalsTableBody">
+              <tr><td colspan="9">Pulsa Cargar trazas.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <pre id="chatEvalsRaw" class="output small">-</pre>
+      </section>
+
+      <section class="panel">
         <h2>Que se ha construido</h2>
         <div class="timeline">
           <span>Runtime local de modelos</span>
@@ -163,17 +200,18 @@
             <h3>Linux FastAPI primary runtime</h3>
             <pre>cd /home/jose-gonzalez-oliva/LOCALES
 source .venv/bin/activate
-export BACKEND_URL=&lt;backend-api-url&gt;
+export APP_ENV=local
+export BACKEND_BASE_URL=http://127.0.0.1:8000
 export OLLAMA_BASE_URL=&lt;model-runtime-url&gt;
 export USE_REMOTE_RAG=false
 export DOCUMENTS_DB_PATH=/home/jose-gonzalez-oliva/LOCALES/DB/chunks/documents.sqlite
-uvicorn app.main:app --host &lt;bind-host&gt; --port &lt;api-port&gt;</pre>
+uvicorn app.main:app --host 127.0.0.1 --port 8000</pre>
           </article>
           <article>
-            <h3>Telegram bot</h3>
+            <h3>Telegram legacy</h3>
             <pre>cd /home/jose-gonzalez-oliva/LOCALES
 source .venv/bin/activate
-export BACKEND_URL=&lt;backend-api-url&gt;
+export TELEGRAM_ENABLED=true
 python scripts/run_telegram.py</pre>
           </article>
           <article>
@@ -202,11 +240,11 @@ python scripts/run_telegram.py</pre>
 
       <div id="tab-telegram" class="tab-panel" data-tab-panel="telegram" hidden>
         <section class="panel">
-          <h2>Modo Telegram</h2>
+          <h2>Modo Telegram legacy</h2>
           <p>
-            Telegram funciona como otro cliente del Backend API. El bot usa una
-            URL de backend configurada en su entorno y delega chat, RAG y modelo
-            al mismo runtime operacional.
+            Telegram queda como adaptador legacy opcional. Ya no forma parte del
+            contrato principal de arranque de Uvicorn y no debe bloquear el flujo
+            principal navegador -> FastAPI -> /chat.
           </p>
           <div class="diagram-grid single">
             <article>
@@ -225,8 +263,8 @@ python scripts/run_telegram.py</pre>
             <div>
               <h2>Observabilidad Telegram</h2>
               <p class="muted-text">
-                Estructura visual preparada para datos reales. No llama endpoints
-                inexistentes ni inventa backend de metricas.
+                Legacy temporal. Estos endpoints siguen existiendo para operaciones
+                manuales, pero ya no participan en el arranque principal.
               </p>
             </div>
             <span class="badge pending">Pendiente de backend</span>

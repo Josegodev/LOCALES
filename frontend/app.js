@@ -1,15 +1,10 @@
-const DEFAULT_BACKEND_URL = "";
-const DEV_TOKEN_STORAGE_KEY = "JOSE_DEV_TOKEN";
+const DEFAULT_BACKEND_URL = "http://127.0.0.1:8000";
 
 const elements = {
   tabButtons: document.querySelectorAll("[data-tab-target]"),
   tabPanels: document.querySelectorAll("[data-tab-panel]"),
   backendUrl: document.querySelector("#backendUrl"),
   docsLink: document.querySelector("#docsLink"),
-  devTokenInput: document.querySelector("#devTokenInput"),
-  saveTokenButton: document.querySelector("#saveTokenButton"),
-  clearTokenButton: document.querySelector("#clearTokenButton"),
-  tokenStatus: document.querySelector("#tokenStatus"),
   healthButton: document.querySelector("#healthButton"),
   healthStatus: document.querySelector("#healthStatus"),
   healthState: document.querySelector("#healthState"),
@@ -30,6 +25,11 @@ const elements = {
   warningsText: document.querySelector("#warningsText"),
   chatRaw: document.querySelector("#chatRaw"),
   evidenceList: document.querySelector("#evidenceList"),
+  chatEvalsLimit: document.querySelector("#chatEvalsLimit"),
+  chatEvalsLoadButton: document.querySelector("#chatEvalsLoadButton"),
+  chatEvalsStatus: document.querySelector("#chatEvalsStatus"),
+  chatEvalsTableBody: document.querySelector("#chatEvalsTableBody"),
+  chatEvalsRaw: document.querySelector("#chatEvalsRaw"),
   telegramStatusButton: document.querySelector("#telegramStatusButton"),
   telegramConfigButton: document.querySelector("#telegramConfigButton"),
   telegramStartButton: document.querySelector("#telegramStartButton"),
@@ -98,46 +98,13 @@ function prettyJson(value) {
   return JSON.stringify(value, null, 2);
 }
 
-function storedDevToken() {
-  return (localStorage.getItem(DEV_TOKEN_STORAGE_KEY) || "").trim();
-}
-
-function setTokenStatus(text, kind) {
-  setStatus(elements.tokenStatus, text, kind);
-}
-
-function refreshTokenUi() {
-  const token = storedDevToken();
-  elements.devTokenInput.value = token;
-  setTokenStatus(token ? "Token guardado en localStorage" : "Sin token guardado", token ? "ok" : "muted");
-}
-
-function saveDevToken() {
-  const token = elements.devTokenInput.value.trim();
-  if (!token) {
-    setTokenStatus("Introduce JOSE_DEV_TOKEN antes de guardar", "error");
-    return;
-  }
-  localStorage.setItem(DEV_TOKEN_STORAGE_KEY, token);
-  refreshTokenUi();
-}
-
-function clearDevToken() {
-  localStorage.removeItem(DEV_TOKEN_STORAGE_KEY);
-  refreshTokenUi();
-}
-
-function buildProtectedHeaders(extraHeaders = {}) {
-  const token = storedDevToken();
-  if (!token) {
-    const error = new Error("Missing JOSE_DEV_TOKEN in credentials.");
-    error.code = "missing_dev_token";
-    throw error;
-  }
-  return {
-    ...extraHeaders,
-    Authorization: `Bearer ${token}`,
-  };
+function logAuthState(route, authRequired) {
+  console.info("backend_auth", {
+    route,
+    auth_required: authRequired,
+    auth_header_present: false,
+    token_configured: false,
+  });
 }
 
 function truncateText(value, limit = 1200) {
@@ -181,6 +148,7 @@ async function fetchJsonWithLatency(url, options = {}) {
   }
   if (!response.ok) {
     const error = new Error(`HTTP ${response.status}`);
+    error.status = response.status;
     error.data = data;
     error.latencyMs = latencyMs;
     throw error;
@@ -188,11 +156,83 @@ async function fetchJsonWithLatency(url, options = {}) {
   return { data, latencyMs };
 }
 
-async function fetchProtectedJsonWithLatency(path, options = {}) {
+async function backendFetch(path, options = {}, { authRequired = false } = {}) {
+  logAuthState(path, authRequired);
   return fetchJsonWithLatency(`${requireBackendBaseUrl()}${path}`, {
     ...options,
-    headers: buildProtectedHeaders(options.headers || {}),
   });
+}
+
+function selectedChatEvalsLimit() {
+  const limit = Number(elements.chatEvalsLimit.value);
+  return [10, 25, 50].includes(limit) ? limit : 25;
+}
+
+function normalizeChatEvalsPayload(data) {
+  if (Array.isArray(data)) {
+    return data;
+  }
+  if (Array.isArray(data?.items)) {
+    return data.items;
+  }
+  if (Array.isArray(data?.evals)) {
+    return data.evals;
+  }
+  return [];
+}
+
+function renderChatEvals(items) {
+  elements.chatEvalsTableBody.innerHTML = "";
+  if (!items.length) {
+    elements.chatEvalsTableBody.innerHTML = '<tr><td colspan="9">No hay trazas disponibles.</td></tr>';
+    return;
+  }
+
+  for (const item of items) {
+    const row = document.createElement("tr");
+    if (normalizedStatus(item) === "error") {
+      row.classList.add("error-row");
+    }
+    [
+      item.created_at,
+      item.trace_id,
+      item.source,
+      item.model,
+      item.status,
+      item.retrieval_status,
+      item.latency_ms,
+      item.tokens_total,
+      item.error_code,
+    ].forEach((cellValue) => {
+      const cell = document.createElement("td");
+      cell.textContent = valueOrDash(cellValue);
+      row.appendChild(cell);
+    });
+    elements.chatEvalsTableBody.appendChild(row);
+  }
+}
+
+async function loadChatEvals() {
+  updateBackendLinks();
+  const limit = selectedChatEvalsLimit();
+  setStatus(elements.chatEvalsStatus, "Cargando trazas /chat...", "muted");
+  elements.chatEvalsLoadButton.disabled = true;
+  elements.chatEvalsTableBody.innerHTML = '<tr><td colspan="9">Cargando...</td></tr>';
+  elements.chatEvalsRaw.textContent = "-";
+
+  try {
+    const { data, latencyMs } = await backendFetch(`/api/evals/chat?limit=${limit}`);
+    const items = normalizeChatEvalsPayload(data);
+    renderChatEvals(items);
+    elements.chatEvalsRaw.textContent = prettyJson(data);
+    setStatus(elements.chatEvalsStatus, `Trazas cargadas: ${items.length} (${latencyMs} ms)`, "ok");
+  } catch (error) {
+    setStatus(elements.chatEvalsStatus, "Error cargando trazas /chat", "error");
+    elements.chatEvalsTableBody.innerHTML = '<tr><td colspan="9">No se pudo cargar el endpoint de trazas.</td></tr>';
+    elements.chatEvalsRaw.textContent = error.data ? prettyJson(error.data) : visibleProtectedErrorMessage(error);
+  } finally {
+    elements.chatEvalsLoadButton.disabled = false;
+  }
 }
 
 function applyTelegramConfig(data) {
@@ -218,7 +258,7 @@ async function callTelegramEndpoint(path, options = {}) {
   elements.telegramRaw.textContent = "-";
 
   try {
-    const { data, latencyMs } = await fetchProtectedJsonWithLatency(path, options);
+    const { data, latencyMs } = await backendFetch(path, options, { authRequired: true });
     setStatus(elements.telegramStatus, `OK ${path} (${latencyMs} ms)`, "ok");
     elements.telegramRaw.textContent = prettyJson(data);
     applyTelegramConfig(data);
@@ -249,7 +289,7 @@ async function checkHealth() {
   elements.healthRaw.textContent = "-";
 
   try {
-    const { data, latencyMs } = await fetchJsonWithLatency(`${requireBackendBaseUrl()}/health`);
+    const { data, latencyMs } = await backendFetch("/health");
     setStatus(elements.healthStatus, "FastAPI responde", "ok");
     elements.healthState.textContent = data.status || "ok";
     elements.healthLatency.textContent = String(latencyMs);
@@ -552,7 +592,7 @@ async function loadTelegramEvals() {
   elements.telegramEvalsRaw.textContent = "-";
 
   try {
-    const { data, latencyMs } = await fetchProtectedJsonWithLatency(`/api/evals/telegram?limit=${limit}`);
+    const { data, latencyMs } = await backendFetch(`/api/evals/telegram?limit=${limit}`, {}, { authRequired: true });
     const items = normalizeTelegramEvalsPayload(data);
     renderTelegramEvalsKpis(items);
     renderTelegramEvalsTable(items);
@@ -589,12 +629,8 @@ function setChatPending(isPending) {
 }
 
 function visibleChatErrorMessage(error) {
-  if (error?.message === "HTTP 401") {
-    return "Unauthorized. Check JOSE_DEV_TOKEN in credentials.";
-  }
-  if (error?.code === "missing_dev_token") {
-    return "Missing JOSE_DEV_TOKEN in credentials.";
-  }
+  const categorized = categorizedBackendErrorMessage(error);
+  if (categorized) return categorized;
   const detail = error?.data?.detail;
   if (detail && typeof detail === "object") {
     const detailMessage = detail.message || detail.code;
@@ -612,17 +648,35 @@ function visibleChatErrorMessage(error) {
 }
 
 function visibleProtectedErrorMessage(error) {
-  if (error?.message === "HTTP 401") {
-    return "Unauthorized. Check JOSE_DEV_TOKEN in credentials.";
-  }
-  if (error?.code === "missing_dev_token") {
-    return "Missing JOSE_DEV_TOKEN in credentials.";
-  }
+  const categorized = categorizedBackendErrorMessage(error);
+  if (categorized) return categorized;
   const detail = error?.data?.detail;
   if (detail && typeof detail === "object" && detail.message) {
     return String(detail.message);
   }
   return error?.message || "Error inesperado llamando al backend.";
+}
+
+function isAuthError(error) {
+  return error?.code === "missing_dev_token" || error?.status === 401 || error?.status === 403;
+}
+
+function categorizedBackendErrorMessage(error) {
+  const detail = error?.data?.detail;
+  const code = detail && typeof detail === "object" ? detail.code : undefined;
+  if (error?.message === "Failed to fetch") {
+    return "Backend no accesible. Revisa URL, CORS y que FastAPI este arrancado.";
+  }
+  if (code === "dev_token_not_configured") {
+    return "El token operacional no esta configurado en el servidor.";
+  }
+  if (code === "chat_disabled") {
+    return "/chat esta deshabilitado por configuracion del backend.";
+  }
+  if (isAuthError(error)) {
+    return "La ruta requiere autenticacion operacional. El navegador no envia tokens del servidor.";
+  }
+  return null;
 }
 
 function renderEvidence(data) {
@@ -680,7 +734,7 @@ async function sendChat() {
   renderEvidence({});
 
   try {
-    const { data, latencyMs } = await fetchProtectedJsonWithLatency("/chat", {
+    const { data, latencyMs } = await backendFetch("/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -698,6 +752,7 @@ async function sendChat() {
     elements.warningsText.textContent = Array.isArray(data.warnings) && data.warnings.length ? data.warnings.join("\n") : "-";
     elements.chatRaw.textContent = prettyJson(summarizeChatPayload(data));
     renderEvidence(data);
+    loadChatEvals().catch(() => {});
   } catch (error) {
     setStatus(elements.chatStatus, "Error llamando a /chat", "error");
     clearChatOutput();
@@ -717,7 +772,6 @@ if (savedBackendUrl) {
 }
 
 updateBackendLinks();
-refreshTokenUi();
 setActiveTab("principal");
 elements.tabButtons.forEach((button) => {
   button.addEventListener("click", () => setActiveTab(button.dataset.tabTarget));
@@ -730,10 +784,9 @@ elements.docsLink.addEventListener("click", (event) => {
     setStatus(elements.healthStatus, "Configura Backend base URL antes de abrir /docs", "error");
   }
 });
-elements.saveTokenButton.addEventListener("click", saveDevToken);
-elements.clearTokenButton.addEventListener("click", clearDevToken);
 elements.healthButton.addEventListener("click", checkHealth);
 elements.chatButton.addEventListener("click", sendChat);
+elements.chatEvalsLoadButton.addEventListener("click", loadChatEvals);
 elements.telegramStatusButton.addEventListener("click", () => callTelegramEndpoint("/telegram/status"));
 elements.telegramConfigButton.addEventListener("click", () => callTelegramEndpoint("/telegram/config"));
 elements.telegramStartButton.addEventListener("click", () => callTelegramEndpoint("/telegram/start", { method: "POST" }));

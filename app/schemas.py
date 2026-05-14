@@ -62,6 +62,7 @@ class ChatRequest(BaseModel):
         return normalized_filenames
 
 class ChatResponse(BaseModel):
+    trace_id: str | None = None
     status: str
     provider: str
     model: str
@@ -186,6 +187,30 @@ class TelegramEvalRunResponse(BaseModel):
     error_category: str | None = None
     failed_phase: str | None = None
     warnings: list | None = None
+
+
+class ChatEvalRunResponse(BaseModel):
+    trace_id: str | None = None
+    created_at: str | None = None
+    source: str | None = None
+    input: str | None = None
+    response: str | None = None
+    provider: str | None = None
+    model: str | None = None
+    status: str | None = None
+    retrieval_status: str | None = None
+    chunk_ids: list[int] = Field(default_factory=list)
+    tokens_input: float | None = None
+    tokens_output: float | None = None
+    tokens_total: float | None = None
+    latency_ms: float | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+    use_rag: bool | None = None
+    evidence_used: bool | None = None
+    fallback_used: bool | None = None
+    answer_mode: str | None = None
 
 
 class TelegramConfigUpdateRequest(BaseModel):

@@ -1,6 +1,7 @@
 import requests
 
 from app.config import BACKEND_URL, settings
+from app.observability import log_event
 from app.schemas import CreateDocumentRequest
 
 FASTAPI_URL = BACKEND_URL
@@ -19,11 +20,38 @@ class BackendClientError(Exception):
         super().__init__(message)
 
 
-def _auth_headers() -> dict[str, str]:
-    token = settings.jose_dev_token
+def _log_backend_request(
+    *,
+    route: str,
+    backend_url: str,
+    token_configured: bool,
+    auth_header_present: bool,
+    status_code: int,
+) -> None:
+    log_event(
+        component="backend.internal_client",
+        event="backend.internal_request",
+        route=route,
+        telegram_backend_url=backend_url,
+        token_configured=token_configured,
+        auth_header_present=auth_header_present,
+        status_code=status_code,
+    )
+
+
+def build_internal_auth_headers() -> dict[str, str]:
+    token = (settings.jose_dev_token or "").strip()
     if not token:
-        return {}
+        raise BackendClientError(
+            code="internal_auth_token_missing",
+            message="JOSE_DEV_TOKEN no configurado para cliente interno server-side.",
+            status_code=500,
+        )
     return {"Authorization": f"Bearer {token}"}
+
+
+def _auth_headers() -> dict[str, str]:
+    return build_internal_auth_headers()
 
 
 def _response_detail(response: requests.Response) -> dict:
@@ -53,11 +81,30 @@ def create_document(
     timeout_seconds: int = 20,
 ) -> dict:
     normalized_base_url = _normalize_base_url(base_url)
+    route = "/documents"
+    try:
+        headers = build_internal_auth_headers()
+    except BackendClientError:
+        _log_backend_request(
+            route=route,
+            backend_url=normalized_base_url,
+            token_configured=False,
+            auth_header_present=False,
+            status_code=0,
+        )
+        raise
     response = requests_module.post(
-        f"{normalized_base_url}/documents",
-        headers=_auth_headers(),
+        f"{normalized_base_url}{route}",
+        headers=headers,
         json=request.model_dump(),
         timeout=timeout_seconds,
+    )
+    _log_backend_request(
+        route=route,
+        backend_url=normalized_base_url,
+        token_configured=True,
+        auth_header_present="Authorization" in headers,
+        status_code=response.status_code,
     )
 
     if response.status_code >= 400:
@@ -98,6 +145,7 @@ def ask_chat(
     timeout_seconds: int = 90,
 ) -> dict:
     normalized_base_url = _normalize_base_url(base_url)
+    route = "/chat"
     payload = {"message": message}
     optional_fields = {
         "trace_id": trace_id,
@@ -118,11 +166,30 @@ def ask_chat(
         if value is not None:
             payload[key] = value
 
+    try:
+        headers = build_internal_auth_headers()
+    except BackendClientError:
+        _log_backend_request(
+            route=route,
+            backend_url=normalized_base_url,
+            token_configured=False,
+            auth_header_present=False,
+            status_code=0,
+        )
+        raise
+
     response = requests_module.post(
-        f"{normalized_base_url}/chat",
-        headers=_auth_headers(),
+        f"{normalized_base_url}{route}",
+        headers=headers,
         json=payload,
         timeout=timeout_seconds,
+    )
+    _log_backend_request(
+        route=route,
+        backend_url=normalized_base_url,
+        token_configured=True,
+        auth_header_present="Authorization" in headers,
+        status_code=response.status_code,
     )
 
     if response.status_code >= 400:

@@ -2,31 +2,36 @@
 
 ## Propósito
 
-`LOCALES` integra un bot local de Telegram con trazabilidad operativa, flujo de chat con LLM y una capa experimental de análisis de repositorio mediante `/repo`.
+`LOCALES` se ejecuta ahora en modo principal navegador -> FastAPI -> `/chat` -> RAG/modelo, con trazas visibles desde la ventana principal. Telegram queda como adaptador legacy opcional.
 
 El objetivo práctico actual es:
 
-- operar el bot de Telegram
-- mantener trazas y observabilidad de las interacciones
+- mantener estable el contrato principal de `/chat`
+- ejecutar y revisar trazas/evals desde el frontend principal
+- conservar Telegram como legacy reversible, sin formar parte del arranque principal
 - responder preguntas sobre un repositorio fijo con herramientas deterministas
-- usar fallback LLM solo cuando la pregunta de repositorio es abierta
 
 ## Estado actual
 
-- Bot Telegram operativo.
+- Frontend principal y `/chat` operativos.
+- Trazas de `/chat` consultables en `/api/evals/chat`.
+- Bot Telegram conservado como legacy opcional.
 - `/repo` experimental para analizar únicamente `REPO_ANALYZER_PATH`.
 - Herramientas deterministas para lectura y búsqueda en repositorio.
 - Fallback LLM con Ollama para preguntas abiertas de repositorio.
-- Trazas ampliadas para el flujo Telegram.
+- Trazas ampliadas para el flujo Telegram legacy.
 
 ## Componentes principales
 
 | Componente | Ruta | Función |
 | --- | --- | --- |
-| Bot Telegram | `app/services/bot_service.py` | Orquesta mensajes Telegram, comandos y persistencia de trazas |
+| Frontend principal | `frontend/app.js` | Cliente navegador de `/health`, `/chat` y `/api/evals/chat` |
+| FastAPI principal | `app/main.py` | Contrato HTTP principal, auth, `/chat`, `/health` y trazas consultables |
+| Trazas `/chat` | `app/observability/chat_trace.py` | Persiste y carga ejecuciones del frontend principal |
+| Bot Telegram legacy | `app/services/bot_service.py` | Orquesta mensajes Telegram y persistencia legacy |
 | Servicio `/repo` | `app/services/repo_analyzer_service.py` | Valida configuración de `/repo`, ejecuta routing y formatea respuestas |
 | Tools deterministas | `app/services/repo_tools.py` | Resuelve lectura de líneas, búsqueda, árbol y localización de archivos |
-| Trazas Telegram | `app/observability/telegram_trace.py` | Persiste `trace_id`, metadata y artefactos de ejecución Telegram |
+| Trazas Telegram legacy | `app/observability/telegram_trace.py` | Persiste `trace_id`, metadata y artefactos de ejecución Telegram |
 | Guía `/repo` | `docs/repo_analyzer_telegram.md` | Documentación completa del flujo `/repo` |
 
 ## Configuración mínima
@@ -40,7 +45,18 @@ REPO_ANALYZER_MODEL=granite4.1:8b
 REPO_ANALYZER_TEMPERATURE=0.2
 ```
 
-Variables mínimas del bot Telegram:
+Variables mínimas del runtime principal:
+
+```env
+APP_ENV=local
+BACKEND_BASE_URL=http://127.0.0.1:8000
+CHAT_AUTH_MODE=local_open
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+USE_REMOTE_RAG=false
+DOCUMENTS_DB_PATH=/home/jose-gonzalez-oliva/LOCALES/DB/chunks/documents.sqlite
+```
+
+Variables mínimas del bot Telegram legacy:
 
 ```env
 TELEGRAM_ENABLED=true
@@ -55,18 +71,19 @@ Variable mínima adicional para endpoints operacionales protegidos:
 
 ```env
 JOSE_DEV_TOKEN=change_me
+CHAT_AUTH_MODE=local_open
 ```
 
-## Recommended runtime: Linux all-in-one
+## Modo principal recomendado
 
-La ruta operativa recomendada ahora es ejecutar todo el runtime principal en Linux:
+La ruta operativa recomendada ahora es ejecutar el contrato principal en Linux:
 
-- bot de Telegram en Linux
 - FastAPI en Linux
 - RAG local en Linux usando `documents.sqlite`
 - Ollama en Linux
+- frontend como cliente web del mismo backend
 
-Windows puede quedarse como máquina de desarrollo o cliente de prueba. Por ejemplo, puede consultar:
+Telegram ya no forma parte del arranque principal. Windows puede quedarse como máquina de desarrollo o cliente de prueba. Por ejemplo, puede consultar:
 
 ```bash
 curl http://192.168.1.51:8000/health
@@ -132,27 +149,34 @@ Guías:
 
 ## Uso rápido
 
-Arranque recomendado en Linux con Telegram embebido opcional:
+Arranque principal recomendado en Linux:
 
 ```bash
 cd /home/jose-gonzalez-oliva/LOCALES
 source .venv/bin/activate
 
-export BACKEND_URL=http://127.0.0.1:8000
+export APP_ENV=local
+export BACKEND_BASE_URL=http://127.0.0.1:8000
 export OLLAMA_BASE_URL=http://127.0.0.1:11434
 export USE_REMOTE_RAG=false
 export DOCUMENTS_DB_PATH=/home/jose-gonzalez-oliva/LOCALES/DB/chunks/documents.sqlite
 
-export TELEGRAM_ENABLED=true
-export TELEGRAM_BOT_TOKEN="<NO_COMMIT_REAL_TOKEN>"
-export TELEGRAM_DEFAULT_MODEL="granite4.1:8b"
-export TELEGRAM_DEFAULT_TEMPERATURE="0.2"
-export TELEGRAM_DEFAULT_RAG_ENABLED=true
-
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-No uses `--reload` ni varios workers con Telegram embebido: ambos pueden duplicar el polling contra Telegram. `scripts/run_telegram.py` se mantiene como runner standalone legacy/opcional.
+Comando unico de frontend local:
+
+```bash
+python -m http.server 3000 --directory frontend
+```
+
+Telegram se mantiene como runner standalone legacy/opcional:
+
+```bash
+export TELEGRAM_ENABLED=true
+export TELEGRAM_BOT_TOKEN="<NO_COMMIT_REAL_TOKEN>"
+python scripts/run_telegram.py
+```
 
 ## Frontend web console
 
@@ -169,7 +193,7 @@ Abrir:
 http://localhost:3000
 ```
 
-La URL real del backend se introduce en el input `Backend base URL`. La consola prueba `/health`, `/chat` y los endpoints `/telegram/*`, muestra campos de RAG/observabilidad y documenta la arquitectura LOCALES / NUCLEO. Mas detalle en `docs/frontend_console.md` y `docs/telegram_embedded_fastapi.md`.
+La consola usa `http://127.0.0.1:8000` como valor inicial de `Backend base URL`, permite cambiarlo manualmente y lo recuerda en `localStorage`. Prueba `/health`, `/chat`, `/api/evals/chat` y deja Telegram en secciones legacy separadas. Mas detalle en `docs/frontend_console.md` y `docs/telegram_embedded_fastapi.md`.
 
 Ejemplos de `/repo` en Telegram:
 
@@ -212,19 +236,31 @@ Authorization: Bearer <JOSE_DEV_TOKEN>
 Rutas abiertas:
 
 - `/health`
+- `/chat` cuando `CHAT_AUTH_MODE=local_open`
 
 Rutas protegidas:
 
-- `/chat`
 - `/documents`
 - `/telegram/*`
 - `/api/evals/telegram`
 
+Contrato especifico de `/chat`:
+
+- `CHAT_AUTH_MODE=local_open`: acepta llamadas sin Bearer para frontend local/LAN y registra un warning seguro.
+- `CHAT_AUTH_MODE=bearer_required`: exige `Authorization: Bearer <JOSE_DEV_TOKEN>`.
+- `CHAT_AUTH_MODE=disabled`: responde `403`.
+
+Contrato de `/api/evals/chat`:
+
+- usa el mismo gate que `/chat`
+- expone solo ejecuciones `source=frontend` o `source=chat`
+- no mezcla trazas Telegram
+
 El flujo es simple:
 
 - el servidor lee `JOSE_DEV_TOKEN` desde su entorno
-- el frontend pide el token al usuario y lo envía en el header `Authorization`
-- clientes locales como Telegram o scripts de eval usan el mismo token desde entorno
+- el frontend navegador no guarda ni envia el token operacional
+- clientes server-side como Telegram o scripts de eval usan `Authorization: Bearer <JOSE_DEV_TOKEN>` desde entorno mediante el cliente interno
 
 Esto es hardening de desarrollo, no autenticación completa de producción.
 
@@ -236,7 +272,7 @@ Comprobar que `/health` sigue abierto:
 curl http://127.0.0.1:8000/health
 ```
 
-Comprobar que `/chat` sin token falla con `401`:
+Comprobar que `/chat` local abierto responde sin token:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/chat \
@@ -244,7 +280,7 @@ curl -X POST http://127.0.0.1:8000/chat \
   -d '{"message":"hola"}'
 ```
 
-Comprobar que `/chat` con token correcto responde:
+Comprobar que `/chat` con `CHAT_AUTH_MODE=bearer_required` responde con token correcto:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/chat \

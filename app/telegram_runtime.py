@@ -1,3 +1,9 @@
+"""Legacy optional Telegram runtime.
+
+This module is kept for reversible operations, but it is no longer part of the
+main FastAPI startup contract.
+"""
+
 import threading
 import time
 import uuid

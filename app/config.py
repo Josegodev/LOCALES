@@ -1,8 +1,20 @@
+from pathlib import Path
+from typing import Literal
+
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+ENV_FILE = REPO_ROOT / ".env"
+
+
 class Settings(BaseSettings):
-    backend_url: str = "http://127.0.0.1:8000"
+    app_env: str = "local"
+    backend_url: str = Field(
+        default="http://127.0.0.1:8000",
+        validation_alias=AliasChoices("BACKEND_URL", "BACKEND_BASE_URL"),
+    )
     lmstudio_base_url: str = "http://127.0.0.1:1234"
     lmstudio_timeout_seconds: float = 60.0
     lmstudio_model: str = "ibm/granite-3.2-8b"
@@ -36,9 +48,10 @@ class Settings(BaseSettings):
     rag_timeout_seconds: float = 10.0
     rag_top_k: int = 5
     jose_dev_token: str | None = None
+    chat_auth_mode: Literal["local_open", "bearer_required", "disabled"] = "local_open"
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(ENV_FILE),
         env_file_encoding="utf-8",
         extra="ignore",
     )

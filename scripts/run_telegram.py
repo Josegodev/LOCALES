@@ -6,8 +6,8 @@ from pathlib import Path
 
 import requests
 
-# Legacy standalone runner. The recommended operational mode is now embedded
-# Telegram polling inside FastAPI with TELEGRAM_ENABLED=true.
+# Legacy standalone runner. The primary operational mode is now
+# frontend -> FastAPI -> /chat, and Telegram stays optional.
 # Allows `python scripts/run_telegram.py` to import top-level packages (e.g. `app`).
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -175,17 +175,6 @@ def handle_doc_ai_command(
     )
 
 
-def _chat_response_error_reason(response: requests.Response) -> str:
-    try:
-        detail = response.json().get("detail", {})
-    except Exception:
-        return response.text or "backend_error"
-
-    if isinstance(detail, dict):
-        return str(detail.get("code") or detail.get("message") or "backend_error")
-    return str(detail or "backend_error")
-
-
 def get_updates() -> list[dict]:
     return telegram_api.get_updates(
         last_update_id=last_update_id,
@@ -242,61 +231,24 @@ def ask_fastapi(
     active_corpus: str | None = None,
     last_source_intent: str | None = None,
 ) -> dict:
-    payload = {
-        "message": message,
-        "provider": SELECTED_PROVIDER,
-        "model": SELECTED_MODEL,
-        "temperature": SELECTED_TEMPERATURE,
-        "use_rag": SELECTED_USE_RAG,
-        "top_k": DEFAULT_TOP_K,
-    }
-    optional_fields = {
-        "trace_id": trace_id,
-        "user_id": user_id,
-        "chat_id": chat_id,
-        "active_document_id": active_document_id,
-        "active_document_title": active_document_title,
-        "active_corpus": active_corpus,
-        "last_source_intent": last_source_intent,
-    }
-    for key, value in optional_fields.items():
-        if value is not None:
-            payload[key] = value
-
-    response = requests.post(
-        f"{FASTAPI_URL}/chat",
-        headers=backend_client._auth_headers(),
-        json=payload,
-        timeout=90,
+    data = backend_client.ask_chat(
+        message,
+        trace_id=trace_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        active_document_id=active_document_id,
+        active_document_title=active_document_title,
+        active_corpus=active_corpus,
+        last_source_intent=last_source_intent,
+        provider=SELECTED_PROVIDER,
+        model=SELECTED_MODEL,
+        temperature=SELECTED_TEMPERATURE,
+        use_rag=SELECTED_USE_RAG,
+        top_k=DEFAULT_TOP_K,
+        requests_module=requests,
+        base_url=FASTAPI_URL,
+        timeout_seconds=90,
     )
-
-    if response.status_code >= 400:
-        error = backend_client.BackendClientError(
-            code=_chat_response_error_reason(response),
-            message="backend_chat_error",
-            status_code=response.status_code,
-        )
-        error.provider = SELECTED_PROVIDER
-        error.model = SELECTED_MODEL
-        error.temperature = SELECTED_TEMPERATURE
-        error.use_rag = SELECTED_USE_RAG
-        error.top_k = DEFAULT_TOP_K
-        raise error
-
-    try:
-        data = response.json()
-    except ValueError as exc:
-        error = backend_client.BackendClientError(
-            code="backend_invalid_response",
-            message="backend_invalid_response",
-            status_code=502,
-        )
-        error.provider = SELECTED_PROVIDER
-        error.model = SELECTED_MODEL
-        error.temperature = SELECTED_TEMPERATURE
-        error.use_rag = SELECTED_USE_RAG
-        error.top_k = DEFAULT_TOP_K
-        raise error from exc
 
     if not isinstance(data.get("provider"), str) or not data["provider"].strip():
         data["provider"] = SELECTED_PROVIDER

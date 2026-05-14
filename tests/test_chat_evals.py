@@ -1,12 +1,53 @@
+import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+from fastapi.testclient import TestClient
+
+from app.main import app
 import scripts.run_chat_evals as run_chat_evals
 
 
 class ChatEvalsTests(unittest.TestCase):
+    def test_chat_eval_endpoint_returns_frontend_runs_only(self):
+        with TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            frontend_run = {
+                "trace_id": "frontend-trace",
+                "created_at": "2026-05-14T10:00:00+00:00",
+                "source": "frontend",
+                "input": "hola",
+                "response": "ok",
+                "provider": "ollama",
+                "model": "granite4.1:8b",
+                "status": "ok",
+                "retrieval_status": "EVIDENCE_FOUND",
+                "chunk_ids": [1],
+                "tokens_input": 10,
+                "tokens_output": 5,
+                "tokens_total": 15,
+                "latency_ms": 123,
+                "warnings": [],
+            }
+            telegram_run = {
+                "trace_id": "telegram-trace",
+                "created_at": "2026-05-14T11:00:00+00:00",
+                "source": "telegram",
+            }
+            (runs_dir / "chat_frontend_eval_frontend.json").write_text(json.dumps(frontend_run), encoding="utf-8")
+            (runs_dir / "chat_frontend_eval_telegram.json").write_text(json.dumps(telegram_run), encoding="utf-8")
+
+            with patch("app.observability.chat_trace.CHAT_EVAL_RUNS_DIR", runs_dir):
+                response = TestClient(app).get("/api/evals/chat?limit=10")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload), 1)
+        self.assertEqual(payload[0]["trace_id"], "frontend-trace")
+        self.assertEqual(payload[0]["source"], "frontend")
+
     def test_load_cases_returns_required_fields(self):
         cases = run_chat_evals.load_cases()
 
@@ -106,6 +147,26 @@ class ChatEvalsTests(unittest.TestCase):
         self.assertEqual(len(trace_id), 32)
         int(trace_id, 16)
         self.assertNotEqual(trace_id, other_trace_id)
+
+    def test_build_auth_headers_uses_shared_settings(self):
+        with patch("scripts.run_chat_evals.build_internal_auth_headers", return_value={"Authorization": "Bearer test-dev-token"}):
+            headers = run_chat_evals.build_auth_headers()
+
+        self.assertEqual(headers, {"Authorization": "Bearer test-dev-token"})
+
+    def test_build_auth_headers_fails_when_internal_token_missing(self):
+        from app.adapters.backend_client import BackendClientError
+
+        error = BackendClientError(
+            code="internal_auth_token_missing",
+            message="JOSE_DEV_TOKEN no configurado para cliente interno server-side.",
+            status_code=500,
+        )
+        with patch("scripts.run_chat_evals.build_internal_auth_headers", side_effect=error):
+            with self.assertRaises(BackendClientError) as ctx:
+                run_chat_evals.build_auth_headers()
+
+        self.assertEqual(ctx.exception.code, "internal_auth_token_missing")
 
     def test_extract_ollama_metrics_derives_token_rates(self):
         metrics = run_chat_evals.extract_ollama_metrics(
