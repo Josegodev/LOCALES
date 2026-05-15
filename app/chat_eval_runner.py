@@ -19,6 +19,7 @@ DEFAULT_BASELINE_PATH = "evals/baselines/chat_baseline.json"
 DEFAULT_OUT_DIR = "evals/runs"
 DEFAULT_TIMEOUT = 120
 RUN_VERSION = "chat_eval_run.v1"
+FRONT_CHAT_RUN_VERSION = "front_chat_run.v1"
 
 
 class RunnerConfigError(Exception):
@@ -369,6 +370,85 @@ def write_run_file(out_dir: Path, payload: dict[str, Any], *, created_at: dateti
     output_path = out_dir / build_run_filename(created_at)
     output_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
     return output_path
+
+
+def build_front_chat_run_filename(trace_id: str | None, created_at: datetime | None = None) -> str:
+    timestamp = (created_at or _utc_now()).strftime("%Y%m%d_%H%M%S_%f")
+    normalized_trace_id = "".join(character for character in str(trace_id or uuid.uuid4().hex) if character.isalnum())
+    return f"{timestamp}_{normalized_trace_id[:12]}_front_chat_run.json"
+
+
+def write_front_chat_run(
+    payload: dict[str, Any],
+    *,
+    out_dir_str: str | None = None,
+    created_at: datetime | None = None,
+) -> Path:
+    out_dir = repo_path(out_dir_str or DEFAULT_OUT_DIR)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    output_path = out_dir / build_front_chat_run_filename(payload.get("trace_id"), created_at)
+    output_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
+    return output_path
+
+
+def _parse_created_at(value: Any) -> datetime:
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return datetime.min.replace(tzinfo=timezone.utc)
+    return datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _numeric_or_none(value: Any) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def list_front_chat_runs(*, out_dir_str: str | None = None) -> dict[str, Any]:
+    out_dir = repo_path(out_dir_str or DEFAULT_OUT_DIR)
+    runs: list[dict[str, Any]] = []
+    if out_dir.exists():
+        for path in out_dir.glob("*.json"):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(payload, dict):
+                continue
+            if payload.get("source") != "front" or payload.get("endpoint") != "/chat":
+                continue
+            runs.append(payload)
+
+    runs.sort(key=lambda item: _parse_created_at(item.get("created_at")), reverse=True)
+    total_runs = len(runs)
+    ok_runs = sum(1 for item in runs if item.get("status") == "ok")
+    error_runs = sum(1 for item in runs if item.get("status") == "error")
+    models: dict[str, int] = {}
+    latency_values: list[float] = []
+    token_values: list[float] = []
+
+    for item in runs:
+        model = item.get("model")
+        if isinstance(model, str) and model:
+            models[model] = models.get(model, 0) + 1
+        latency = _numeric_or_none(item.get("latency_ms"))
+        if latency is not None:
+            latency_values.append(latency)
+        tokens_total = _numeric_or_none(item.get("tokens_total"))
+        if tokens_total is not None:
+            token_values.append(tokens_total)
+
+    return {
+        "total_runs": total_runs,
+        "ok_runs": ok_runs,
+        "error_runs": error_runs,
+        "models": dict(sorted(models.items())),
+        "avg_latency_ms": round(sum(latency_values) / len(latency_values), 2) if latency_values else None,
+        "avg_tokens_total": round(sum(token_values) / len(token_values), 2) if token_values else None,
+        "runs": runs,
+    }
 
 
 def request_case_result(

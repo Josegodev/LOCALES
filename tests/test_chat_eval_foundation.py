@@ -12,6 +12,8 @@ from app.observability.chat_trace import write_chat_trace
 
 
 class ChatEvalFoundationTests(unittest.TestCase):
+    REPO_ROOT = Path(__file__).resolve().parents[1]
+
     def _write_eval_fixture_files(self, root: Path) -> tuple[Path, Path, Path]:
         cases_path = root / "cases.json"
         baseline_path = root / "baseline.json"
@@ -210,7 +212,7 @@ class ChatEvalFoundationTests(unittest.TestCase):
         self.assertEqual(payload["cases_file"], str(cases_path))
         self.assertEqual(payload["baseline_file"], str(baseline_path))
 
-    def test_chat_endpoint_does_not_create_eval_run_files(self):
+    def test_chat_endpoint_creates_front_run_file(self):
         with TemporaryDirectory() as tmpdir:
             runs_dir = Path(tmpdir) / "runs"
             with patch("app.auth.settings.chat_auth_mode", "local_open"):
@@ -231,16 +233,95 @@ class ChatEvalFoundationTests(unittest.TestCase):
                                 "/chat",
                                 json={"message": "hola", "provider": "ollama", "model": "granite4.1:8b"},
                             )
+            run_files = list(runs_dir.glob("*_front_chat_run.json"))
+            payload = json.loads(run_files[0].read_text(encoding="utf-8"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(runs_dir.exists() and list(runs_dir.glob("*_chat_eval_run.json")))
+        self.assertEqual(len(run_files), 1)
+        self.assertEqual(payload["source"], "front")
+        self.assertEqual(payload["endpoint"], "/chat")
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["model"], "granite4.1:8b")
+
+    def test_saved_runs_endpoint_reads_front_run_files_and_stats(self):
+        with TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir) / "runs"
+            runs_dir.mkdir()
+            (runs_dir / "20260101_000000_000000_aaa_front_chat_run.json").write_text(
+                json.dumps(
+                    {
+                        "created_at": "2026-01-01T00:00:00+00:00",
+                        "trace_id": "aaa",
+                        "source": "front",
+                        "endpoint": "/chat",
+                        "model": "granite4.1:8b",
+                        "provider": "ollama",
+                        "input": "hola",
+                        "response": "ok",
+                        "status": "ok",
+                        "retrieval_status": "EVIDENCE_FOUND",
+                        "use_rag": True,
+                        "tokens_input": None,
+                        "tokens_output": None,
+                        "tokens_total": 12,
+                        "latency_ms": 100,
+                        "source_filenames": [],
+                        "chunk_ids": [],
+                        "warnings": [],
+                        "error_code": None,
+                        "error_message": None,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (runs_dir / "20260102_000000_000000_bbb_front_chat_run.json").write_text(
+                json.dumps(
+                    {
+                        "created_at": "2026-01-02T00:00:00+00:00",
+                        "trace_id": "bbb",
+                        "source": "front",
+                        "endpoint": "/chat",
+                        "model": "mistral",
+                        "provider": "ollama",
+                        "input": "hola",
+                        "response": None,
+                        "status": "error",
+                        "retrieval_status": "unknown",
+                        "use_rag": False,
+                        "tokens_input": None,
+                        "tokens_output": None,
+                        "tokens_total": None,
+                        "latency_ms": 300,
+                        "source_filenames": [],
+                        "chunk_ids": [],
+                        "warnings": [],
+                        "error_code": "llm_unavailable",
+                        "error_message": "down",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with patch("app.auth.settings.chat_auth_mode", "local_open"):
+                with patch("app.main.chat_eval_runner.DEFAULT_OUT_DIR", str(runs_dir)):
+                    response = TestClient(app).get("/api/evals/runs")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["total_runs"], 2)
+        self.assertEqual(body["ok_runs"], 1)
+        self.assertEqual(body["error_runs"], 1)
+        self.assertEqual(body["models"], {"granite4.1:8b": 1, "mistral": 1})
+        self.assertEqual(body["avg_latency_ms"], 200.0)
+        self.assertEqual(body["avg_tokens_total"], 12.0)
+        self.assertEqual(body["runs"][0]["trace_id"], "bbb")
 
     def test_importing_app_main_does_not_import_telegram_modules(self):
         telegram_modules = [name for name in sys.modules if "telegram" in name]
         self.assertEqual(telegram_modules, [])
 
     def test_chat_eval_cases_file_exists_and_is_valid_json(self):
-        cases_path = Path("/home/jose-gonzalez-oliva/LOCALES/evals/cases/chat_cases.json")
+        cases_path = self.REPO_ROOT / "evals" / "cases" / "chat_cases.json"
         payload = json.loads(cases_path.read_text(encoding="utf-8"))
 
         self.assertEqual(payload["version"], "chat_eval_cases.v1")
@@ -248,7 +329,7 @@ class ChatEvalFoundationTests(unittest.TestCase):
         self.assertGreaterEqual(len(payload["cases"]), 1)
 
     def test_chat_baseline_file_exists_and_is_valid_json(self):
-        baseline_path = Path("/home/jose-gonzalez-oliva/LOCALES/evals/baselines/chat_baseline.json")
+        baseline_path = self.REPO_ROOT / "evals" / "baselines" / "chat_baseline.json"
         payload = json.loads(baseline_path.read_text(encoding="utf-8"))
 
         self.assertEqual(payload["version"], "chat_baseline.v1")
@@ -256,8 +337,8 @@ class ChatEvalFoundationTests(unittest.TestCase):
         self.assertGreaterEqual(len(payload["baseline_items"]), 1)
 
     def test_every_baseline_case_id_exists_in_chat_cases(self):
-        cases_path = Path("/home/jose-gonzalez-oliva/LOCALES/evals/cases/chat_cases.json")
-        baseline_path = Path("/home/jose-gonzalez-oliva/LOCALES/evals/baselines/chat_baseline.json")
+        cases_path = self.REPO_ROOT / "evals" / "cases" / "chat_cases.json"
+        baseline_path = self.REPO_ROOT / "evals" / "baselines" / "chat_baseline.json"
         cases_payload = json.loads(cases_path.read_text(encoding="utf-8"))
         baseline_payload = json.loads(baseline_path.read_text(encoding="utf-8"))
 

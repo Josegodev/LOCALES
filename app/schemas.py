@@ -209,6 +209,20 @@ class ChatEvalListResponse(BaseModel):
     limit: int
 
 
+class ChatSavedRunResponse(ChatTraceResponse):
+    pass
+
+
+class ChatRunsStatsResponse(BaseModel):
+    total_runs: int
+    ok_runs: int
+    error_runs: int
+    models: dict[str, int] = Field(default_factory=dict)
+    avg_latency_ms: float | None = None
+    avg_tokens_total: float | None = None
+    runs: list[ChatSavedRunResponse] = Field(default_factory=list)
+
+
 class ChatEvalFailure(BaseModel):
     name: str
     expected: Any = None

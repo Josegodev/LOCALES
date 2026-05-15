@@ -23,6 +23,7 @@ from app.schemas import (
     ChatModelListResponse,
     ChatRequest,
     ChatResponse,
+    ChatRunsStatsResponse,
     ChatTraceListResponse,
     ChatTraceResetResponse,
 )
@@ -472,6 +473,57 @@ def _persist_chat_trace(
     )
 
 
+def _persist_front_chat_run(
+    *,
+    trace_id: str,
+    request: ChatRequest,
+    final_answer: str,
+    provider: str,
+    model: str,
+    status: str,
+    retrieval_status: str,
+    chunk_ids: list[int],
+    source_filenames: list[str],
+    latency_ms: int,
+    error_code: str | None,
+    error_message: str | None,
+    warnings: list[str],
+    use_rag: bool,
+    tokens_input: int | float | None,
+    tokens_output: int | float | None,
+    tokens_total: int | float | None,
+) -> None:
+    if _chat_trace_source(request.user_id, request.chat_id) != "frontend":
+        return
+
+    created_at = datetime.now(timezone.utc)
+    chat_eval_runner.write_front_chat_run(
+        {
+            "created_at": created_at.isoformat(),
+            "trace_id": trace_id,
+            "source": "front",
+            "endpoint": "/chat",
+            "model": model,
+            "provider": provider,
+            "input": request.message,
+            "response": final_answer if final_answer else None,
+            "status": status,
+            "retrieval_status": retrieval_status,
+            "use_rag": use_rag,
+            "tokens_input": tokens_input,
+            "tokens_output": tokens_output,
+            "tokens_total": tokens_total,
+            "latency_ms": latency_ms,
+            "source_filenames": source_filenames,
+            "chunk_ids": chunk_ids,
+            "warnings": warnings,
+            "error_code": error_code,
+            "error_message": error_message,
+        },
+        created_at=created_at,
+    )
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
@@ -522,6 +574,15 @@ def chat_eval_runs(
         "count": len(items),
         "limit": normalized_limit,
     }
+
+
+@app.get("/api/evals/runs", response_model=ChatRunsStatsResponse)
+def saved_chat_runs(
+    _: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    authorization: str | None = Header(default=None),
+) -> dict:
+    require_chat_access(_, auth_header_present=authorization is not None)
+    return chat_eval_runner.list_front_chat_runs()
 
 
 def _execute_chat_eval_case(payload: dict[str, object]) -> dict[str, object]:
@@ -944,7 +1005,10 @@ def _run_chat_request(
                 "warnings": context.get("warnings", []),
             },
         )
-    except HTTPException:
+    except HTTPException as exc:
+        if isinstance(exc.detail, dict):
+            error_code = exc.detail.get("code") if isinstance(exc.detail.get("code"), str) else error_code
+            error_message = exc.detail.get("message") if isinstance(exc.detail.get("message"), str) else error_message
         raise
     except Exception as exc:
         error_code = "chat_internal_error"
@@ -1010,6 +1074,34 @@ def _run_chat_request(
                     event="fastapi.chat.trace.persist_failed",
                     trace_id=trace_id,
                     error_code="chat_trace_persist_failed",
+                    error_message=str(exc),
+                )
+            try:
+                _persist_front_chat_run(
+                    trace_id=trace_id,
+                    request=request,
+                    final_answer=final_answer,
+                    provider=provider,
+                    model=model,
+                    status=status,
+                    retrieval_status=retrieval_status,
+                    chunk_ids=trace_chunk_ids,
+                    source_filenames=context.get("source_filenames", []),
+                    latency_ms=trace_latency_ms,
+                    error_code=error_code,
+                    error_message=error_message,
+                    warnings=trace_warnings,
+                    use_rag=use_rag,
+                    tokens_input=llm_metrics["tokens_input"],
+                    tokens_output=llm_metrics["tokens_output"],
+                    tokens_total=llm_metrics["tokens_total"],
+                )
+            except Exception as exc:
+                log_event(
+                    component="fastapi.chat.eval_runs",
+                    event="fastapi.chat.eval_run.persist_failed",
+                    trace_id=trace_id,
+                    error_code="chat_eval_run_persist_failed",
                     error_message=str(exc),
                 )
         log_event(

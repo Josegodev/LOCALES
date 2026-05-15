@@ -39,14 +39,13 @@
         <h2>Autenticacion navegador</h2>
         <p class="muted-text">
           El navegador no envia tokens operacionales. El acceso a <code>/chat</code> y
-          <code>/api/traces/chat</code> depende de <code>CHAT_AUTH_MODE</code> en el backend.
+          <code>/api/evals/runs</code> depende de <code>CHAT_AUTH_MODE</code> en el backend.
         </p>
       </section>
 
       <nav class="tab-list" aria-label="Secciones FastAPI">
         <button class="tab-button active" type="button" data-tab-target="chat" aria-controls="tab-chat" aria-selected="true">Chat</button>
         <button class="tab-button" type="button" data-tab-target="health" aria-controls="tab-health" aria-selected="false">Health</button>
-        <button class="tab-button" type="button" data-tab-target="evals" aria-controls="tab-evals" aria-selected="false">Run evals</button>
         <button class="tab-button" type="button" data-tab-target="runs" aria-controls="tab-runs" aria-selected="false">Runs</button>
         <button class="tab-button" type="button" data-tab-target="endpoints" aria-controls="tab-endpoints" aria-selected="false">Puertas FastAPI</button>
       </nav>
@@ -126,81 +125,46 @@
         </section>
       </div>
 
-      <div id="tab-evals" class="tab-panel" data-tab-panel="evals" hidden>
-        <section class="panel">
-          <div class="section-heading-row">
-            <div>
-              <h2>Chat evals</h2>
-              <p class="muted-text">
-                Ejecuta casos contra el contrato estable del chat y persiste el run en <code>evals/runs/</code>.
-              </p>
-            </div>
-            <div class="button-row">
-              <button id="evalRunButton" type="button">Run evals</button>
-            </div>
-          </div>
-          <div id="evalStatus" class="status muted">Sin ejecutar</div>
-          <dl class="metrics wide">
-            <div><dt>run_id</dt><dd id="evalRunId">-</dd></div>
-            <div><dt>run_path</dt><dd id="evalRunPath">-</dd></div>
-            <div><dt>total</dt><dd id="evalTotal">-</dd></div>
-            <div><dt>passed</dt><dd id="evalPassed">-</dd></div>
-            <div><dt>failed</dt><dd id="evalFailed">-</dd></div>
-          </dl>
-          <h3>Fallos</h3>
-          <div id="evalFailures" class="failure-list">
-            <p class="muted-text">Los fallos por caso apareceran aqui.</p>
-          </div>
-          <h3>Raw JSON</h3>
-          <pre id="evalRaw" class="output small">-</pre>
-        </section>
-      </div>
-
       <div id="tab-runs" class="tab-panel" data-tab-panel="runs" hidden>
         <section class="panel">
           <div class="section-heading-row">
             <div>
-              <h2>Runs /chat</h2>
+              <h2>Runs guardados</h2>
               <p class="muted-text">
-                Historial minimo del flujo principal. Solo usa las trazas persistidas del chat.
+                Vista de solo lectura sobre los runs reales guardados en <code>evals/runs/</code> por llamadas a <code>/chat</code>.
               </p>
             </div>
             <div class="button-row">
-              <label for="chatTracesLimit">Runs</label>
-              <select id="chatTracesLimit">
-                <option value="10">10</option>
-                <option value="25" selected>25</option>
-                <option value="50">50</option>
-              </select>
-              <button id="chatTracesLoadButton" type="button">Cargar runs</button>
-              <button id="chatTracesResetButton" class="secondary-button danger-button" type="button">Reset runs</button>
+              <button id="chatRunsLoadButton" type="button">Refresh</button>
             </div>
           </div>
-          <div id="chatTracesStatus" class="status muted">Sin ejecutar</div>
+          <div id="chatRunsStatus" class="status muted">Sin ejecutar</div>
+          <dl class="metrics wide">
+            <div><dt>total runs</dt><dd id="runsTotal">-</dd></div>
+            <div><dt>ok/error</dt><dd id="runsOkError">-</dd></div>
+            <div><dt>modelos usados</dt><dd id="runsModels">-</dd></div>
+            <div><dt>latencia media</dt><dd id="runsAvgLatency">-</dd></div>
+            <div><dt>tokens medios</dt><dd id="runsAvgTokens">-</dd></div>
+          </dl>
           <div class="table-scroll">
-            <table>
+            <table class="data-table">
               <thead>
                 <tr>
                   <th>created_at</th>
-                  <th>status</th>
-                  <th>provider</th>
                   <th>model</th>
-                  <th>trace_id</th>
-                  <th>input</th>
-                  <th>response</th>
+                  <th>status</th>
                   <th>retrieval_status</th>
-                  <th>chunk_ids</th>
                   <th>latency_ms</th>
-                  <th>error_code</th>
-                  <th>error_message</th>
+                  <th>tokens_total</th>
+                  <th>trace_id</th>
                 </tr>
               </thead>
-              <tbody id="chatTracesTableBody">
-                <tr><td colspan="12">Pulsa Cargar runs.</td></tr>
+              <tbody id="chatRunsTableBody">
+                <tr><td colspan="7">Pulsa Refresh.</td></tr>
               </tbody>
             </table>
           </div>
-          <pre id="chatTracesRaw" class="output small">-</pre>
+          <pre id="chatRunsRaw" class="output small">-</pre>
         </section>
       </div>
 
@@ -229,10 +193,10 @@
             <article><strong>GET /health</strong><p>Estado basico del backend.</p></article>
             <article><strong>GET /api/models/chat</strong><p>Catalogo de modelos seleccionables para el chat.</p></article>
             <article><strong>POST /chat</strong><p>Chat principal con RAG y runtime de modelos.</p></article>
-            <article><strong>GET /api/traces/chat</strong><p>Listado de runs persistidos de chat.</p></article>
-            <article><strong>POST /api/traces/chat/reset</strong><p>Reset controlado de runs de chat.</p></article>
+            <article><strong>GET /api/evals/runs</strong><p>Listado y estadisticas de runs guardados por /chat.</p></article>
+            <article><strong>GET /api/traces/chat</strong><p>Compatibilidad interna de trazas de chat.</p></article>
             <article><strong>GET /api/evals/chat</strong><p>Vista compatible de trazas como evals.</p></article>
-            <article><strong>POST /api/evals/chat/run</strong><p>Ejecuta casos de evaluacion de chat.</p></article>
+            <article><strong>POST /api/evals/chat/run</strong><p>Endpoint legacy para suites manuales; la UI ya no lo dispara.</p></article>
             <article><strong>GET /docs</strong><p>Swagger UI generado por FastAPI.</p></article>
             <article><strong>GET /openapi.json</strong><p>Contrato OpenAPI en JSON.</p></article>
           </div>
@@ -265,8 +229,8 @@ uvicorn app.main:app --host &lt;backend-host&gt; --port &lt;backend-port&gt;</pr
               <pre>curl -X POST "&lt;backend-api-url&gt;/chat" -H "Content-Type: application/json" -d "{\"message\":\"Que es un transformer?\",\"use_rag\":true}"</pre>
             </article>
             <article>
-              <h3>Run chat evals</h3>
-              <pre>curl -X POST "&lt;backend-api-url&gt;/api/evals/chat/run"</pre>
+              <h3>Runs guardados</h3>
+              <pre>curl "&lt;backend-api-url&gt;/api/evals/runs"</pre>
             </article>
           </div>
         </section>
