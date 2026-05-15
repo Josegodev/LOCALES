@@ -169,6 +169,7 @@ class ChatRunResponse(BaseModel):
     version: str | None = None
     trace_id: str | None = None
     created_at: str | None = None
+    timestamp: str | None = None
     source: str | None = None
     endpoint: str | None = None
     input: str | None = None

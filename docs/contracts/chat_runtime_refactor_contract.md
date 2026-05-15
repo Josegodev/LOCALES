@@ -149,7 +149,7 @@ Variables minimas del backend:
 - `APP_ENV=local`
 - `BACKEND_BASE_URL=http://127.0.0.1:8000`
 - `CHAT_AUTH_MODE=local_open`
-- `CHAT_RUNS_PATH=data/chat_runs.jsonl`
+- `CHAT_RUNS_PATH=CHAT_RUNS`
 - `OLLAMA_BASE_URL=http://127.0.0.1:11434`
 - `DOCUMENTS_DB_PATH=/home/jose-gonzalez-oliva/LOCALES/DB/chunks/documents.sqlite`
 - `USE_REMOTE_RAG=false`

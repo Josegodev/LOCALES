@@ -195,7 +195,6 @@
             <article><strong>POST /chat</strong><p>Chat principal con RAG y runtime de modelos.</p></article>
             <article><strong>GET /api/chat/runs</strong><p>Listado y estadisticas de runs guardados por /chat.</p></article>
             <article><strong>GET /api/traces/chat</strong><p>Compatibilidad interna de trazas de chat.</p></article>
-            <article><strong>GET /api/evals/chat</strong><p>Vista compatible de trazas como evals.</p></article>
             <article><strong>GET /docs</strong><p>Swagger UI generado por FastAPI.</p></article>
             <article><strong>GET /openapi.json</strong><p>Contrato OpenAPI en JSON.</p></article>
           </div>
@@ -225,7 +224,7 @@ uvicorn app.main:app --host &lt;backend-host&gt; --port &lt;backend-port&gt;</pr
             </article>
             <article>
               <h3>Smoke /chat</h3>
-              <pre>curl -X POST "&lt;backend-api-url&gt;/chat" -H "Content-Type: application/json" -d "{\"message\":\"Que es un transformer?\",\"use_rag\":true}"</pre>
+              <pre>curl -X POST "&lt;backend-api-url&gt;/chat" -H "Content-Type: application/json" -d "{\"message\":\"Que es un transformer?\",\"provider\":\"ollama\",\"model\":\"granite4.1:8b\",\"use_rag\":true}"</pre>
             </article>
             <article>
               <h3>Runs guardados</h3>

@@ -30,7 +30,7 @@ Los futuros evals deben apuntar directamente a `/chat`.
 APP_ENV=local
 BACKEND_BASE_URL=http://127.0.0.1:8000
 CHAT_AUTH_MODE=local_open
-CHAT_RUNS_PATH=data/chat_runs.jsonl
+CHAT_RUNS_PATH=CHAT_RUNS
 OLLAMA_BASE_URL=http://127.0.0.1:11434
 USE_REMOTE_RAG=false
 DOCUMENTS_DB_PATH=/home/jose-gonzalez-oliva/LOCALES/DB/chunks/documents.sqlite
@@ -80,10 +80,13 @@ Comprobaciones HTTP mínimas:
 
 ```bash
 curl http://127.0.0.1:8000/health
-curl -X POST http://127.0.0.1:8000/chat -H "Content-Type: application/json" -d '{"message":"hola","use_rag":true}'
+curl -X POST http://127.0.0.1:8000/chat -H "Content-Type: application/json" -d '{"message":"hola","provider":"ollama","model":"granite4.1:8b","use_rag":true}'
 curl http://127.0.0.1:8000/api/chat/runs?limit=10
 bash scripts/run_chat_eval_e2e.sh
 ```
+
+Cada llamada real a `POST /chat` escribe un JSON independiente en `CHAT_RUNS/`.
+Si la escritura del archivo falla, la respuesta del chat sigue devolviendose.
 
 El comando E2E levanta una instancia temporal del backend actual en `127.0.0.1:8011`, ejecuta el endpoint de evals y la apaga al terminar.
 

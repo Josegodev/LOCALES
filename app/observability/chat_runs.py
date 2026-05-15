@@ -2,6 +2,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
+import re
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -11,10 +12,11 @@ from app.observability.logging import log_event
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CHAT_RUNS_PATH = REPO_ROOT / "data" / "chat_runs.jsonl"
+DEFAULT_CHAT_RUNS_PATH = REPO_ROOT / "CHAT_RUNS"
 CHAT_RUN_SOURCES = {"frontend", "chat"}
 CHAT_RUN_ENDPOINT = "/chat"
 CHAT_RUN_VERSION = "chat_run.v1"
+CHAT_RUN_FILE_SUFFIX = "_chat_run.json"
 
 
 def _utc_timestamp(created_at: datetime | None = None) -> datetime:
@@ -92,15 +94,20 @@ def _normalize_tokens_total(
 
 
 def _runs_path(path: Path | None = None) -> Path:
+    def normalize_directory(candidate: Path) -> Path:
+        if candidate.suffix.lower() in {".json", ".jsonl"}:
+            return candidate.parent / candidate.stem
+        return candidate
+
     if path is not None:
-        return path
+        return normalize_directory(path)
 
     configured = getattr(settings, "chat_runs_path", None)
     if isinstance(configured, str) and configured.strip():
         candidate = Path(configured.strip())
         if not candidate.is_absolute():
             candidate = REPO_ROOT / candidate
-        return candidate
+        return normalize_directory(candidate)
 
     return DEFAULT_CHAT_RUNS_PATH
 
@@ -109,6 +116,7 @@ class ChatRunRecord(BaseModel):
     version: str = CHAT_RUN_VERSION
     trace_id: str
     created_at: str
+    timestamp: str | None = None
     source: str = "frontend"
     endpoint: str = CHAT_RUN_ENDPOINT
     input: str
@@ -134,6 +142,7 @@ class ChatRunRecord(BaseModel):
 
 
 def normalize_chat_run_record(record: dict[str, Any]) -> ChatRunRecord:
+    created_at = _nullable_str(record.get("created_at")) or _utc_timestamp().isoformat()
     tokens_input = _nullable_number(record.get("tokens_input"))
     tokens_output = _nullable_number(record.get("tokens_output"))
     use_rag = record.get("use_rag") if isinstance(record.get("use_rag"), bool) else None
@@ -141,7 +150,8 @@ def normalize_chat_run_record(record: dict[str, Any]) -> ChatRunRecord:
     payload = {
         "version": _nullable_str(record.get("version")) or CHAT_RUN_VERSION,
         "trace_id": _nullable_str(record.get("trace_id")) or "",
-        "created_at": _nullable_str(record.get("created_at")) or _utc_timestamp().isoformat(),
+        "created_at": created_at,
+        "timestamp": _nullable_str(record.get("timestamp")) or created_at,
         "source": _normalize_source(record.get("source")),
         "endpoint": _normalize_endpoint(record.get("endpoint")),
         "input": _nullable_str(record.get("input")) or "",
@@ -172,58 +182,75 @@ def normalize_chat_run_record(record: dict[str, Any]) -> ChatRunRecord:
     return ChatRunRecord(**payload)
 
 
-def record_chat_run(run: ChatRunRecord, *, path: Path | None = None) -> None:
+def _safe_trace_id(value: str) -> str:
+    candidate = re.sub(r"[^A-Za-z0-9_-]+", "_", value.strip())
+    return candidate or "trace"
+
+
+def _timestamp_for_filename(value: str) -> str:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        parsed = _utc_timestamp()
+    return _utc_timestamp(parsed).strftime("%Y%m%dT%H%M%S%fZ")
+
+
+def _run_filename(run: ChatRunRecord) -> str:
+    return f"{_timestamp_for_filename(run.created_at)}_{_safe_trace_id(run.trace_id)}{CHAT_RUN_FILE_SUFFIX}"
+
+
+def record_chat_run(run: ChatRunRecord, *, path: Path | None = None) -> Path:
     output_path = _runs_path(path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.mkdir(parents=True, exist_ok=True)
     payload = run.model_dump()
+    run_path = output_path / _run_filename(run)
+    run_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
+    return run_path
 
-    with output_path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(payload, ensure_ascii=True))
-        handle.write("\n")
+
+def _load_chat_run_file(path: Path) -> ChatRunRecord | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        log_event(
+            component="frontend.chat.runs",
+            event="chat_run_file_skipped",
+            level=logging.WARNING,
+            path=str(path),
+            error_code="chat_run_json_invalid",
+            error_message=str(exc),
+        )
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+
+    if payload.get("source") not in CHAT_RUN_SOURCES:
+        return None
+
+    try:
+        return normalize_chat_run_record(payload)
+    except Exception as exc:
+        log_event(
+            component="frontend.chat.runs",
+            event="chat_run_record_skipped",
+            level=logging.WARNING,
+            path=str(path),
+            error_code="chat_run_record_invalid",
+            error_message=str(exc),
+        )
+        return None
 
 
-def _load_jsonl_chat_runs(*, limit: int, path: Path) -> list[ChatRunRecord]:
-    if not path.exists():
+def _load_chat_runs(*, limit: int, path: Path) -> list[ChatRunRecord]:
+    if not path.exists() or not path.is_dir():
         return []
 
     records: list[ChatRunRecord] = []
-    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        if not line.strip():
-            continue
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError as exc:
-            log_event(
-                component="frontend.chat.runs",
-                event="chat_run_jsonl_skipped",
-                level=logging.WARNING,
-                path=str(path),
-                line_number=line_number,
-                error_code="chat_run_json_invalid",
-                error_message=str(exc),
-            )
-            continue
-
-        if not isinstance(payload, dict):
-            continue
-
-        if payload.get("source") not in CHAT_RUN_SOURCES:
-            continue
-
-        try:
-            record = normalize_chat_run_record(payload)
-        except Exception as exc:
-            log_event(
-                component="frontend.chat.runs",
-                event="chat_run_record_skipped",
-                level=logging.WARNING,
-                path=str(path),
-                line_number=line_number,
-                error_code="chat_run_record_invalid",
-                error_message=str(exc),
-            )
-            continue
-        records.append(record)
+    for run_path in sorted(path.glob(f"*{CHAT_RUN_FILE_SUFFIX}")):
+        record = _load_chat_run_file(run_path)
+        if record is not None:
+            records.append(record)
 
     records.sort(key=lambda item: item.created_at, reverse=True)
     return records[:limit]
@@ -231,26 +258,32 @@ def _load_jsonl_chat_runs(*, limit: int, path: Path) -> list[ChatRunRecord]:
 
 def list_chat_runs(limit: int = 50, *, path: Path | None = None) -> list[ChatRunRecord]:
     resolved_path = _runs_path(path)
-    return _load_jsonl_chat_runs(limit=limit, path=resolved_path)
+    return _load_chat_runs(limit=limit, path=resolved_path)
 
 
 def clear_chat_runs(*, path: Path | None = None) -> int:
     output_path = _runs_path(path)
-    if not output_path.exists():
+    if not output_path.exists() or not output_path.is_dir():
         return 0
 
-    removed_count = sum(
-        1 for line in output_path.read_text(encoding="utf-8").splitlines() if line.strip()
-    )
-    output_path.write_text("", encoding="utf-8")
+    removed_count = 0
+    for run_path in output_path.glob(f"*{CHAT_RUN_FILE_SUFFIX}"):
+        run_path.unlink()
+        removed_count += 1
     return removed_count
 
 
-def write_chat_run(**kwargs: Any) -> None:
+def save_chat_run(run_payload: dict[str, Any], *, path: Path | None = None) -> Path:
+    return record_chat_run(normalize_chat_run_record(run_payload), path=path)
+
+
+def write_chat_run(**kwargs: Any) -> Path:
+    created_at = _utc_timestamp(kwargs.get("created_at")).isoformat()
     run = ChatRunRecord(
         version=CHAT_RUN_VERSION,
         trace_id=kwargs["trace_id"],
-        created_at=_utc_timestamp(kwargs.get("created_at")).isoformat(),
+        created_at=created_at,
+        timestamp=created_at,
         source=_normalize_source(kwargs.get("source")),
         endpoint=_normalize_endpoint(kwargs.get("endpoint")),
         input=kwargs.get("input_text") or "",
@@ -278,4 +311,4 @@ def write_chat_run(**kwargs: Any) -> None:
         fallback_used=kwargs.get("fallback_used") if isinstance(kwargs.get("fallback_used"), bool) else None,
         answer_mode=_nullable_str(kwargs.get("answer_mode")),
     )
-    record_chat_run(run, path=kwargs.get("path"))
+    return record_chat_run(run, path=kwargs.get("path"))

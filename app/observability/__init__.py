@@ -6,6 +6,7 @@ from app.observability.chat_runs import (
     list_chat_runs,
     normalize_chat_run_record,
     record_chat_run,
+    save_chat_run,
     write_chat_run,
 )
 from app.observability.chat_trace import (
@@ -35,6 +36,7 @@ __all__ = [
     "normalize_chat_run_record",
     "normalize_chat_trace_record",
     "record_chat_run",
+    "save_chat_run",
     "record_chat_trace",
     "write_chat_run",
     "write_chat_trace",

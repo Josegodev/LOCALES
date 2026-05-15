@@ -12,7 +12,7 @@ import app.chat_eval_runner as chat_eval_runner
 from app.auth import bearer_scheme, require_chat_access
 from app.config import settings
 from app.rag_client import query_remote_rag
-from app.observability.chat_runs import clear_chat_runs, list_chat_runs, write_chat_run
+from app.observability.chat_runs import clear_chat_runs, list_chat_runs, save_chat_run
 from app.observability.logging import get_logger, log_event
 from app.observability.trace import new_trace_id
 from app.llm_client import LLMClientError, ask_chat, resolve_provider_model
@@ -446,31 +446,35 @@ def _persist_chat_run(
     tokens_output: int | float | None,
     tokens_total: int | float | None,
 ) -> None:
-    write_chat_run(
-        trace_id=trace_id,
-        source=_chat_trace_source(request.user_id, request.chat_id),
-        input_text=request.message,
-        response_text=final_answer or None,
-        provider=provider,
-        model=model,
-        status=status,
-        retrieval_status=retrieval_status,
-        chunk_ids=chunk_ids,
-        document_ids=document_ids,
-        source_filenames=source_filenames,
-        latency_ms=latency_ms,
-        error_code=error_code,
-        error_message=error_message,
-        warnings=warnings,
-        created_at=datetime.now(timezone.utc),
-        tokens_input=tokens_input,
-        tokens_output=tokens_output,
-        tokens_total=tokens_total,
-        use_rag=use_rag,
-        evidence_used=evidence_used,
-        fallback_used=fallback_used,
-        answer_mode=answer_mode,
-        endpoint="/chat",
+    created_at = datetime.now(timezone.utc).isoformat()
+    save_chat_run(
+        {
+            "trace_id": trace_id,
+            "created_at": created_at,
+            "timestamp": created_at,
+            "source": _chat_trace_source(request.user_id, request.chat_id),
+            "endpoint": "/chat",
+            "input": request.message,
+            "response": final_answer or None,
+            "provider": provider,
+            "model": model,
+            "status": status,
+            "retrieval_status": retrieval_status,
+            "chunk_ids": chunk_ids,
+            "document_ids": document_ids,
+            "source_filenames": source_filenames,
+            "latency_ms": latency_ms,
+            "error_code": error_code,
+            "error_message": error_message,
+            "warnings": warnings,
+            "tokens_input": tokens_input,
+            "tokens_output": tokens_output,
+            "tokens_total": tokens_total,
+            "use_rag": use_rag,
+            "evidence_used": evidence_used,
+            "fallback_used": fallback_used,
+            "answer_mode": answer_mode,
+        }
     )
 
 

@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     rag_timeout_seconds: float = 10.0
     rag_top_k: int = 5
     chat_runs_path: str = Field(
-        default="data/chat_runs.jsonl",
+        default="CHAT_RUNS",
         validation_alias=AliasChoices("CHAT_RUNS_PATH", "CHAT_TRACE_PATH"),
     )
     jose_dev_token: str | None = None

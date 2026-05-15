@@ -182,8 +182,8 @@ class DevTokenAuthTests(unittest.TestCase):
         self.assertIn("/api/chat/runs", frontend_js)
         self.assertIn("/api/models/chat", frontend_js)
         self.assertIn("/api/models/chat", frontend_html)
-        self.assertIn("Estadisticas /chat", frontend_html)
-        self.assertIn("Trazas /chat", frontend_html)
+        self.assertIn("Runs guardados", frontend_html)
+        self.assertIn("Vista de solo lectura", frontend_html)
         self.assertNotIn("Telegram legacy", frontend_html)
         self.assertNotIn("Telegram Evals", frontend_html)
 

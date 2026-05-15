@@ -84,7 +84,7 @@ class ChatEvalFoundationTests(unittest.TestCase):
 
     def test_chat_eval_endpoint_returns_expected_shape(self):
         with TemporaryDirectory() as tmpdir:
-            trace_path = Path(tmpdir) / "chat_traces.jsonl"
+            trace_path = Path(tmpdir) / "CHAT_RUNS"
 
             with patch("app.auth.settings.chat_auth_mode", "local_open"):
                 with patch("app.observability.chat_runs.settings.chat_runs_path", str(trace_path)):
@@ -108,7 +108,7 @@ class ChatEvalFoundationTests(unittest.TestCase):
 
     def test_chat_eval_endpoint_lists_chat_traces_without_running_evals(self):
         with TemporaryDirectory() as tmpdir:
-            trace_path = Path(tmpdir) / "chat_traces.jsonl"
+            trace_path = Path(tmpdir) / "CHAT_RUNS"
             write_chat_run(
                 trace_id="12345678123456781234567812345678",
                 source="frontend",
