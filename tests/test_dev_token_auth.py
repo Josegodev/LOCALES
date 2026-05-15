@@ -120,6 +120,28 @@ class DevTokenAuthTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "ok")
 
+    def test_chat_models_endpoint_returns_ollama_and_openai_options(self):
+        with patch("app.main.list_chat_models", return_value=[
+            {
+                "provider": "ollama",
+                "model": "granite4.1:8b",
+                "label": "granite4.1:8b",
+                "is_default": True,
+            },
+            {
+                "provider": "openai",
+                "model": "gpt-5.5",
+                "label": "OpenAI / gpt-5.5",
+                "is_default": False,
+            },
+        ]):
+            response = TestClient(app).get("/api/models/chat")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "ok")
+        self.assertEqual(response.json()["items"][0]["model"], "granite4.1:8b")
+        self.assertEqual(response.json()["items"][1]["provider"], "openai")
+
     def test_frontend_files_do_not_reference_operational_token_name(self):
         frontend_js = Path("/home/jose-gonzalez-oliva/LOCALES/frontend/app.js").read_text(encoding="utf-8")
         frontend_html = Path("/home/jose-gonzalez-oliva/LOCALES/frontend/index.html").read_text(encoding="utf-8")
@@ -134,6 +156,8 @@ class DevTokenAuthTests(unittest.TestCase):
         self.assertNotIn("/telegram/", frontend_js)
         self.assertNotIn("/api/evals/telegram", frontend_js)
         self.assertIn("/api/evals/chat/run", frontend_js)
+        self.assertIn("/api/models/chat", frontend_js)
+        self.assertIn("/api/models/chat", frontend_html)
         self.assertNotIn("Telegram legacy", frontend_html)
         self.assertNotIn("Telegram Evals", frontend_html)
 

@@ -127,6 +127,66 @@ function updateBackendLinks() {
   elements.docsLink.classList.toggle("disabled", !baseUrl);
 }
 
+function inferProviderFromModel(modelName) {
+  return String(modelName || "").trim().startsWith("gpt-") ? "openai" : "ollama";
+}
+
+function selectedModelOption() {
+  return elements.modelSelect.selectedOptions[0] || null;
+}
+
+function selectedModelProvider() {
+  const option = selectedModelOption();
+  const provider = option?.dataset?.provider;
+  if (provider === "ollama" || provider === "openai") {
+    return provider;
+  }
+  return inferProviderFromModel(elements.modelSelect.value);
+}
+
+function selectPreferredModel(preferredModel) {
+  const options = Array.from(elements.modelSelect.options);
+  if (!options.length) {
+    return;
+  }
+
+  const normalizedPreferredModel = String(preferredModel || "").trim().toLowerCase();
+  const exactMatch = options.find((option) => option.value === preferredModel);
+  if (exactMatch) {
+    elements.modelSelect.value = exactMatch.value;
+    return;
+  }
+
+  if (normalizedPreferredModel) {
+    const prefixMatch = options.find((option) => option.value.toLowerCase().startsWith(normalizedPreferredModel));
+    if (prefixMatch) {
+      elements.modelSelect.value = prefixMatch.value;
+      return;
+    }
+  }
+
+  const defaultOption = options.find((option) => option.dataset.isDefault === "true");
+  elements.modelSelect.value = (defaultOption || options[0]).value;
+}
+
+function replaceModelOptions(items) {
+  const currentValue = elements.modelSelect.value;
+  const savedModel = localStorage.getItem("locales.chatModel");
+  elements.modelSelect.innerHTML = "";
+
+  for (const item of items) {
+    const option = document.createElement("option");
+    option.value = item.model;
+    option.textContent = item.label;
+    option.dataset.provider = item.provider;
+    option.dataset.isDefault = item.is_default ? "true" : "false";
+    elements.modelSelect.appendChild(option);
+  }
+
+  selectPreferredModel(savedModel || currentValue);
+  localStorage.setItem("locales.chatModel", elements.modelSelect.value);
+}
+
 async function fetchJsonWithLatency(url, options = {}) {
   const startedAt = performance.now();
   const response = await fetch(url, options);
@@ -153,6 +213,19 @@ async function fetchJsonWithLatency(url, options = {}) {
 
 async function backendFetch(path, options = {}) {
   return fetchJsonWithLatency(`${requireBackendBaseUrl()}${path}`, options);
+}
+
+function validateChatModelsPayload(data) {
+  if (!data || typeof data !== "object" || !Array.isArray(data.items)) {
+    throw new Error("Respuesta JSON invalida del endpoint de modelos.");
+  }
+
+  return data.items.filter((item) => (
+    item
+    && typeof item.provider === "string"
+    && typeof item.model === "string"
+    && typeof item.label === "string"
+  ));
 }
 
 function clearChatOutput() {
@@ -319,6 +392,22 @@ async function checkHealth() {
   }
 }
 
+async function loadChatModels() {
+  if (!backendBaseUrl()) {
+    return;
+  }
+
+  try {
+    const { data } = await backendFetch("/api/models/chat");
+    const items = validateChatModelsPayload(data);
+    if (items.length) {
+      replaceModelOptions(items);
+    }
+  } catch (error) {
+    console.warn("No se pudo cargar /api/models/chat", error);
+  }
+}
+
 async function runChatEvals() {
   updateBackendLinks();
   setEvalPending(true);
@@ -457,6 +546,8 @@ async function sendChat() {
 
   const payload = {
     message: elements.messageInput.value.trim(),
+    provider: selectedModelProvider(),
+    model: elements.modelSelect.value,
     use_rag: elements.useRagInput.checked,
   };
 
@@ -524,7 +615,10 @@ setActiveTab("chat");
 elements.tabButtons.forEach((button) => {
   button.addEventListener("click", () => setActiveTab(button.dataset.tabTarget));
 });
-elements.backendUrl.addEventListener("change", updateBackendLinks);
+elements.backendUrl.addEventListener("change", () => {
+  updateBackendLinks();
+  loadChatModels().catch(() => {});
+});
 elements.backendUrl.addEventListener("input", updateBackendLinks);
 elements.modelSelect.addEventListener("change", () => {
   localStorage.setItem("locales.chatModel", elements.modelSelect.value);
@@ -540,4 +634,5 @@ elements.healthButton.addEventListener("click", checkHealth);
 elements.chatButton.addEventListener("click", sendChat);
 elements.chatTracesLoadButton.addEventListener("click", loadChatTraces);
 elements.chatTracesResetButton.addEventListener("click", resetChatTraces);
+loadChatModels().catch(() => {});
 loadChatTraces().catch(() => {});

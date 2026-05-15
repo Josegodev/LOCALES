@@ -16,6 +16,10 @@ def _chat_completions_url(settings_obj=settings) -> str:
     return f"{settings_obj.ollama_v1_base_url()}/chat/completions"
 
 
+def _api_tags_url(settings_obj=settings) -> str:
+    return f"{settings_obj.ollama_api_base_url()}/api/tags"
+
+
 def _selected_model(settings_obj=settings) -> str:
     return settings_obj.effective_ollama_model()
 
@@ -39,6 +43,54 @@ def _error_from_response(response: requests.Response) -> tuple[str, str]:
         return "llm_http_error", error_text
 
     return "llm_http_error", f"Ollama devolvio HTTP {response.status_code}"
+
+
+def list_models(
+    *,
+    requests_module=requests,
+    settings_obj=settings,
+) -> list[str]:
+    try:
+        response = requests_module.get(
+            _api_tags_url(settings_obj),
+            timeout=_timeout_seconds(settings_obj),
+        )
+    except requests.exceptions.ConnectionError as exc:
+        raise OllamaClientError("llm_unavailable", "Ollama no disponible") from exc
+    except requests.exceptions.Timeout as exc:
+        raise OllamaClientError("llm_timeout", "Ollama ha agotado el tiempo de respuesta") from exc
+    except requests.exceptions.RequestException as exc:
+        raise OllamaClientError("llm_http_error", str(exc)) from exc
+
+    if response.status_code != 200:
+        code, error_message = _error_from_response(response)
+        raise OllamaClientError(code, error_message)
+
+    try:
+        data = response.json()
+    except ValueError as exc:
+        raise OllamaClientError("llm_invalid_json", "ollama_invalid_json") from exc
+
+    raw_models = data.get("models")
+    if not isinstance(raw_models, list):
+        raise OllamaClientError("llm_invalid_json", "ollama_models_invalid")
+
+    models: list[str] = []
+    for raw_model in raw_models:
+        if not isinstance(raw_model, dict):
+            continue
+
+        candidate = raw_model.get("name")
+        if not isinstance(candidate, str) or not candidate.strip():
+            candidate = raw_model.get("model")
+        if not isinstance(candidate, str):
+            continue
+
+        normalized_model = candidate.strip()
+        if normalized_model and normalized_model not in models:
+            models.append(normalized_model)
+
+    return models
 
 
 def ask_chat(

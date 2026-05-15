@@ -13,6 +13,7 @@ class ChatOnlyRuntimeTests(unittest.TestCase):
         paths = {route.path for route in app.routes}
 
         self.assertIn("/health", paths)
+        self.assertIn("/api/models/chat", paths)
         self.assertIn("/chat", paths)
         self.assertIn("/api/evals/chat", paths)
         self.assertIn("/api/evals/chat/run", paths)

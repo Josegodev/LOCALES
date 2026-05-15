@@ -16,9 +16,11 @@ from app.observability.chat_trace import clear_chat_traces, list_chat_traces, wr
 from app.observability.logging import get_logger, log_event
 from app.observability.trace import new_trace_id
 from app.llm_client import LLMClientError, ask_chat, resolve_provider_model
+from app.llm_client import list_chat_models
 from app.schemas import (
     ChatEvalListResponse,
     ChatEvalRunResponse,
+    ChatModelListResponse,
     ChatRequest,
     ChatResponse,
     ChatTraceListResponse,
@@ -473,6 +475,11 @@ def _persist_chat_trace(
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/api/models/chat", response_model=ChatModelListResponse)
+def chat_models() -> dict:
+    return {"status": "ok", "items": list_chat_models()}
 
 
 @app.get("/api/traces/chat", response_model=ChatTraceListResponse)

@@ -147,6 +147,19 @@ class ChatResponse(BaseModel):
     total_duration: int | None = None
     load_duration: int | None = None
 
+
+class ChatModelOption(BaseModel):
+    provider: str
+    model: str
+    label: str
+    is_default: bool = False
+
+
+class ChatModelListResponse(BaseModel):
+    status: str
+    items: list[ChatModelOption] = Field(default_factory=list)
+
+
 class ErrorResponse(BaseModel):
     status: str
     code: str

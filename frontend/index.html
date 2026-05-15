@@ -66,7 +66,7 @@
               <option value="gpt-5.5">GPT-5.5</option>
             </select>
             <p class="muted-text compact-note">
-              Selector preparado para conectar despues con el contrato del backend.
+              El selector usa los modelos publicados por FastAPI cuando el backend expone <code>/api/models/chat</code>.
             </p>
             <label class="checkbox">
               <input id="useRagInput" type="checkbox" checked />
@@ -231,6 +231,7 @@
           <h2>Puertas FastAPI</h2>
           <div class="endpoint-grid">
             <article><strong>GET /health</strong><p>Estado basico del backend.</p></article>
+            <article><strong>GET /api/models/chat</strong><p>Catalogo de modelos seleccionables para el chat.</p></article>
             <article><strong>POST /chat</strong><p>Chat principal con RAG y runtime de modelos.</p></article>
             <article><strong>GET /api/traces/chat</strong><p>Listado de runs persistidos de chat.</p></article>
             <article><strong>POST /api/traces/chat/reset</strong><p>Reset controlado de runs de chat.</p></article>

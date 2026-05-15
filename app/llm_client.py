@@ -7,6 +7,7 @@ from app.adapters.openai_client import (
     resolve_model as _resolve_openai_model,
 )
 from app.adapters.ollama_client import ask_chat as _ask_chat
+from app.adapters.ollama_client import list_models as _list_ollama_models
 from app.config import settings
 from app.llm_errors import LLMClientError as BaseLLMClientError
 
@@ -31,6 +32,68 @@ def _is_openai_model(model: str) -> bool:
     return model.startswith(OPENAI_MODEL_PREFIX) or model in OPENAI_SUPPORTED_MODELS
 
 
+def _resolve_ollama_model(model: str | None) -> str:
+    if model is None:
+        return settings.effective_ollama_model()
+
+    selected_model = model.strip()
+    if not selected_model:
+        return settings.effective_ollama_model()
+
+    try:
+        available_models = _list_ollama_models()
+    except LLMClientError:
+        return selected_model
+
+    if selected_model in available_models:
+        return selected_model
+
+    lowered_model = selected_model.casefold()
+    prefix_matches = [
+        available_model
+        for available_model in available_models
+        if available_model.casefold().startswith(lowered_model)
+    ]
+    if len(prefix_matches) == 1:
+        return prefix_matches[0]
+
+    return selected_model
+
+
+def list_chat_models() -> list[dict[str, object]]:
+    items: list[dict[str, object]] = []
+    default_ollama_model = settings.effective_ollama_model()
+    available_ollama_models = _list_ollama_models()
+
+    ordered_ollama_models: list[str] = []
+    if default_ollama_model in available_ollama_models:
+        ordered_ollama_models.append(default_ollama_model)
+
+    for model_name in sorted(available_ollama_models, key=str.casefold):
+        if model_name not in ordered_ollama_models:
+            ordered_ollama_models.append(model_name)
+
+    for model_name in ordered_ollama_models:
+        items.append(
+            {
+                "provider": "ollama",
+                "model": model_name,
+                "label": model_name,
+                "is_default": model_name == default_ollama_model,
+            }
+        )
+
+    items.append(
+        {
+            "provider": "openai",
+            "model": DEFAULT_OPENAI_MODEL,
+            "label": f"OpenAI / {DEFAULT_OPENAI_MODEL}",
+            "is_default": False,
+        }
+    )
+    return items
+
+
 def resolve_provider_model(
     provider: str | None,
     model: str | None,
@@ -44,7 +107,7 @@ def resolve_provider_model(
                 "invalid_provider_model_pair",
                 f"provider_model_pair_invalido: provider={selected_provider}, model={selected_model}",
             )
-        return selected_provider, selected_model or settings.effective_ollama_model()
+        return selected_provider, _resolve_ollama_model(selected_model)
     if selected_provider == "openai":
         if selected_model is not None and not _is_openai_model(selected_model):
             raise LLMClientError(
