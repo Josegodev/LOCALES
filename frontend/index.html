@@ -46,8 +46,7 @@
       <nav class="tab-list" aria-label="Secciones FastAPI">
         <button class="tab-button active" type="button" data-tab-target="chat" aria-controls="tab-chat" aria-selected="true">Chat</button>
         <button class="tab-button" type="button" data-tab-target="health" aria-controls="tab-health" aria-selected="false">Health</button>
-        <button class="tab-button" type="button" data-tab-target="evals" aria-controls="tab-evals" aria-selected="false">Estadisticas /chat</button>
-        <button class="tab-button" type="button" data-tab-target="runs" aria-controls="tab-runs" aria-selected="false">Trazas /chat</button>
+        <button class="tab-button" type="button" data-tab-target="runs" aria-controls="tab-runs" aria-selected="false">Runs</button>
         <button class="tab-button" type="button" data-tab-target="endpoints" aria-controls="tab-endpoints" aria-selected="false">Puertas FastAPI</button>
       </nav>
 
@@ -126,95 +125,46 @@
         </section>
       </div>
 
-      <div id="tab-evals" class="tab-panel" data-tab-panel="evals" hidden>
+      <div id="tab-runs" class="tab-panel" data-tab-panel="runs" hidden>
         <section class="panel">
           <div class="section-heading-row">
             <div>
-              <h2>Estadisticas /chat</h2>
+              <h2>Runs guardados</h2>
               <p class="muted-text">
-                Agregados calculados desde runs reales ya guardados en <code>data/chat_runs.jsonl</code>.
+                Vista de solo lectura sobre los runs reales guardados automaticamente por llamadas a <code>/chat</code>.
               </p>
             </div>
             <div class="button-row">
-              <button id="chatStatsLoadButton" type="button">Refresh</button>
+              <button id="chatRunsLoadButton" type="button">Refresh</button>
             </div>
           </div>
-          <div id="chatStatsStatus" class="status muted">Sin ejecutar</div>
+          <div id="chatRunsStatus" class="status muted">Sin ejecutar</div>
           <dl class="metrics wide">
-            <div><dt>runs</dt><dd id="chatStatsTotalRuns">-</dd></div>
-            <div><dt>ok</dt><dd id="chatStatsTotalOk">-</dd></div>
-            <div><dt>error</dt><dd id="chatStatsTotalError">-</dd></div>
-            <div><dt>avg latency_ms</dt><dd id="chatStatsAvgLatency">-</dd></div>
-            <div><dt>avg tokens_total</dt><dd id="chatStatsAvgTokens">-</dd></div>
+            <div><dt>total runs</dt><dd id="runsTotal">-</dd></div>
+            <div><dt>ok/error</dt><dd id="runsOkError">-</dd></div>
+            <div><dt>modelos usados</dt><dd id="runsModels">-</dd></div>
+            <div><dt>latencia media</dt><dd id="runsAvgLatency">-</dd></div>
+            <div><dt>tokens medios</dt><dd id="runsAvgTokens">-</dd></div>
           </dl>
           <div class="table-scroll">
             <table class="data-table">
               <thead>
                 <tr>
                   <th>created_at</th>
-                  <th>status</th>
-                  <th>provider</th>
                   <th>model</th>
+                  <th>status</th>
+                  <th>retrieval_status</th>
                   <th>latency_ms</th>
                   <th>tokens_total</th>
-                  <th>retrieval_status</th>
+                  <th>trace_id</th>
                 </tr>
               </thead>
-              <tbody id="chatStatsTableBody">
+              <tbody id="chatRunsTableBody">
                 <tr><td colspan="7">Pulsa Refresh.</td></tr>
               </tbody>
             </table>
           </div>
-          <h3>Raw JSON</h3>
-          <pre id="chatStatsRaw" class="output small">-</pre>
-        </section>
-      </div>
-
-      <div id="tab-runs" class="tab-panel" data-tab-panel="runs" hidden>
-        <section class="panel">
-          <div class="section-heading-row">
-            <div>
-              <h2>Runs /chat</h2>
-              <p class="muted-text">
-                Trazas reales del runtime de chat. No son artefactos de evaluacion.
-              </p>
-            </div>
-            <div class="button-row">
-              <label for="chatTracesLimit">Runs</label>
-              <select id="chatTracesLimit">
-                <option value="10">10</option>
-                <option value="25" selected>25</option>
-                <option value="50">50</option>
-              </select>
-              <button id="chatTracesLoadButton" type="button">Cargar runs</button>
-              <button id="chatTracesResetButton" class="secondary-button danger-button" type="button">Reset runs</button>
-            </div>
-          </div>
-          <div id="chatTracesStatus" class="status muted">Sin ejecutar</div>
-          <div class="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>created_at</th>
-                  <th>status</th>
-                  <th>provider</th>
-                  <th>model</th>
-                  <th>trace_id</th>
-                  <th>input</th>
-                  <th>response</th>
-                  <th>retrieval_status</th>
-                  <th>chunk_ids</th>
-                  <th>latency_ms</th>
-                  <th>error_code</th>
-                  <th>error_message</th>
-                </tr>
-              </thead>
-              <tbody id="chatTracesTableBody">
-                <tr><td colspan="12">Pulsa Cargar runs.</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <pre id="chatTracesRaw" class="output small">-</pre>
+          <pre id="chatRunsRaw" class="output small">-</pre>
         </section>
       </div>
 
@@ -243,11 +193,9 @@
             <article><strong>GET /health</strong><p>Estado basico del backend.</p></article>
             <article><strong>GET /api/models/chat</strong><p>Catalogo de modelos seleccionables para el chat.</p></article>
             <article><strong>POST /chat</strong><p>Chat principal con RAG y runtime de modelos.</p></article>
-            <article><strong>GET /api/chat/runs</strong><p>Listado de runs reales persistidos para observabilidad y metricas.</p></article>
-            <article><strong>GET /api/traces/chat</strong><p>Listado de trazas reales persistidas de chat.</p></article>
-            <article><strong>POST /api/traces/chat/reset</strong><p>Reset controlado de runs de chat.</p></article>
+            <article><strong>GET /api/chat/runs</strong><p>Listado y estadisticas de runs guardados por /chat.</p></article>
+            <article><strong>GET /api/traces/chat</strong><p>Compatibilidad interna de trazas de chat.</p></article>
             <article><strong>GET /api/evals/chat</strong><p>Vista compatible de trazas como evals.</p></article>
-            <article><strong>POST /api/evals/chat/run</strong><p>Ejecuta casos de evaluacion de chat y escribe solo en <code>evals/runs/</code>.</p></article>
             <article><strong>GET /docs</strong><p>Swagger UI generado por FastAPI.</p></article>
             <article><strong>GET /openapi.json</strong><p>Contrato OpenAPI en JSON.</p></article>
           </div>
@@ -280,11 +228,7 @@ uvicorn app.main:app --host &lt;backend-host&gt; --port &lt;backend-port&gt;</pr
               <pre>curl -X POST "&lt;backend-api-url&gt;/chat" -H "Content-Type: application/json" -d "{\"message\":\"Que es un transformer?\",\"use_rag\":true}"</pre>
             </article>
             <article>
-              <h3>Run chat evals</h3>
-              <pre>curl -X POST "&lt;backend-api-url&gt;/api/evals/chat/run"</pre>
-            </article>
-            <article>
-              <h3>Saved eval runs</h3>
+              <h3>Runs guardados</h3>
               <pre>curl "&lt;backend-api-url&gt;/api/chat/runs?limit=25"</pre>
             </article>
           </div>
