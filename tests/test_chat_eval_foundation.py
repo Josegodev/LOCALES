@@ -24,6 +24,8 @@ class ChatEvalFoundationTests(unittest.TestCase):
                         {
                             "id": "case_1",
                             "input": "Que es un transformer?",
+                            "provider": "ollama",
+                            "model": "granite4.1:8b",
                             "use_rag": True,
                             "temperature": 0.2,
                             "forbidden_terms": [],
@@ -60,7 +62,7 @@ class ChatEvalFoundationTests(unittest.TestCase):
             "chunks": [
                 {
                     "text": "Transformer attention context",
-                    "chunk_id": 1,
+                    "id": 1,
                     "document_id": 2,
                     "filename": "doc.pdf",
                     "score": 1,
@@ -162,7 +164,8 @@ class ChatEvalFoundationTests(unittest.TestCase):
                                         "latency_ms": 12,
                                     },
                                 ):
-                                    response = TestClient(app).post("/api/evals/chat/run")
+                                    with patch("app.llm_client._list_ollama_models", return_value=["granite4.1:8b"]):
+                                        response = TestClient(app).post("/api/evals/chat/run")
 
         self.assertEqual(response.status_code, 200)
         body = response.json()
@@ -191,7 +194,8 @@ class ChatEvalFoundationTests(unittest.TestCase):
                                         "answer": "Transformer basado en attention.",
                                     },
                                 ):
-                                    response = TestClient(app).post("/api/evals/chat/run")
+                                    with patch("app.llm_client._list_ollama_models", return_value=["granite4.1:8b"]):
+                                        response = TestClient(app).post("/api/evals/chat/run")
 
             run_files = list(runs_dir.glob("*_chat_eval_run.json"))
             self.assertEqual(response.status_code, 200)
@@ -223,7 +227,10 @@ class ChatEvalFoundationTests(unittest.TestCase):
                                 "answer": "Transformer basado en attention.",
                             },
                         ):
-                            response = TestClient(app).post("/chat", json={"message": "hola"})
+                            response = TestClient(app).post(
+                                "/chat",
+                                json={"message": "hola", "provider": "ollama", "model": "granite4.1:8b"},
+                            )
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(runs_dir.exists() and list(runs_dir.glob("*_chat_eval_run.json")))

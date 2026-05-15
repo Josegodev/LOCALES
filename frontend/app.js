@@ -557,6 +557,13 @@ async function sendChat() {
     return;
   }
 
+  if (!String(payload.model || "").trim()) {
+    setStatus(elements.chatStatus, "Selecciona un modelo valido antes de enviar", "error");
+    elements.answerText.textContent = "La UI necesita cargar o seleccionar un modelo explicito.";
+    setChatPending(false);
+    return;
+  }
+
   setStatus(elements.chatStatus, "Enviando a /chat...", "muted");
   elements.chatRaw.textContent = prettyJson({ request: payload });
   elements.answerText.textContent = "Esperando respuesta...";

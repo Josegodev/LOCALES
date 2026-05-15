@@ -8,6 +8,8 @@ from app.main import app
 
 
 class DevTokenAuthTests(unittest.TestCase):
+    CHAT_PAYLOAD = {"message": "hola", "provider": "ollama", "model": "granite4.1:8b"}
+
     def test_health_remains_open_without_token(self):
         with patch("app.auth.settings.jose_dev_token", "test-dev-token"):
             response = TestClient(app).get("/health")
@@ -41,7 +43,7 @@ class DevTokenAuthTests(unittest.TestCase):
                         "answer": "ok",
                     },
                 ):
-                    response = TestClient(app).post("/chat", json={"message": "hola"})
+                    response = TestClient(app).post("/chat", json=self.CHAT_PAYLOAD)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["answer"], "ok")
@@ -50,7 +52,7 @@ class DevTokenAuthTests(unittest.TestCase):
     def test_chat_bearer_required_without_token_returns_401(self):
         with patch("app.auth.settings.chat_auth_mode", "bearer_required"):
             with patch("app.auth.settings.jose_dev_token", "test-dev-token"):
-                response = TestClient(app).post("/chat", json={"message": "hola"})
+                response = TestClient(app).post("/chat", json=self.CHAT_PAYLOAD)
 
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json()["detail"]["code"], "invalid_token")
@@ -61,7 +63,7 @@ class DevTokenAuthTests(unittest.TestCase):
                 response = TestClient(app).post(
                     "/chat",
                     headers={"Authorization": "Bearer wrong-token"},
-                    json={"message": "hola"},
+                    json=self.CHAT_PAYLOAD,
                 )
 
         self.assertEqual(response.status_code, 401)
@@ -88,7 +90,7 @@ class DevTokenAuthTests(unittest.TestCase):
                         response = TestClient(app).post(
                             "/chat",
                             headers={"Authorization": "Bearer test-dev-token"},
-                            json={"message": "hola"},
+                            json=self.CHAT_PAYLOAD,
                         )
 
         self.assertEqual(response.status_code, 200)
@@ -96,7 +98,7 @@ class DevTokenAuthTests(unittest.TestCase):
 
     def test_chat_disabled_returns_403(self):
         with patch("app.auth.settings.chat_auth_mode", "disabled"):
-            response = TestClient(app).post("/chat", json={"message": "hola"})
+            response = TestClient(app).post("/chat", json=self.CHAT_PAYLOAD)
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json()["detail"]["code"], "chat_disabled")
@@ -107,7 +109,7 @@ class DevTokenAuthTests(unittest.TestCase):
                 response = TestClient(app).post(
                     "/chat",
                     headers={"Authorization": "Bearer anything"},
-                    json={"message": "hola"},
+                    json=self.CHAT_PAYLOAD,
                 )
 
         self.assertEqual(response.status_code, 500)
@@ -120,13 +122,20 @@ class DevTokenAuthTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "ok")
 
+    def test_chat_without_model_returns_explicit_contract_error(self):
+        with patch("app.auth.settings.chat_auth_mode", "local_open"):
+            response = TestClient(app).post("/chat", json={"message": "hola", "provider": "ollama"})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"]["code"], "model_required")
+
     def test_chat_models_endpoint_returns_ollama_and_openai_options(self):
         with patch("app.main.list_chat_models", return_value=[
             {
                 "provider": "ollama",
                 "model": "granite4.1:8b",
                 "label": "granite4.1:8b",
-                "is_default": True,
+                "is_default": False,
             },
             {
                 "provider": "openai",
@@ -160,6 +169,12 @@ class DevTokenAuthTests(unittest.TestCase):
         self.assertIn("/api/models/chat", frontend_html)
         self.assertNotIn("Telegram legacy", frontend_html)
         self.assertNotIn("Telegram Evals", frontend_html)
+
+    def test_frontend_model_selector_does_not_hardcode_granite_option(self):
+        frontend_html = Path("/home/jose-gonzalez-oliva/LOCALES/frontend/index.html").read_text(encoding="utf-8")
+
+        self.assertNotIn('<option value="granite"', frontend_html)
+        self.assertIn("Carga modelos del backend", frontend_html)
 
 
 if __name__ == "__main__":

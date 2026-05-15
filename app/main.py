@@ -673,6 +673,23 @@ def _run_chat_request(
     )
 
     try:
+        if not isinstance(request.model, str) or not request.model.strip():
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "trace_id": trace_id,
+                    "status": "error",
+                    "code": "model_required",
+                    "message": "El contrato de /chat requiere un model explicito.",
+                    "retrieval_status": retrieval_status,
+                    "chunk_ids": [],
+                    "document_ids": [],
+                    "source_filenames": [],
+                    "query_original": context.get("query_original"),
+                    "use_rag": use_rag,
+                    "warnings": [],
+                },
+            )
         provider, model = resolve_provider_model(provider, request.model)
         active_document_title = _normalize_active_document_title(request.active_document_title)
         use_active_context, active_context_reason = _should_use_active_context(

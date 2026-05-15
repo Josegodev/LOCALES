@@ -6,7 +6,8 @@
       "id": "rag_transformer_definition_001",
       "input": "Que es un transformer?",
       "use_rag": true,
-      "model": null,
+      "provider": "ollama",
+      "model": "granite4.1:8b",
       "temperature": 0.2,
       "expected_retrieval_status": "EVIDENCE_FOUND",
       "required_source_filenames": [

@@ -33,17 +33,27 @@ def _is_openai_model(model: str) -> bool:
 
 
 def _resolve_ollama_model(model: str | None) -> str:
+    configured_default_model = settings.effective_ollama_model()
     if model is None:
-        return settings.effective_ollama_model()
-
-    selected_model = model.strip()
-    if not selected_model:
-        return settings.effective_ollama_model()
-
+        selected_model = ""
+    else:
+        selected_model = model.strip()
+    if not selected_model and configured_default_model:
+        return configured_default_model
     try:
-        available_models = _list_ollama_models()
+        available_models = sorted(_list_ollama_models(), key=str.casefold)
     except LLMClientError:
-        return selected_model
+        if selected_model:
+            return selected_model
+        raise
+
+    if not selected_model:
+        if available_models:
+            return available_models[0]
+        raise LLMClientError(
+            "llm_model_not_available",
+            "ollama_no_models_available",
+        )
 
     if selected_model in available_models:
         return selected_model
@@ -62,24 +72,15 @@ def _resolve_ollama_model(model: str | None) -> str:
 
 def list_chat_models() -> list[dict[str, object]]:
     items: list[dict[str, object]] = []
-    default_ollama_model = settings.effective_ollama_model()
-    available_ollama_models = _list_ollama_models()
+    available_ollama_models = sorted(_list_ollama_models(), key=str.casefold)
 
-    ordered_ollama_models: list[str] = []
-    if default_ollama_model in available_ollama_models:
-        ordered_ollama_models.append(default_ollama_model)
-
-    for model_name in sorted(available_ollama_models, key=str.casefold):
-        if model_name not in ordered_ollama_models:
-            ordered_ollama_models.append(model_name)
-
-    for model_name in ordered_ollama_models:
+    for model_name in available_ollama_models:
         items.append(
             {
                 "provider": "ollama",
                 "model": model_name,
                 "label": model_name,
-                "is_default": model_name == default_ollama_model,
+                "is_default": False,
             }
         )
 

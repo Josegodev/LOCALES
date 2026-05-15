@@ -59,14 +59,10 @@
             <textarea id="messageInput" rows="5">Que es un transformer?</textarea>
             <label for="modelSelect">Modelo</label>
             <select id="modelSelect">
-              <option value="qwen">qwen</option>
-              <option value="mistral">mistral</option>
-              <option value="granite" selected>granite</option>
-              <option value="llama">llama</option>
-              <option value="gpt-5.5">GPT-5.5</option>
+              <option value="" data-provider="ollama" selected>Carga modelos del backend</option>
             </select>
             <p class="muted-text compact-note">
-              El selector usa los modelos publicados por FastAPI cuando el backend expone <code>/api/models/chat</code>.
+              El contrato de <code>/chat</code> exige un modelo explicito. La UI debe cargarlo desde <code>/api/models/chat</code> o seleccionarlo antes de enviar.
             </p>
             <label class="checkbox">
               <input id="useRagInput" type="checkbox" checked />

@@ -16,7 +16,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("BACKEND_URL", "BACKEND_BASE_URL"),
     )
     ollama_base_url: str = "http://127.0.0.1:11434"
-    ollama_model: str = "granite4.1:8b"
+    ollama_model: str = ""
     ollama_timeout_seconds: float = 45.0
     llm_timeout_seconds: float = 60.0
 
@@ -58,8 +58,9 @@ class Settings(BaseSettings):
             return base_url
         return f"{base_url}/v1"
 
-    def effective_ollama_model(self) -> str:
-        return self.ollama_model
+    def effective_ollama_model(self) -> str | None:
+        normalized_model = self.ollama_model.strip()
+        return normalized_model or None
 
     def effective_ollama_timeout_seconds(self) -> float:
         return self.ollama_timeout_seconds
