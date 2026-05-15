@@ -19,37 +19,18 @@
       <div class="runtime-card">
         <span class="badge ok">Runtime soportado</span>
         <strong>Chat-only + RAG</strong>
-        <small>Telegram y evals legacy quedan fuera del arranque activo.</small>
+        <small>La consola usa la URL indicada en la seccion de conexion.</small>
       </div>
     </header>
 
     <main>
-      <section class="panel">
-        <h2>Contrato activo</h2>
-        <div class="diagram-grid single">
-          <article>
-            <h3>Ruta soportada</h3>
-            <pre>Frontend
-   -> POST /chat
-        -> FastAPI
-             -> RAG retrieval
-             -> provider / model
-                  -> JSON estructurado</pre>
-          </article>
-        </div>
-        <p class="muted-text">
-          Referencia del contrato: <code>docs/contracts/chat_runtime_refactor_contract.md</code>.
-        </p>
-      </section>
-
       <section class="panel control-panel">
         <div>
           <h2>Conexion backend</h2>
           <label for="backendUrl">Backend base URL</label>
-          <input id="backendUrl" type="url" placeholder="http://127.0.0.1:8000" />
+          <input id="backendUrl" type="url" placeholder="https://backend.local" />
         </div>
         <div class="button-row">
-          <button id="healthButton" type="button">Check /health</button>
           <a id="docsLink" class="secondary-button" href="#" target="_blank" rel="noreferrer">Abrir /docs</a>
         </div>
       </section>
@@ -62,172 +43,237 @@
         </p>
       </section>
 
-      <section class="panel">
-        <div class="section-heading-row">
-          <div>
-            <h2>Chat evals</h2>
-            <p class="muted-text">
-              Ejecuta casos contra el contrato estable del chat y persiste el run en <code>evals/runs/</code>.
-            </p>
-          </div>
-          <div class="button-row">
-            <button id="evalRunButton" type="button">Run evals</button>
-          </div>
-        </div>
-        <div id="evalStatus" class="status muted">Sin ejecutar</div>
-        <dl class="metrics wide">
-          <div><dt>run_id</dt><dd id="evalRunId">-</dd></div>
-          <div><dt>run_path</dt><dd id="evalRunPath">-</dd></div>
-          <div><dt>total</dt><dd id="evalTotal">-</dd></div>
-          <div><dt>passed</dt><dd id="evalPassed">-</dd></div>
-          <div><dt>failed</dt><dd id="evalFailed">-</dd></div>
-        </dl>
-        <h3>Fallos</h3>
-        <div id="evalFailures" class="failure-list">
-          <p class="muted-text">Los fallos por caso apareceran aqui.</p>
-        </div>
-        <h3>Raw JSON</h3>
-        <pre id="evalRaw" class="output small">-</pre>
-      </section>
+      <nav class="tab-list" aria-label="Secciones FastAPI">
+        <button class="tab-button active" type="button" data-tab-target="chat" aria-controls="tab-chat" aria-selected="true">Chat</button>
+        <button class="tab-button" type="button" data-tab-target="health" aria-controls="tab-health" aria-selected="false">Health</button>
+        <button class="tab-button" type="button" data-tab-target="evals" aria-controls="tab-evals" aria-selected="false">Run evals</button>
+        <button class="tab-button" type="button" data-tab-target="runs" aria-controls="tab-runs" aria-selected="false">Runs</button>
+        <button class="tab-button" type="button" data-tab-target="endpoints" aria-controls="tab-endpoints" aria-selected="false">Puertas FastAPI</button>
+      </nav>
 
-      <section class="grid-two">
-        <article class="panel">
+      <div id="tab-chat" class="tab-panel active" data-tab-panel="chat">
+        <section class="grid-two">
+          <article class="panel">
+            <h2>Chat / RAG test</h2>
+            <label for="messageInput">Mensaje</label>
+            <textarea id="messageInput" rows="5">Que es un transformer?</textarea>
+            <label for="modelSelect">Modelo</label>
+            <select id="modelSelect">
+              <option value="qwen">qwen</option>
+              <option value="mistral">mistral</option>
+              <option value="granite" selected>granite</option>
+              <option value="llama">llama</option>
+              <option value="gpt-5.5">GPT-5.5</option>
+            </select>
+            <p class="muted-text compact-note">
+              Selector preparado para conectar despues con el contrato del backend.
+            </p>
+            <label class="checkbox">
+              <input id="useRagInput" type="checkbox" checked />
+              use_rag=true
+            </label>
+            <button id="chatButton" type="button">Send</button>
+          </article>
+
+          <article class="panel">
+            <h2>Observabilidad minima</h2>
+            <div class="pill-list">
+              <span>trace_id</span><span>provider</span><span>model</span>
+              <span>tokens_input</span><span>tokens_output</span><span>tokens_total</span>
+              <span>latency_ms</span><span>retrieval_status</span><span>chunk_ids</span>
+              <span>document_ids</span><span>source_filenames</span><span>warnings</span>
+              <span>error_code</span><span>error_message</span>
+            </div>
+          </article>
+        </section>
+
+        <section class="panel">
+          <h2>Respuesta /chat</h2>
+          <div id="chatStatus" class="status muted">Sin ejecutar</div>
+          <dl class="metrics wide">
+            <div><dt>retrieval_status</dt><dd id="retrievalStatus">-</dd></div>
+            <div><dt>evidence_used</dt><dd id="evidenceUsed">-</dd></div>
+            <div><dt>fallback_used</dt><dd id="fallbackUsed">-</dd></div>
+            <div><dt>chunks_found</dt><dd id="chunksFound">-</dd></div>
+            <div><dt>provider/model</dt><dd id="providerModel">-</dd></div>
+            <div><dt>trace_id</dt><dd id="traceId">-</dd></div>
+            <div><dt>latency_ms</dt><dd id="chatLatency">-</dd></div>
+          </dl>
+          <h3>Texto</h3>
+          <pre id="answerText" class="output">La respuesta aparecera aqui.</pre>
+          <h3>Warnings</h3>
+          <pre id="warningsText" class="output small">-</pre>
+          <h3>Raw JSON</h3>
+          <pre id="chatRaw" class="output small">-</pre>
+        </section>
+
+        <section class="panel">
+          <h2>Evidencia recuperada</h2>
+          <div id="evidenceList" class="evidence-list">
+            <p class="muted-text">Si /chat devuelve evidencia documental, se mostrara aqui.</p>
+          </div>
+        </section>
+      </div>
+
+      <div id="tab-health" class="tab-panel" data-tab-panel="health" hidden>
+        <section class="panel">
           <h2>Health</h2>
+          <div class="button-row">
+            <button id="healthButton" type="button">Check /health</button>
+          </div>
           <div id="healthStatus" class="status muted">Sin ejecutar</div>
           <dl class="metrics">
             <div><dt>status</dt><dd id="healthState">-</dd></div>
             <div><dt>latency_ms</dt><dd id="healthLatency">-</dd></div>
           </dl>
           <pre id="healthRaw" class="output">Pulsa el boton para llamar a /health.</pre>
-        </article>
+        </section>
+      </div>
 
-        <article class="panel">
-          <h2>Chat / RAG test</h2>
-          <label for="messageInput">Mensaje</label>
-          <textarea id="messageInput" rows="5">Que es un transformer?</textarea>
-          <label class="checkbox">
-            <input id="useRagInput" type="checkbox" checked />
-            use_rag=true
-          </label>
-          <button id="chatButton" type="button">Send</button>
-        </article>
-      </section>
-
-      <section class="panel">
-        <h2>Respuesta /chat</h2>
-        <div id="chatStatus" class="status muted">Sin ejecutar</div>
-        <dl class="metrics wide">
-          <div><dt>retrieval_status</dt><dd id="retrievalStatus">-</dd></div>
-          <div><dt>evidence_used</dt><dd id="evidenceUsed">-</dd></div>
-          <div><dt>fallback_used</dt><dd id="fallbackUsed">-</dd></div>
-          <div><dt>chunks_found</dt><dd id="chunksFound">-</dd></div>
-          <div><dt>provider/model</dt><dd id="providerModel">-</dd></div>
-          <div><dt>trace_id</dt><dd id="traceId">-</dd></div>
-          <div><dt>latency_ms</dt><dd id="chatLatency">-</dd></div>
-        </dl>
-        <h3>Texto</h3>
-        <pre id="answerText" class="output">La respuesta aparecera aqui.</pre>
-        <h3>Warnings</h3>
-        <pre id="warningsText" class="output small">-</pre>
-        <h3>Raw JSON</h3>
-        <pre id="chatRaw" class="output small">-</pre>
-      </section>
-
-      <section class="panel">
-        <h2>Evidencia recuperada</h2>
-        <div id="evidenceList" class="evidence-list">
-          <p class="muted-text">Si /chat devuelve evidencia documental, se mostrara aqui.</p>
-        </div>
-      </section>
-
-      <section class="panel">
-        <h2>Observabilidad minima</h2>
-        <div class="pill-list">
-          <span>trace_id</span><span>provider</span><span>model</span>
-          <span>tokens_input</span><span>tokens_output</span><span>tokens_total</span>
-          <span>latency_ms</span><span>retrieval_status</span><span>chunk_ids</span>
-          <span>document_ids</span><span>source_filenames</span><span>warnings</span>
-          <span>error_code</span><span>error_message</span>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="section-heading-row">
-          <div>
-            <h2>Trazas /chat</h2>
-            <p class="muted-text">
-              Historial minimo del flujo principal. Solo usa las trazas persistidas del chat.
-            </p>
+      <div id="tab-evals" class="tab-panel" data-tab-panel="evals" hidden>
+        <section class="panel">
+          <div class="section-heading-row">
+            <div>
+              <h2>Chat evals</h2>
+              <p class="muted-text">
+                Ejecuta casos contra el contrato estable del chat y persiste el run en <code>evals/runs/</code>.
+              </p>
+            </div>
+            <div class="button-row">
+              <button id="evalRunButton" type="button">Run evals</button>
+            </div>
           </div>
-          <div class="button-row">
-            <label for="chatTracesLimit">Runs</label>
-            <select id="chatTracesLimit">
-              <option value="10">10</option>
-              <option value="25" selected>25</option>
-              <option value="50">50</option>
-            </select>
-            <button id="chatTracesLoadButton" type="button">Cargar trazas</button>
+          <div id="evalStatus" class="status muted">Sin ejecutar</div>
+          <dl class="metrics wide">
+            <div><dt>run_id</dt><dd id="evalRunId">-</dd></div>
+            <div><dt>run_path</dt><dd id="evalRunPath">-</dd></div>
+            <div><dt>total</dt><dd id="evalTotal">-</dd></div>
+            <div><dt>passed</dt><dd id="evalPassed">-</dd></div>
+            <div><dt>failed</dt><dd id="evalFailed">-</dd></div>
+          </dl>
+          <h3>Fallos</h3>
+          <div id="evalFailures" class="failure-list">
+            <p class="muted-text">Los fallos por caso apareceran aqui.</p>
           </div>
-        </div>
-        <div id="chatTracesStatus" class="status muted">Sin ejecutar</div>
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>created_at</th>
-                <th>status</th>
-                <th>provider</th>
-                <th>model</th>
-                <th>trace_id</th>
-                <th>input</th>
-                <th>response</th>
-                <th>retrieval_status</th>
-                <th>chunk_ids</th>
-                <th>latency_ms</th>
-                <th>error_code</th>
-                <th>error_message</th>
-              </tr>
-            </thead>
-            <tbody id="chatTracesTableBody">
-              <tr><td colspan="12">Pulsa Cargar trazas.</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <pre id="chatTracesRaw" class="output small">-</pre>
-      </section>
+          <h3>Raw JSON</h3>
+          <pre id="evalRaw" class="output small">-</pre>
+        </section>
+      </div>
 
-      <section class="panel">
-        <h2>Comandos operacionales</h2>
-        <div class="command-grid">
-          <article>
-            <h3>Backend</h3>
-            <pre>cd /home/jose-gonzalez-oliva/LOCALES
+      <div id="tab-runs" class="tab-panel" data-tab-panel="runs" hidden>
+        <section class="panel">
+          <div class="section-heading-row">
+            <div>
+              <h2>Runs /chat</h2>
+              <p class="muted-text">
+                Historial minimo del flujo principal. Solo usa las trazas persistidas del chat.
+              </p>
+            </div>
+            <div class="button-row">
+              <label for="chatTracesLimit">Runs</label>
+              <select id="chatTracesLimit">
+                <option value="10">10</option>
+                <option value="25" selected>25</option>
+                <option value="50">50</option>
+              </select>
+              <button id="chatTracesLoadButton" type="button">Cargar runs</button>
+              <button id="chatTracesResetButton" class="secondary-button danger-button" type="button">Reset runs</button>
+            </div>
+          </div>
+          <div id="chatTracesStatus" class="status muted">Sin ejecutar</div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>created_at</th>
+                  <th>status</th>
+                  <th>provider</th>
+                  <th>model</th>
+                  <th>trace_id</th>
+                  <th>input</th>
+                  <th>response</th>
+                  <th>retrieval_status</th>
+                  <th>chunk_ids</th>
+                  <th>latency_ms</th>
+                  <th>error_code</th>
+                  <th>error_message</th>
+                </tr>
+              </thead>
+              <tbody id="chatTracesTableBody">
+                <tr><td colspan="12">Pulsa Cargar runs.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <pre id="chatTracesRaw" class="output small">-</pre>
+        </section>
+      </div>
+
+      <div id="tab-endpoints" class="tab-panel" data-tab-panel="endpoints" hidden>
+        <section class="panel">
+          <h2>Contrato activo</h2>
+          <div class="diagram-grid single">
+            <article>
+              <h3>Ruta soportada</h3>
+              <pre>Frontend
+   -> POST /chat
+        -> FastAPI
+             -> RAG retrieval
+             -> provider / model
+                  -> JSON estructurado</pre>
+            </article>
+          </div>
+          <p class="muted-text">
+            Referencia del contrato: <code>docs/contracts/chat_runtime_refactor_contract.md</code>.
+          </p>
+        </section>
+
+        <section class="panel">
+          <h2>Puertas FastAPI</h2>
+          <div class="endpoint-grid">
+            <article><strong>GET /health</strong><p>Estado basico del backend.</p></article>
+            <article><strong>POST /chat</strong><p>Chat principal con RAG y runtime de modelos.</p></article>
+            <article><strong>GET /api/traces/chat</strong><p>Listado de runs persistidos de chat.</p></article>
+            <article><strong>POST /api/traces/chat/reset</strong><p>Reset controlado de runs de chat.</p></article>
+            <article><strong>GET /api/evals/chat</strong><p>Vista compatible de trazas como evals.</p></article>
+            <article><strong>POST /api/evals/chat/run</strong><p>Ejecuta casos de evaluacion de chat.</p></article>
+            <article><strong>GET /docs</strong><p>Swagger UI generado por FastAPI.</p></article>
+            <article><strong>GET /openapi.json</strong><p>Contrato OpenAPI en JSON.</p></article>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Comandos operacionales</h2>
+          <div class="command-grid">
+            <article>
+              <h3>Backend</h3>
+              <pre>cd /home/jose-gonzalez-oliva/LOCALES
 source .venv/bin/activate
 export APP_ENV=local
-export BACKEND_BASE_URL=http://127.0.0.1:8000
+export BACKEND_BASE_URL=&lt;backend-api-url&gt;
 export OLLAMA_BASE_URL=&lt;model-runtime-url&gt;
 export USE_REMOTE_RAG=false
 export DOCUMENTS_DB_PATH=/home/jose-gonzalez-oliva/LOCALES/DB/chunks/documents.sqlite
-uvicorn app.main:app --host 127.0.0.1 --port 8000</pre>
-          </article>
-          <article>
-            <h3>Frontend</h3>
-            <pre>python -m http.server 3000 --directory frontend</pre>
-          </article>
-          <article>
-            <h3>Smoke /health</h3>
-            <pre>curl http://127.0.0.1:8000/health</pre>
-          </article>
-          <article>
-            <h3>Smoke /chat</h3>
-            <pre>curl -X POST "http://127.0.0.1:8000/chat" -H "Content-Type: application/json" -d "{\"message\":\"Que es un transformer?\",\"use_rag\":true}"</pre>
-          </article>
-          <article>
-            <h3>Run chat evals</h3>
-            <pre>curl -X POST "http://127.0.0.1:8000/api/evals/chat/run"</pre>
-          </article>
-        </div>
-      </section>
+uvicorn app.main:app --host &lt;backend-host&gt; --port &lt;backend-port&gt;</pre>
+            </article>
+            <article>
+              <h3>Frontend</h3>
+              <pre>python -m http.server 3000 --directory frontend</pre>
+            </article>
+            <article>
+              <h3>Smoke /health</h3>
+              <pre>curl &lt;backend-api-url&gt;/health</pre>
+            </article>
+            <article>
+              <h3>Smoke /chat</h3>
+              <pre>curl -X POST "&lt;backend-api-url&gt;/chat" -H "Content-Type: application/json" -d "{\"message\":\"Que es un transformer?\",\"use_rag\":true}"</pre>
+            </article>
+            <article>
+              <h3>Run chat evals</h3>
+              <pre>curl -X POST "&lt;backend-api-url&gt;/api/evals/chat/run"</pre>
+            </article>
+          </div>
+        </section>
+      </div>
     </main>
 
     <script src="./app.js" defer></script>

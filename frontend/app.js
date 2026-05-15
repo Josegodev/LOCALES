@@ -1,6 +1,8 @@
-const DEFAULT_BACKEND_URL = "http://127.0.0.1:8000";
+const DEFAULT_BACKEND_URL = "";
 
 const elements = {
+  tabButtons: document.querySelectorAll("[data-tab-target]"),
+  tabPanels: document.querySelectorAll("[data-tab-panel]"),
   backendUrl: document.querySelector("#backendUrl"),
   docsLink: document.querySelector("#docsLink"),
   healthButton: document.querySelector("#healthButton"),
@@ -18,6 +20,7 @@ const elements = {
   evalFailures: document.querySelector("#evalFailures"),
   evalRaw: document.querySelector("#evalRaw"),
   messageInput: document.querySelector("#messageInput"),
+  modelSelect: document.querySelector("#modelSelect"),
   useRagInput: document.querySelector("#useRagInput"),
   chatButton: document.querySelector("#chatButton"),
   chatStatus: document.querySelector("#chatStatus"),
@@ -34,10 +37,25 @@ const elements = {
   evidenceList: document.querySelector("#evidenceList"),
   chatTracesLimit: document.querySelector("#chatTracesLimit"),
   chatTracesLoadButton: document.querySelector("#chatTracesLoadButton"),
+  chatTracesResetButton: document.querySelector("#chatTracesResetButton"),
   chatTracesStatus: document.querySelector("#chatTracesStatus"),
   chatTracesTableBody: document.querySelector("#chatTracesTableBody"),
   chatTracesRaw: document.querySelector("#chatTracesRaw"),
 };
+
+function setActiveTab(tabName) {
+  elements.tabButtons.forEach((button) => {
+    const isActive = button.dataset.tabTarget === tabName;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+  });
+
+  elements.tabPanels.forEach((panel) => {
+    const isActive = panel.dataset.tabPanel === tabName;
+    panel.classList.toggle("active", isActive);
+    panel.hidden = !isActive;
+  });
+}
 
 function backendBaseUrl() {
   return (elements.backendUrl.value || DEFAULT_BACKEND_URL).trim().replace(/\/+$/, "");
@@ -348,7 +366,7 @@ function normalizeChatTracesPayload(data) {
 function renderChatTraces(items) {
   elements.chatTracesTableBody.innerHTML = "";
   if (!items.length) {
-    elements.chatTracesTableBody.innerHTML = '<tr><td colspan="12">No hay trazas disponibles.</td></tr>';
+    elements.chatTracesTableBody.innerHTML = '<tr><td colspan="12">No hay runs disponibles.</td></tr>';
     return;
   }
 
@@ -384,7 +402,7 @@ function renderChatTraces(items) {
 async function loadChatTraces() {
   updateBackendLinks();
   const limit = selectedChatTracesLimit();
-  setStatus(elements.chatTracesStatus, "Cargando trazas /chat...", "muted");
+  setStatus(elements.chatTracesStatus, "Cargando runs /chat...", "muted");
   elements.chatTracesLoadButton.disabled = true;
   elements.chatTracesTableBody.innerHTML = '<tr><td colspan="12">Cargando...</td></tr>';
   elements.chatTracesRaw.textContent = "-";
@@ -394,13 +412,42 @@ async function loadChatTraces() {
     const items = normalizeChatTracesPayload(data);
     renderChatTraces(items);
     elements.chatTracesRaw.textContent = prettyJson(data);
-    setStatus(elements.chatTracesStatus, `Trazas cargadas: ${items.length} (${latencyMs} ms)`, "ok");
+    setStatus(elements.chatTracesStatus, `Runs cargados: ${items.length} (${latencyMs} ms)`, "ok");
   } catch (error) {
-    setStatus(elements.chatTracesStatus, "Error cargando trazas /chat", "error");
-    elements.chatTracesTableBody.innerHTML = '<tr><td colspan="12">No se pudo cargar el endpoint de trazas.</td></tr>';
+    setStatus(elements.chatTracesStatus, "Error cargando runs /chat", "error");
+    elements.chatTracesTableBody.innerHTML = '<tr><td colspan="12">No se pudo cargar el endpoint de runs.</td></tr>';
     elements.chatTracesRaw.textContent = error.data ? prettyJson(error.data) : visibleChatErrorMessage(error);
   } finally {
     elements.chatTracesLoadButton.disabled = false;
+  }
+}
+
+async function resetChatTraces() {
+  const confirmed = window.confirm("Vas a borrar los runs /chat guardados en el backend. ¿Continuar?");
+  if (!confirmed) {
+    return;
+  }
+
+  updateBackendLinks();
+  setStatus(elements.chatTracesStatus, "Reseteando runs /chat...", "muted");
+  elements.chatTracesResetButton.disabled = true;
+
+  try {
+    const { data, latencyMs } = await backendFetch("/api/traces/chat/reset", {
+      method: "POST",
+    });
+    renderChatTraces([]);
+    elements.chatTracesRaw.textContent = prettyJson(data);
+    setStatus(
+      elements.chatTracesStatus,
+      `Runs reseteados: ${valueOrDash(data.removed_count)} (${latencyMs} ms)`,
+      "ok",
+    );
+  } catch (error) {
+    setStatus(elements.chatTracesStatus, "Error reseteando runs /chat", "error");
+    elements.chatTracesRaw.textContent = error.data ? prettyJson(error.data) : visibleChatErrorMessage(error);
+  } finally {
+    elements.chatTracesResetButton.disabled = false;
   }
 }
 
@@ -467,9 +514,21 @@ if (savedBackendUrl) {
   elements.backendUrl.value = savedBackendUrl;
 }
 
+const savedModel = localStorage.getItem("locales.chatModel");
+if (savedModel && Array.from(elements.modelSelect.options).some((option) => option.value === savedModel)) {
+  elements.modelSelect.value = savedModel;
+}
+
 updateBackendLinks();
+setActiveTab("chat");
+elements.tabButtons.forEach((button) => {
+  button.addEventListener("click", () => setActiveTab(button.dataset.tabTarget));
+});
 elements.backendUrl.addEventListener("change", updateBackendLinks);
 elements.backendUrl.addEventListener("input", updateBackendLinks);
+elements.modelSelect.addEventListener("change", () => {
+  localStorage.setItem("locales.chatModel", elements.modelSelect.value);
+});
 elements.docsLink.addEventListener("click", (event) => {
   if (!backendBaseUrl()) {
     event.preventDefault();
@@ -480,4 +539,5 @@ elements.evalRunButton.addEventListener("click", runChatEvals);
 elements.healthButton.addEventListener("click", checkHealth);
 elements.chatButton.addEventListener("click", sendChat);
 elements.chatTracesLoadButton.addEventListener("click", loadChatTraces);
+elements.chatTracesResetButton.addEventListener("click", resetChatTraces);
 loadChatTraces().catch(() => {});
