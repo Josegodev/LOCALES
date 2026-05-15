@@ -12,11 +12,18 @@ import app.chat_eval_runner as chat_eval_runner
 from app.auth import bearer_scheme, require_chat_access
 from app.config import settings
 from app.rag_client import query_remote_rag
-from app.observability.chat_trace import list_chat_traces, write_chat_trace
+from app.observability.chat_trace import clear_chat_traces, list_chat_traces, write_chat_trace
 from app.observability.logging import get_logger, log_event
 from app.observability.trace import new_trace_id
 from app.llm_client import LLMClientError, ask_chat, resolve_provider_model
-from app.schemas import ChatEvalListResponse, ChatEvalRunResponse, ChatRequest, ChatResponse, ChatTraceListResponse
+from app.schemas import (
+    ChatEvalListResponse,
+    ChatEvalRunResponse,
+    ChatRequest,
+    ChatResponse,
+    ChatTraceListResponse,
+    ChatTraceResetResponse,
+)
 
 NO_EVIDENCE_MARKER = "NO_EVIDENCE_FOR_ANSWER"
 NO_EVIDENCE_EXPLANATION = "No hay evidencia documental suficiente para responder."
@@ -477,6 +484,21 @@ def chat_trace_runs(
     require_chat_access(_, auth_header_present=authorization is not None)
     items = [record.model_dump() for record in list_chat_traces(limit=limit)]
     return {"status": "ok", "items": items, "count": len(items)}
+
+
+@app.post("/api/traces/chat/reset", response_model=ChatTraceResetResponse)
+def reset_chat_trace_runs(
+    _: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    authorization: str | None = Header(default=None),
+) -> dict:
+    require_chat_access(_, auth_header_present=authorization is not None)
+    removed_count = clear_chat_traces()
+    log_event(
+        component="frontend.chat.traces",
+        event="chat_trace_runs_reset",
+        removed_count=removed_count,
+    )
+    return {"status": "ok", "removed_count": removed_count}
 
 
 @app.get("/api/evals/chat", response_model=ChatEvalListResponse)

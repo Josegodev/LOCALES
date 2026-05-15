@@ -1,9 +1,53 @@
 import math
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+class CreateDocumentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str = Field(min_length=32, max_length=36)
+    filename: str = Field(min_length=1, max_length=255)
+    content: str = Field(min_length=1, max_length=100_000)
+    overwrite: Literal[False] = False
+    user_id: int
+    chat_id: int
+
+    @field_validator("request_id")
+    @classmethod
+    def validate_request_id(cls, value: str) -> str:
+        request_id = value.strip()
+        try:
+            parsed = uuid.UUID(request_id)
+        except ValueError as exc:
+            raise ValueError("request_id_invalid") from exc
+
+        if request_id not in {parsed.hex, str(parsed)}:
+            raise ValueError("request_id_invalid")
+
+        return request_id
+
+    @field_validator("filename")
+    @classmethod
+    def validate_filename(cls, value: str) -> str:
+        filename = value.strip()
+        if not filename:
+            raise ValueError("filename_required")
+        if Path(filename).is_absolute() or ".." in filename or "/" in filename or "\\" in filename:
+            raise ValueError("filename_invalid")
+        if Path(filename).suffix.lower() != ".md":
+            raise ValueError("filename_extension_invalid")
+        return filename
+
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("content_required")
+        return value
 
 
 class ChatRequest(BaseModel):
@@ -139,6 +183,11 @@ class ChatTraceListResponse(BaseModel):
     status: str
     items: list[ChatTraceResponse] = Field(default_factory=list)
     count: int
+
+
+class ChatTraceResetResponse(BaseModel):
+    status: str
+    removed_count: int
 
 
 class ChatEvalListResponse(BaseModel):
