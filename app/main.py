@@ -1,24 +1,20 @@
 import re
 import time
 from datetime import datetime, timezone
-from importlib import import_module
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials
 from DB.chunks.document_context import build_document_prompt, detect_source_intent, normalize_terms
-from app.auth import bearer_scheme, require_chat_access, require_dev_token
+from app.auth import bearer_scheme, require_chat_access
 from app.config import settings
 from app.rag_client import query_remote_rag
-from app.observability import list_chat_traces, load_telegram_eval_runs, new_trace_id, write_chat_eval_run
-from app.observability import get_logger, log_event
+from app.observability.chat_trace import list_chat_traces, write_chat_trace
+from app.observability.logging import get_logger, log_event
+from app.observability.trace import new_trace_id
 from app.llm_client import LLMClientError, ask_chat, resolve_provider_model
-from app.schemas import ChatEvalRunResponse, ChatRequest, ChatResponse, ChatTraceListResponse, TelegramEvalRunResponse
-from app.schemas import CreateDocumentRequest, DocumentCreateResponse
-from app.schemas import TelegramConfigUpdateRequest
-from app.document_writer import create_document, DocumentWriteError
-from app.telegram_permissions import TelegramPermissionConfigError, is_telegram_user_allowed
+from app.schemas import ChatEvalListResponse, ChatRequest, ChatResponse, ChatTraceListResponse
 
 NO_EVIDENCE_MARKER = "NO_EVIDENCE_FOR_ANSWER"
 NO_EVIDENCE_EXPLANATION = "No hay evidencia documental suficiente para responder."
@@ -60,7 +56,6 @@ COMMON_QUERY_TERMS = {
 
 
 app = FastAPI(title="Local LLM Gateway")
-_telegram_runtime = None
 
 FRONTEND_DEV_ORIGINS = [
     "http://localhost:3000",
@@ -88,25 +83,6 @@ def _message_preview(text: str, limit: int = 200) -> str:
     if len(normalized) <= limit:
         return normalized
     return normalized[:limit].rstrip() + "..."
-
-
-def _load_telegram_runtime():
-    module = import_module("app.telegram_runtime")
-    return module.telegram_runtime
-
-
-def _get_telegram_runtime():
-    global _telegram_runtime
-    if _telegram_runtime is None:
-        _telegram_runtime = _load_telegram_runtime()
-    return _telegram_runtime
-
-
-def _maybe_stop_telegram_runtime() -> None:
-    global _telegram_runtime
-    if _telegram_runtime is None:
-        return
-    _telegram_runtime.stop()
 
 
 def _chat_trace_source(user_id: int | None, chat_id: int | None) -> str:
@@ -433,7 +409,7 @@ def _extract_chunk_response_data(chunks: list[dict]) -> tuple[list[str], list[in
     return chunk_texts, chunk_ids, document_ids, sorted(source_filenames)
 
 
-def _persist_chat_eval_run(
+def _persist_chat_trace(
     *,
     trace_id: str,
     request: ChatRequest,
@@ -457,7 +433,7 @@ def _persist_chat_eval_run(
     tokens_output: int | float | None,
     tokens_total: int | float | None,
 ) -> None:
-    write_chat_eval_run(
+    write_chat_trace(
         trace_id=trace_id,
         source=_chat_trace_source(request.user_id, request.chat_id),
         input_text=request.message,
@@ -490,15 +466,6 @@ def health() -> dict:
     return {"status": "ok"}
 
 
-@app.get("/api/evals/telegram", response_model=list[TelegramEvalRunResponse])
-def telegram_eval_runs(
-    limit: int = Query(default=100, ge=1, le=1000),
-    _: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-) -> list[dict]:
-    require_dev_token(_)
-    return load_telegram_eval_runs(limit=limit)
-
-
 @app.get("/api/traces/chat", response_model=ChatTraceListResponse)
 def chat_trace_runs(
     limit: int = Query(default=50, ge=1, le=200),
@@ -510,152 +477,27 @@ def chat_trace_runs(
     return {"status": "ok", "items": items, "count": len(items)}
 
 
-@app.get("/api/evals/chat", response_model=list[ChatEvalRunResponse])
-def chat_eval_runs_legacy(
-    limit: int = Query(default=50, ge=1, le=200),
+@app.get("/api/evals/chat", response_model=ChatEvalListResponse)
+def chat_eval_runs(
+    limit: int = Query(default=25),
     _: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     authorization: str | None = Header(default=None),
-) -> list[dict]:
+) -> dict:
     require_chat_access(_, auth_header_present=authorization is not None)
-    return [record.model_dump() for record in list_chat_traces(limit=limit)]
+    normalized_limit = max(1, min(int(limit), 100))
+    items = [record.model_dump() for record in list_chat_traces(limit=normalized_limit)]
+    return {
+        "items": items,
+        "count": len(items),
+        "limit": normalized_limit,
+    }
 
 
 @app.on_event("startup")
 def log_runtime_configuration() -> None:
     configured = str(bool(settings.jose_dev_token)).lower()
     get_logger().info("JOSE_DEV_TOKEN configured: %s", configured)
-    get_logger().info(
-        "Telegram legacy runtime auto-start disabled in main app: %s",
-        str(bool(settings.telegram_enabled)).lower(),
-    )
-
-
-@app.on_event("shutdown")
-def stop_embedded_telegram_on_shutdown() -> None:
-    _maybe_stop_telegram_runtime()
-
-
-@app.get("/telegram/status")
-def telegram_status(_: HTTPAuthorizationCredentials | None = Depends(bearer_scheme)) -> dict:
-    require_dev_token(_)
-    return _get_telegram_runtime().status()
-
-
-@app.get("/telegram/config")
-def telegram_config(_: HTTPAuthorizationCredentials | None = Depends(bearer_scheme)) -> dict:
-    require_dev_token(_)
-    return _get_telegram_runtime().config()
-
-
-@app.post("/telegram/config")
-def telegram_update_config(
-    request: TelegramConfigUpdateRequest,
-    _: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-) -> dict:
-    require_dev_token(_)
-    return _get_telegram_runtime().update_config(
-        model=request.model,
-        temperature=request.temperature,
-        rag_enabled=request.rag_enabled,
-    )
-
-
-@app.post("/telegram/start")
-def telegram_start(_: HTTPAuthorizationCredentials | None = Depends(bearer_scheme)) -> dict:
-    require_dev_token(_)
-    return _get_telegram_runtime().start()
-
-
-@app.post("/telegram/stop")
-def telegram_stop(_: HTTPAuthorizationCredentials | None = Depends(bearer_scheme)) -> dict:
-    require_dev_token(_)
-    return _get_telegram_runtime().stop()
-
-
-@app.post("/documents", response_model=DocumentCreateResponse)
-def create_document_endpoint(
-    request: CreateDocumentRequest,
-    _: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-) -> DocumentCreateResponse:
-    require_dev_token(_)
-    started_at = time.perf_counter()
-    status = "error"
-    reason = "unexpected_error"
-
-    try:
-        if not is_telegram_user_allowed(request.user_id):
-            status = "rejected"
-            reason = "telegram_user_not_allowed"
-            raise HTTPException(
-                status_code=403,
-                detail={
-                    "request_id": request.request_id,
-                    "status": "error",
-                    "code": "telegram_user_not_allowed",
-                    "message": "usuario Telegram no autorizado",
-                },
-            )
-
-        result = create_document(
-            filename=request.filename,
-            content=request.content,
-            request_id=request.request_id,
-            overwrite=False,
-        )
-        status = "created"
-        reason = "created"
-        return DocumentCreateResponse(**result)
-    except TelegramPermissionConfigError as exc:
-        status = "error"
-        reason = "telegram_permission_config_invalid"
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "request_id": request.request_id,
-                "status": "error",
-                "code": "telegram_permission_config_invalid",
-                "message": str(exc),
-            },
-        )
-    except DocumentWriteError as exc:
-        status = "rejected"
-        reason = exc.code
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "request_id": request.request_id,
-                "status": "error",
-                "code": exc.code,
-                "message": exc.detail,
-            },
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        status = "error"
-        reason = "document_write_internal_error"
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "request_id": request.request_id,
-                "status": "error",
-                "code": "document_write_internal_error",
-                "message": str(e),
-            },
-        )
-    finally:
-        log_event(
-            component="fastapi.documents",
-            trace_id=request.request_id,
-            request_id=request.request_id,
-            command="doc.create",
-            user_id=request.user_id,
-            chat_id=request.chat_id,
-            filename=request.filename,
-            status=status,
-            reason=reason,
-            duration_ms=int((time.perf_counter() - started_at) * 1000),
-        )
+    get_logger().info("Chat-only runtime mode enabled for /chat and /health.")
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(
@@ -1010,7 +852,7 @@ def chat(
         trace_warnings = warnings or [item for item in context.get("warnings", []) if isinstance(item, str)]
         trace_latency_ms = int((time.perf_counter() - started_at) * 1000)
         try:
-            _persist_chat_eval_run(
+            _persist_chat_trace(
                 trace_id=trace_id,
                 request=request,
                 final_answer=final_answer,
@@ -1038,7 +880,7 @@ def chat(
                 component="fastapi.chat.trace",
                 event="fastapi.chat.trace.persist_failed",
                 trace_id=trace_id,
-                error_code="chat_eval_persist_failed",
+                error_code="chat_trace_persist_failed",
                 error_message=str(exc),
             )
         log_event(

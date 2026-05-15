@@ -1,9 +1,8 @@
 import math
 import uuid
 from pathlib import Path
-from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class ChatRequest(BaseModel):
@@ -108,88 +107,7 @@ class ErrorResponse(BaseModel):
     code: str
     message: str
 
-class CreateDocumentRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    request_id: str = Field(min_length=32, max_length=36)
-    filename: str = Field(min_length=1, max_length=120)
-    content: str = Field(max_length=100_000)
-    overwrite: Literal[False] = False
-    user_id: int
-    chat_id: int
-
-    @field_validator("request_id")
-    @classmethod
-    def validate_request_id(cls, value: str) -> str:
-        request_id = value.strip()
-        try:
-            parsed = uuid.UUID(request_id)
-        except ValueError as exc:
-            raise ValueError("request_id_invalid") from exc
-
-        if request_id not in {parsed.hex, str(parsed)}:
-            raise ValueError("request_id_invalid")
-
-        return request_id
-
-    @field_validator("filename")
-    @classmethod
-    def validate_filename(cls, value: str) -> str:
-        filename = value.strip()
-
-        if not filename:
-            raise ValueError("filename_required")
-        if Path(filename).is_absolute():
-            raise ValueError("absolute_path_not_allowed")
-        if ".." in filename:
-            raise ValueError("parent_directory_not_allowed")
-        if "/" in filename or "\\" in filename:
-            raise ValueError("path_separator_not_allowed")
-        if Path(filename).suffix.lower() != ".md":
-            raise ValueError("only_markdown_extension_allowed")
-
-        return filename
-
-    @field_validator("content")
-    @classmethod
-    def validate_content(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("content_required")
-        return value
-
-
-class DocumentCreateResponse(BaseModel):
-    request_id: str
-    status: str
-    filename: str
-    path: str
-    chars: int
-    created_at: str
-
-
-DocumentCreateRequest = CreateDocumentRequest
-
-
-class TelegramEvalRunResponse(BaseModel):
-    trace_id: str | None = None
-    created_at: str | None = None
-    source: str | None = None
-    model: str | None = None
-    status: str | None = None
-    retrieval_status: str | None = None
-    latency_ms: float | None = None
-    tokens_input: float | None = None
-    tokens_output: float | None = None
-    tokens_total: float | None = None
-    output_tokens_per_second: float | None = None
-    error_code: str | None = None
-    error_message: str | None = None
-    error_category: str | None = None
-    failed_phase: str | None = None
-    warnings: list | None = None
-
-
-class ChatEvalRunResponse(BaseModel):
+class ChatTraceResponse(BaseModel):
     trace_id: str | None = None
     created_at: str | None = None
     source: str | None = None
@@ -218,13 +136,11 @@ class ChatEvalRunResponse(BaseModel):
 
 class ChatTraceListResponse(BaseModel):
     status: str
-    items: list[ChatEvalRunResponse] = Field(default_factory=list)
+    items: list[ChatTraceResponse] = Field(default_factory=list)
     count: int
 
 
-class TelegramConfigUpdateRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    model: str = Field(min_length=1, max_length=120)
-    temperature: float = Field(ge=0.0, le=1.0)
-    rag_enabled: bool
+class ChatEvalListResponse(BaseModel):
+    items: list[ChatTraceResponse] = Field(default_factory=list)
+    count: int
+    limit: int

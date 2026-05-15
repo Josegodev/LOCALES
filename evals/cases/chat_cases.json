@@ -1,20 +1,24 @@
-[
-  {
-    "id": "chat_no_evidence_random_nonce_a",
-    "input": "Busca evidencia documental sobre el identificador inexistente HARDENING_NONCE_A_7F3K91X y responde.",
-    "expected_contains": ["NO_EVIDENCE_FOR_ANSWER"],
-    "forbidden_contains": ["LM Studio", "OpenAI API"],
-    "min_chars": 10,
-    "max_chars": 200,
-    "notes": "Caso determinista para comprobar el contrato de no-evidencia sin fuga de backend."
-  },
-  {
-    "id": "chat_no_evidence_random_nonce_b",
-    "input": "Necesito datos sobre HARDENING_NONCE_B_Q2L8P44 que no deberia existir en el corpus.",
-    "expected_contains": ["NO_EVIDENCE_FOR_ANSWER"],
-    "forbidden_contains": ["LM Studio", "OpenAI API"],
-    "min_chars": 10,
-    "max_chars": 200,
-    "notes": "Segundo caso determinista para detectar drift operacional sobre el camino de no-evidencia."
-  }
-]
+{
+  "version": "chat_eval_cases.v1",
+  "description": "Chat-only evaluation cases for the /chat runtime. These cases are not executed automatically yet.",
+  "cases": [
+    {
+      "id": "rag_transformer_definition_001",
+      "input": "Que es un transformer?",
+      "use_rag": true,
+      "model": null,
+      "temperature": 0.2,
+      "expected_retrieval_status": "EVIDENCE_FOUND",
+      "required_source_filenames": [
+        "Attention is all yout need.pdf"
+      ],
+      "required_chunk_ids": [],
+      "expected_answer_contains": [
+        "Transformer",
+        "attention"
+      ],
+      "forbidden_terms": [],
+      "notes": "Basic RAG case against Attention Is All You Need."
+    }
+  ]
+}

@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -12,12 +11,9 @@ from app.observability.logging import log_event
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-LEGACY_CHAT_EVAL_RUNS_DIR = REPO_ROOT / "evals" / "runs"
-CHAT_EVAL_RUNS_DIR = LEGACY_CHAT_EVAL_RUNS_DIR
 DEFAULT_CHAT_TRACE_PATH = REPO_ROOT / "data" / "chat_traces.jsonl"
 CHAT_TRACE_SOURCES = {"frontend", "chat"}
 CHAT_TRACE_ENDPOINT = "/chat"
-LEGACY_CHAT_TRACE_PREFIX = "chat_frontend_eval_"
 
 
 def _utc_timestamp(created_at: datetime | None = None) -> datetime:
@@ -232,55 +228,12 @@ def _load_jsonl_chat_traces(*, limit: int, path: Path) -> list[ChatTraceRecord]:
     return records[:limit]
 
 
-def _load_legacy_chat_eval_runs(*, limit: int, base_dir: Path | None = None) -> list[ChatTraceRecord]:
-    resolved_base_dir = base_dir or CHAT_EVAL_RUNS_DIR
-    records: list[ChatTraceRecord] = []
-
-    for path in resolved_base_dir.glob(f"{LEGACY_CHAT_TRACE_PREFIX}*.json"):
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
-            log_event(
-                component="frontend.chat.traces",
-                event="legacy_chat_trace_skipped",
-                level=logging.WARNING,
-                path=str(path),
-                error_code="chat_trace_json_invalid",
-                error_message=str(exc),
-            )
-            continue
-
-        if not isinstance(payload, dict):
-            continue
-
-        if payload.get("source") not in CHAT_TRACE_SOURCES:
-            continue
-
-        try:
-            records.append(normalize_chat_trace_record(payload))
-        except Exception as exc:
-            log_event(
-                component="frontend.chat.traces",
-                event="legacy_chat_trace_skipped",
-                level=logging.WARNING,
-                path=str(path),
-                error_code="chat_trace_record_invalid",
-                error_message=str(exc),
-            )
-
-    records.sort(key=lambda item: item.created_at, reverse=True)
-    return records[:limit]
-
-
 def list_chat_traces(limit: int = 50, *, path: Path | None = None) -> list[ChatTraceRecord]:
     resolved_path = _trace_path(path)
-    records = _load_jsonl_chat_traces(limit=limit, path=resolved_path)
-    if records:
-        return records[:limit]
-    return _load_legacy_chat_eval_runs(limit=limit)
+    return _load_jsonl_chat_traces(limit=limit, path=resolved_path)
 
 
-def write_chat_eval_run(**kwargs: Any) -> None:
+def write_chat_trace(**kwargs: Any) -> None:
     record = ChatTraceRecord(
         trace_id=kwargs["trace_id"],
         created_at=_utc_timestamp(kwargs.get("created_at")).isoformat(),
@@ -311,12 +264,3 @@ def write_chat_eval_run(**kwargs: Any) -> None:
         answer_mode=_nullable_str(kwargs.get("answer_mode")),
     )
     record_chat_trace(record, path=kwargs.get("path"))
-
-
-def load_chat_eval_runs(*, limit: int = 100, base_dir: Path | None = None) -> list[dict[str, Any]]:
-    path = base_dir if isinstance(base_dir, Path) and base_dir.suffix == ".jsonl" else None
-    return [record.model_dump() for record in list_chat_traces(limit=limit, path=path)]
-
-
-def build_chat_eval_path(*args: Any, **kwargs: Any) -> Path:
-    return _trace_path(kwargs.get("path"))
