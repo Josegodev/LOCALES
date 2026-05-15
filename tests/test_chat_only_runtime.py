@@ -15,6 +15,7 @@ class ChatOnlyRuntimeTests(unittest.TestCase):
         self.assertIn("/health", paths)
         self.assertIn("/chat", paths)
         self.assertIn("/api/evals/chat", paths)
+        self.assertIn("/api/evals/chat/run", paths)
         self.assertIn("/api/traces/chat", paths)
         self.assertNotIn("/api/evals/telegram", paths)
         self.assertFalse(any(path.startswith("/telegram") for path in paths))

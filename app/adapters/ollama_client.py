@@ -4,15 +4,6 @@ from app.config import settings
 from app.llm_errors import LLMClientError
 
 
-SYSTEM_PROMPT = """Responde solo con Markdown.
-No incluyas rutas de archivos.
-No incluyas comandos de shell.
-No afirmes que has creado archivos.
-No pidas permisos.
-No devuelvas JSON salvo que el usuario lo pida como contenido documental.
-"""
-
-
 class OllamaClientError(LLMClientError):
     pass
 
@@ -48,67 +39,6 @@ def _error_from_response(response: requests.Response) -> tuple[str, str]:
         return "llm_http_error", error_text
 
     return "llm_http_error", f"Ollama devolvio HTTP {response.status_code}"
-
-
-def generate_markdown(
-    prompt: str,
-    request_id: str,
-    *,
-    requests_module=requests,
-    settings_obj=settings,
-) -> str:
-    if not isinstance(prompt, str) or not prompt.strip():
-        raise OllamaClientError("llm_generation_failed", "prompt_required")
-    if not isinstance(request_id, str) or not request_id.strip():
-        raise OllamaClientError("llm_generation_failed", "request_id_required")
-
-    payload = {
-        "model": _selected_model(settings_obj),
-        "messages": [
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPT,
-            },
-            {
-                "role": "user",
-                "content": prompt,
-            },
-        ],
-        "stream": False,
-        "temperature": settings_obj.temperature,
-    }
-
-    try:
-        response = requests_module.post(
-            _chat_completions_url(settings_obj),
-            json=payload,
-            timeout=_timeout_seconds(settings_obj),
-        )
-    except requests.exceptions.ConnectionError as exc:
-        raise OllamaClientError("llm_unavailable", "Ollama no disponible") from exc
-    except requests.exceptions.Timeout as exc:
-        raise OllamaClientError("llm_timeout", "Ollama ha agotado el tiempo de respuesta") from exc
-    except requests.exceptions.RequestException as exc:
-        raise OllamaClientError("llm_generation_failed", str(exc)) from exc
-
-    if response.status_code != 200:
-        code, message = _error_from_response(response)
-        if code == "llm_model_not_available":
-            raise OllamaClientError(code, message)
-        raise OllamaClientError("llm_generation_failed", message)
-
-    try:
-        data = response.json()
-        content = data["choices"][0]["message"]["content"]
-    except ValueError as exc:
-        raise OllamaClientError("llm_invalid_json", "ollama_invalid_json") from exc
-    except (KeyError, IndexError, TypeError) as exc:
-        raise OllamaClientError("llm_invalid_response", "ollama_invalid_response") from exc
-
-    if not isinstance(content, str):
-        raise OllamaClientError("llm_invalid_response", "ollama_content_not_text")
-
-    return content
 
 
 def ask_chat(

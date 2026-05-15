@@ -3,61 +3,53 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>LOCALES / NUCLEO - Local AI Runtime Console</title>
+    <title>LOCALES / NUCLEO - Chat Runtime Console</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <header class="hero">
       <div>
-        <p class="eyebrow">Consola operacional frontend/client</p>
-        <h1>LOCALES / NUCLEO - Local AI Runtime Console</h1>
+        <p class="eyebrow">Consola chat-only</p>
+        <h1>LOCALES / NUCLEO - Chat Runtime Console</h1>
         <p class="lead">
-          Panel ligero para explicar, probar y diagnosticar el runtime local:
-          Backend API, RAG local, runtime de modelos y cliente web.
+          Baseline operativo reducido al flujo confirmado:
+          frontend -> FastAPI -> /chat -> RAG -> provider local -> JSON.
         </p>
       </div>
       <div class="runtime-card">
-        <span class="badge ok">Runtime principal</span>
-        <strong>Backend configurado</strong>
-        <small>La consola usara la URL indicada en la seccion de conexion.</small>
+        <span class="badge ok">Runtime soportado</span>
+        <strong>Chat-only + RAG</strong>
+        <small>Telegram y evals legacy quedan fuera del arranque activo.</small>
       </div>
     </header>
 
     <main>
-      <nav class="tab-list" aria-label="Modos operativos">
-        <button class="tab-button active" type="button" data-tab-target="principal" aria-controls="tab-principal" aria-selected="true">Principal</button>
-        <button class="tab-button" type="button" data-tab-target="chat-runs" aria-controls="tab-chat-runs" aria-selected="false">Runs /chat</button>
-      </nav>
-
-      <div id="tab-principal" class="tab-panel active" data-tab-panel="principal">
       <section class="panel">
-        <h2>Arquitectura actual</h2>
-        <p>
-          El runtime de IA se organiza por roles. El Backend API funciona como
-          capa de control, el RAG local recupera evidencia desde documentos y el
-          runtime de modelos genera respuestas. Cada peticion enviada desde esta
-          consola a <code>/chat</code> debe quedar registrada como run del backend.
-          El frontend no lee SQLite, PDFs ni chunks directamente.
-        </p>
+        <h2>Contrato activo</h2>
         <div class="diagram-grid single">
           <article>
-            <h3>Modo principal</h3>
+            <h3>Ruta soportada</h3>
             <pre>Frontend
-   -> Backend API
-        -> RAG local
-        -> Runtime de modelos</pre>
+   -> POST /chat
+        -> FastAPI
+             -> RAG retrieval
+             -> provider / model
+                  -> JSON estructurado</pre>
           </article>
         </div>
+        <p class="muted-text">
+          Referencia del contrato: <code>docs/contracts/chat_runtime_refactor_contract.md</code>.
+        </p>
       </section>
 
       <section class="panel control-panel">
         <div>
           <h2>Conexion backend</h2>
           <label for="backendUrl">Backend base URL</label>
-          <input id="backendUrl" type="url" placeholder="https://backend.local" />
+          <input id="backendUrl" type="url" placeholder="http://127.0.0.1:8000" />
         </div>
         <div class="button-row">
-          <button id="healthButton" type="button">Check FastAPI health</button>
+          <button id="healthButton" type="button">Check /health</button>
           <a id="docsLink" class="secondary-button" href="#" target="_blank" rel="noreferrer">Abrir /docs</a>
         </div>
       </section>
@@ -65,17 +57,45 @@
       <section class="panel">
         <h2>Autenticacion navegador</h2>
         <p class="muted-text">
-          El navegador no gestiona tokens operacionales. El acceso a <code>/chat</code> y
-          <code>/api/traces/chat</code> depende del modo configurado en el backend.
+          El navegador no envia tokens operacionales. El acceso a <code>/chat</code> y
+          <code>/api/traces/chat</code> depende de <code>CHAT_AUTH_MODE</code> en el backend.
         </p>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading-row">
+          <div>
+            <h2>Chat evals</h2>
+            <p class="muted-text">
+              Ejecuta casos contra el contrato estable del chat y persiste el run en <code>evals/runs/</code>.
+            </p>
+          </div>
+          <div class="button-row">
+            <button id="evalRunButton" type="button">Run evals</button>
+          </div>
+        </div>
+        <div id="evalStatus" class="status muted">Sin ejecutar</div>
+        <dl class="metrics wide">
+          <div><dt>run_id</dt><dd id="evalRunId">-</dd></div>
+          <div><dt>run_path</dt><dd id="evalRunPath">-</dd></div>
+          <div><dt>total</dt><dd id="evalTotal">-</dd></div>
+          <div><dt>passed</dt><dd id="evalPassed">-</dd></div>
+          <div><dt>failed</dt><dd id="evalFailed">-</dd></div>
+        </dl>
+        <h3>Fallos</h3>
+        <div id="evalFailures" class="failure-list">
+          <p class="muted-text">Los fallos por caso apareceran aqui.</p>
+        </div>
+        <h3>Raw JSON</h3>
+        <pre id="evalRaw" class="output small">-</pre>
       </section>
 
       <section class="grid-two">
         <article class="panel">
-          <h2>Health panel</h2>
+          <h2>Health</h2>
           <div id="healthStatus" class="status muted">Sin ejecutar</div>
           <dl class="metrics">
-            <div><dt>Status</dt><dd id="healthState">-</dd></div>
+            <div><dt>status</dt><dd id="healthState">-</dd></div>
             <div><dt>latency_ms</dt><dd id="healthLatency">-</dd></div>
           </dl>
           <pre id="healthRaw" class="output">Pulsa el boton para llamar a /health.</pre>
@@ -116,171 +136,100 @@
       <section class="panel">
         <h2>Evidencia recuperada</h2>
         <div id="evidenceList" class="evidence-list">
-          <p class="muted-text">Si /chat devuelve chunks, source_filenames, chunk_ids, document_ids o scores, se mostraran aqui.</p>
+          <p class="muted-text">Si /chat devuelve evidencia documental, se mostrara aqui.</p>
         </div>
       </section>
 
       <section class="panel">
-        <h2>Campos de observabilidad</h2>
+        <h2>Observabilidad minima</h2>
         <div class="pill-list">
-          <span>trace_id / request_id</span><span>timestamp</span><span>provider</span><span>model</span>
-          <span>input/output tokens</span><span>latency_ms</span><span>retrieval_status</span>
-          <span>chunks_found</span><span>evidence_used</span><span>fallback_used</span>
-          <span>warnings</span><span>error_type/error_code</span><span>cost estimate</span>
+          <span>trace_id</span><span>provider</span><span>model</span>
+          <span>tokens_input</span><span>tokens_output</span><span>tokens_total</span>
+          <span>latency_ms</span><span>retrieval_status</span><span>chunk_ids</span>
+          <span>document_ids</span><span>source_filenames</span><span>warnings</span>
+          <span>error_code</span><span>error_message</span>
         </div>
       </section>
 
       <section class="panel">
-        <h2>Que se ha construido</h2>
-        <div class="timeline">
-          <span>Runtime local de modelos</span>
-          <span>Backend FastAPI</span>
-          <span>Chunking documental en SQLite</span>
-          <span>RAG sobre documents.sqlite</span>
-          <span>Trazas de evidencia y fallback</span>
-          <span>Hardening del esquema SQLite</span>
-          <span>Linux como runtime principal</span>
-          <span>Frontend como cliente del backend</span>
-          <span>Persistencia de runs /chat</span>
+        <div class="section-heading-row">
+          <div>
+            <h2>Trazas /chat</h2>
+            <p class="muted-text">
+              Historial minimo del flujo principal. Solo usa las trazas persistidas del chat.
+            </p>
+          </div>
+          <div class="button-row">
+            <label for="chatTracesLimit">Runs</label>
+            <select id="chatTracesLimit">
+              <option value="10">10</option>
+              <option value="25" selected>25</option>
+              <option value="50">50</option>
+            </select>
+            <button id="chatTracesLoadButton" type="button">Cargar trazas</button>
+          </div>
         </div>
+        <div id="chatTracesStatus" class="status muted">Sin ejecutar</div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>created_at</th>
+                <th>status</th>
+                <th>provider</th>
+                <th>model</th>
+                <th>trace_id</th>
+                <th>input</th>
+                <th>response</th>
+                <th>retrieval_status</th>
+                <th>chunk_ids</th>
+                <th>latency_ms</th>
+                <th>error_code</th>
+                <th>error_message</th>
+              </tr>
+            </thead>
+            <tbody id="chatTracesTableBody">
+              <tr><td colspan="12">Pulsa Cargar trazas.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <pre id="chatTracesRaw" class="output small">-</pre>
       </section>
 
       <section class="panel">
         <h2>Comandos operacionales</h2>
         <div class="command-grid">
           <article>
-            <h3>Linux FastAPI primary runtime</h3>
+            <h3>Backend</h3>
             <pre>cd /home/jose-gonzalez-oliva/LOCALES
 source .venv/bin/activate
 export APP_ENV=local
-export BACKEND_BASE_URL=&lt;backend-api-url&gt;
+export BACKEND_BASE_URL=http://127.0.0.1:8000
 export OLLAMA_BASE_URL=&lt;model-runtime-url&gt;
 export USE_REMOTE_RAG=false
 export DOCUMENTS_DB_PATH=/home/jose-gonzalez-oliva/LOCALES/DB/chunks/documents.sqlite
-uvicorn app.main:app --host &lt;backend-host&gt; --port &lt;backend-port&gt;</pre>
+uvicorn app.main:app --host 127.0.0.1 --port 8000</pre>
           </article>
           <article>
-            <h3>Frontend test</h3>
-            <pre>curl.exe &lt;backend-api-url&gt;/health</pre>
+            <h3>Frontend</h3>
+            <pre>python -m http.server 3000 --directory frontend</pre>
           </article>
           <article>
-            <h3>RAG test</h3>
-            <pre>curl.exe -X POST "&lt;backend-api-url&gt;/chat" -H "Content-Type: application/json" -d "{\"message\":\"Que es un transformer?\",\"use_rag\":true}"</pre>
+            <h3>Smoke /health</h3>
+            <pre>curl http://127.0.0.1:8000/health</pre>
+          </article>
+          <article>
+            <h3>Smoke /chat</h3>
+            <pre>curl -X POST "http://127.0.0.1:8000/chat" -H "Content-Type: application/json" -d "{\"message\":\"Que es un transformer?\",\"use_rag\":true}"</pre>
+          </article>
+          <article>
+            <h3>Run chat evals</h3>
+            <pre>curl -X POST "http://127.0.0.1:8000/api/evals/chat/run"</pre>
           </article>
         </div>
       </section>
-
-      <section class="panel">
-        <h2>Diagnostico de fallos</h2>
-        <div class="failure-grid">
-          <article><strong>Connection refused</strong><p>El servicio no esta escuchando en ese puerto.</p></article>
-          <article><strong>Timeout</strong><p>Firewall, IP incorrecta, ruta de red o servicio no accesible.</p></article>
-          <article><strong>CORS error</strong><p>El origen del frontend no esta permitido por el Backend API.</p></article>
-          <article><strong>NO_EVIDENCE_FOR_ANSWER</strong><p>RAG no encontro evidencia usable; el fallback puede responder con conocimiento del modelo.</p></article>
-          <article><strong>Run no aparece</strong><p>Revisa que el backend tenga ruta de trazas escribible y que <code>/api/traces/chat</code> responda.</p></article>
-          <article><strong>sqlite no such table documents</strong><p>Fallo antiguo ya protegido; si reaparece indica DB o esquema invalido.</p></article>
-        </div>
-      </section>
-      </div>
-
-      <div id="tab-chat-runs" class="tab-panel" data-tab-panel="chat-runs" hidden>
-        <section class="panel">
-          <div class="section-heading-row">
-            <div>
-              <h2>Runs /chat</h2>
-              <p class="muted-text">
-                Historial minimo del flujo principal. Cada envio desde el panel
-                <code>Chat / RAG test</code> llama a <code>/chat</code> y luego refresca
-                <code>/api/traces/chat?limit=&lt;limite&gt;</code>.
-              </p>
-            </div>
-            <div class="inline-controls">
-              <label for="chatEvalsLimit">Runs</label>
-              <select id="chatEvalsLimit">
-                <option value="10">10</option>
-                <option value="25">25</option>
-                <option value="50">50</option>
-                <option value="100" selected>100</option>
-              </select>
-              <button id="chatEvalsLoadButton" type="button">Cargar runs</button>
-              <button id="chatRunsResetButton" class="secondary-button danger-button" type="button">Reset runs</button>
-            </div>
-          </div>
-          <div id="chatEvalsStatus" class="status muted">Sin ejecutar</div>
-        </section>
-
-        <section class="panel">
-          <div class="section-heading-row">
-            <div>
-              <h2>KPIs</h2>
-              <p class="muted-text">Runs /chat frontend v1</p>
-            </div>
-          </div>
-          <div id="chatRunsKpis" class="metrics evals-kpis">
-            <div>
-              <span>total_runs</span>
-              <strong id="chatRunTotal">-</strong>
-            </div>
-            <div>
-              <span>ok_runs</span>
-              <strong id="chatRunOk">-</strong>
-            </div>
-            <div class="kpi-error">
-              <span>error_runs</span>
-              <strong id="chatRunError">-</strong>
-            </div>
-            <div>
-              <span>error_rate_percent</span>
-              <strong id="chatRunErrorRate">-</strong>
-            </div>
-            <div>
-              <span>avg_latency_ms</span>
-              <strong id="chatRunAvgLatency">-</strong>
-            </div>
-            <div>
-              <span>evidence_found_rate_percent</span>
-              <strong id="chatRunEvidenceRate">-</strong>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel">
-          <h2>Tabla</h2>
-          <div class="table-wrap">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>created_at</th>
-                  <th>status</th>
-                  <th>provider</th>
-                  <th>model</th>
-                  <th>trace_id</th>
-                  <th>input</th>
-                  <th>response</th>
-                  <th>retrieval_status</th>
-                  <th>chunk_ids</th>
-                  <th>latency_ms</th>
-                  <th>tokens_input</th>
-                  <th>tokens_output</th>
-                  <th>tokens_total</th>
-                  <th>error_code</th>
-                  <th>error_message</th>
-                </tr>
-              </thead>
-              <tbody id="chatEvalsTableBody">
-                <tr><td colspan="15">Pulsa Cargar runs.</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section class="panel">
-          <h2>Raw</h2>
-          <pre id="chatEvalsRaw" class="output small">-</pre>
-        </section>
-      </div>
     </main>
 
-    <script src="./app.js"></script>
+    <script src="./app.js" defer></script>
   </body>
 </html>

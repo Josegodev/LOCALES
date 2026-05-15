@@ -5,7 +5,7 @@ from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import settings
-from app.observability import log_event
+from app.observability.logging import log_event
 
 bearer_scheme = HTTPBearer(auto_error=False)
 

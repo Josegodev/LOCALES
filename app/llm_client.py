@@ -6,10 +6,7 @@ from app.adapters.openai_client import (
     ask_chat as _ask_openai_chat,
     resolve_model as _resolve_openai_model,
 )
-from app.adapters.ollama_client import (
-    ask_chat as _ask_chat,
-    generate_markdown as _generate_markdown,
-)
+from app.adapters.ollama_client import ask_chat as _ask_chat
 from app.config import settings
 from app.llm_errors import LLMClientError as BaseLLMClientError
 
@@ -20,15 +17,6 @@ CHAT_SYSTEM_PROMPT = (
     "tu función es responder a las preguntas de forma clara y concisa. "
     "Si no sabes la respuesta, di que no lo sabes."
 )
-
-
-def generate_markdown(prompt: str, request_id: str) -> str:
-    return _generate_markdown(
-        prompt,
-        request_id,
-        requests_module=requests,
-        settings_obj=settings,
-    )
 
 
 def _normalize_model_name(model: str | None) -> str | None:

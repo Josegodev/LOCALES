@@ -6,15 +6,17 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials
+from pydantic import ValidationError
 from DB.chunks.document_context import build_document_prompt, detect_source_intent, normalize_terms
+import app.chat_eval_runner as chat_eval_runner
 from app.auth import bearer_scheme, require_chat_access
 from app.config import settings
 from app.rag_client import query_remote_rag
-from app.observability.chat_trace import clear_chat_traces, list_chat_traces, write_chat_trace
+from app.observability.chat_trace import list_chat_traces, write_chat_trace
 from app.observability.logging import get_logger, log_event
 from app.observability.trace import new_trace_id
 from app.llm_client import LLMClientError, ask_chat, resolve_provider_model
-from app.schemas import ChatEvalListResponse, ChatRequest, ChatResponse, ChatTraceListResponse, ChatTraceResetResponse
+from app.schemas import ChatEvalListResponse, ChatEvalRunResponse, ChatRequest, ChatResponse, ChatTraceListResponse
 
 NO_EVIDENCE_MARKER = "NO_EVIDENCE_FOR_ANSWER"
 NO_EVIDENCE_EXPLANATION = "No hay evidencia documental suficiente para responder."
@@ -477,21 +479,6 @@ def chat_trace_runs(
     return {"status": "ok", "items": items, "count": len(items)}
 
 
-@app.post("/api/traces/chat/reset", response_model=ChatTraceResetResponse)
-def reset_chat_trace_runs(
-    _: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-    authorization: str | None = Header(default=None),
-) -> dict:
-    require_chat_access(_, auth_header_present=authorization is not None)
-    removed_count = clear_chat_traces()
-    log_event(
-        component="frontend.chat.traces",
-        event="chat_trace_runs_reset",
-        removed_count=removed_count,
-    )
-    return {"status": "ok", "removed_count": removed_count}
-
-
 @app.get("/api/evals/chat", response_model=ChatEvalListResponse)
 def chat_eval_runs(
     limit: int = Query(default=25),
@@ -508,6 +495,78 @@ def chat_eval_runs(
     }
 
 
+def _execute_chat_eval_case(payload: dict[str, object]) -> dict[str, object]:
+    try:
+        request = ChatRequest.model_validate(payload)
+    except ValidationError as exc:
+        return chat_eval_runner.normalize_chat_result(
+            {
+                "detail": {
+                    "status": "error",
+                    "code": "invalid_eval_case_payload",
+                    "message": str(exc),
+                    "retrieval_status": None,
+                    "chunk_ids": [],
+                    "document_ids": [],
+                    "source_filenames": [],
+                }
+            },
+            http_status=400,
+        )
+
+    try:
+        response = _run_chat_request(request, persist_trace=False)
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {"status": "error", "message": str(exc.detail)}
+        return chat_eval_runner.normalize_chat_result({"detail": detail}, http_status=exc.status_code)
+
+    return chat_eval_runner.normalize_chat_result(response.model_dump(), http_status=200)
+
+
+@app.post("/api/evals/chat/run", response_model=ChatEvalRunResponse)
+def run_chat_eval_suite(
+    _: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    authorization: str | None = Header(default=None),
+) -> dict:
+    require_chat_access(_, auth_header_present=authorization is not None)
+    try:
+        run_payload, output_path, _ = chat_eval_runner.run_chat_evals(
+            base_url=settings.backend_base_url(),
+            cases_path_str=chat_eval_runner.DEFAULT_CASES_PATH,
+            baseline_path_str=chat_eval_runner.DEFAULT_BASELINE_PATH,
+            out_dir_str=chat_eval_runner.DEFAULT_OUT_DIR,
+            timeout=chat_eval_runner.DEFAULT_TIMEOUT,
+            limit=None,
+            source="frontend",
+            request_case_fn=_execute_chat_eval_case,
+        )
+    except chat_eval_runner.RunnerConfigError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "status": "error",
+                "code": "chat_eval_config_error",
+                "message": str(exc),
+            },
+        ) from exc
+
+    try:
+        run_path = str(output_path.relative_to(chat_eval_runner.REPO_ROOT))
+    except ValueError:
+        run_path = str(output_path)
+
+    return {
+        "status": "ok",
+        "run_id": run_payload["run_id"],
+        "run_path": run_path,
+        "source": run_payload["source"],
+        "cases_file": run_payload["cases_file"],
+        "baseline_file": run_payload["baseline_file"],
+        "summary": run_payload["summary"],
+        "results": run_payload["results"],
+    }
+
+
 @app.on_event("startup")
 def log_runtime_configuration() -> None:
     configured = str(bool(settings.jose_dev_token)).lower()
@@ -521,6 +580,14 @@ def chat(
     authorization: str | None = Header(default=None),
 ) -> ChatResponse:
     require_chat_access(_, auth_header_present=authorization is not None)
+    return _run_chat_request(request)
+
+
+def _run_chat_request(
+    request: ChatRequest,
+    *,
+    persist_trace: bool = True,
+) -> ChatResponse:
     trace_id = request.trace_id or new_trace_id()
     started_at = time.perf_counter()
     status = "error"
@@ -866,38 +933,39 @@ def chat(
         )
         trace_warnings = warnings or [item for item in context.get("warnings", []) if isinstance(item, str)]
         trace_latency_ms = int((time.perf_counter() - started_at) * 1000)
-        try:
-            _persist_chat_trace(
-                trace_id=trace_id,
-                request=request,
-                final_answer=final_answer,
-                provider=provider,
-                model=model,
-                status=status,
-                retrieval_status=retrieval_status,
-                chunk_ids=trace_chunk_ids,
-                document_ids=context.get("document_ids", []),
-                source_filenames=context.get("source_filenames", []),
-                latency_ms=trace_latency_ms,
-                error_code=error_code,
-                error_message=error_message,
-                warnings=trace_warnings,
-                use_rag=use_rag,
-                evidence_used=evidence_used,
-                fallback_used=fallback_used,
-                answer_mode=answer_mode,
-                tokens_input=llm_metrics["tokens_input"],
-                tokens_output=llm_metrics["tokens_output"],
-                tokens_total=llm_metrics["tokens_total"],
-            )
-        except Exception as exc:
-            log_event(
-                component="fastapi.chat.trace",
-                event="fastapi.chat.trace.persist_failed",
-                trace_id=trace_id,
-                error_code="chat_trace_persist_failed",
-                error_message=str(exc),
-            )
+        if persist_trace:
+            try:
+                _persist_chat_trace(
+                    trace_id=trace_id,
+                    request=request,
+                    final_answer=final_answer,
+                    provider=provider,
+                    model=model,
+                    status=status,
+                    retrieval_status=retrieval_status,
+                    chunk_ids=trace_chunk_ids,
+                    document_ids=context.get("document_ids", []),
+                    source_filenames=context.get("source_filenames", []),
+                    latency_ms=trace_latency_ms,
+                    error_code=error_code,
+                    error_message=error_message,
+                    warnings=trace_warnings,
+                    use_rag=use_rag,
+                    evidence_used=evidence_used,
+                    fallback_used=fallback_used,
+                    answer_mode=answer_mode,
+                    tokens_input=llm_metrics["tokens_input"],
+                    tokens_output=llm_metrics["tokens_output"],
+                    tokens_total=llm_metrics["tokens_total"],
+                )
+            except Exception as exc:
+                log_event(
+                    component="fastapi.chat.trace",
+                    event="fastapi.chat.trace.persist_failed",
+                    trace_id=trace_id,
+                    error_code="chat_trace_persist_failed",
+                    error_message=str(exc),
+                )
         log_event(
             component="fastapi.chat",
             event="fastapi.chat.completed" if status == "ok" else "fastapi.chat.failed",

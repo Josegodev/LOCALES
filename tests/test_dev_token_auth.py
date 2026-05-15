@@ -15,17 +15,14 @@ class DevTokenAuthTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ok"})
 
-    def test_startup_does_not_auto_start_telegram_runtime(self):
+    def test_startup_logs_chat_only_runtime_mode(self):
         with patch("app.main.settings.jose_dev_token", "test-dev-token"):
             with patch("app.main.get_logger") as get_logger:
                 with TestClient(app):
                     pass
 
         get_logger.return_value.info.assert_any_call("JOSE_DEV_TOKEN configured: %s", "true")
-        get_logger.return_value.info.assert_any_call(
-            "Telegram legacy runtime auto-start disabled in main app: %s",
-            "false",
-        )
+        get_logger.return_value.info.assert_any_call("Chat-only runtime mode enabled for /chat and /health.")
 
     def test_chat_local_open_accepts_request_without_token(self):
         with patch("app.auth.settings.chat_auth_mode", "local_open"):
@@ -116,13 +113,6 @@ class DevTokenAuthTests(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
         self.assertEqual(response.json()["detail"]["code"], "dev_token_not_configured")
 
-    def test_operational_eval_endpoint_still_requires_token(self):
-        with patch("app.auth.settings.jose_dev_token", "test-dev-token"):
-            response = TestClient(app).get("/api/evals/telegram?limit=1")
-
-        self.assertEqual(response.status_code, 401)
-        self.assertEqual(response.json()["detail"]["code"], "invalid_token")
-
     def test_chat_trace_endpoint_is_open_in_local_open_mode(self):
         with patch("app.auth.settings.chat_auth_mode", "local_open"):
             response = TestClient(app).get("/api/traces/chat?limit=1")
@@ -136,6 +126,16 @@ class DevTokenAuthTests(unittest.TestCase):
 
         self.assertNotIn("JOSE_DEV_TOKEN", frontend_js)
         self.assertNotIn("JOSE_DEV_TOKEN", frontend_html)
+
+    def test_frontend_files_do_not_reference_telegram_endpoints(self):
+        frontend_js = Path("/home/jose-gonzalez-oliva/LOCALES/frontend/app.js").read_text(encoding="utf-8")
+        frontend_html = Path("/home/jose-gonzalez-oliva/LOCALES/frontend/index.html").read_text(encoding="utf-8")
+
+        self.assertNotIn("/telegram/", frontend_js)
+        self.assertNotIn("/api/evals/telegram", frontend_js)
+        self.assertIn("/api/evals/chat/run", frontend_js)
+        self.assertNotIn("Telegram legacy", frontend_html)
+        self.assertNotIn("Telegram Evals", frontend_html)
 
 
 if __name__ == "__main__":

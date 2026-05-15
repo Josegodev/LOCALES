@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from app.config import settings
-from app.observability import log_event
+from app.observability.logging import log_event
 
 
 BASE_DIR = Path(__file__).resolve().parent

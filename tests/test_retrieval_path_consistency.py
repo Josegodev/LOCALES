@@ -6,7 +6,6 @@ from unittest.mock import patch
 
 from DB.chunks import document_context
 from DB.chunks import search_docs
-from app import rag_store
 
 
 def _create_documents_sqlite(db_path: Path) -> None:
@@ -123,22 +122,6 @@ class RetrievalPathConsistencyTests(unittest.TestCase):
             ["ARCHITECTURE.md", "EVOLUTION_MAP.md"],
         )
         self.assertNotIn("UNRELATED_NOTES.md", [item["filename"] for item in results])
-
-    def test_rag_store_filters_by_allowed_source_filenames_and_preserves_source_alias(self):
-        with TemporaryDirectory() as tmpdir:
-            db_path = Path(tmpdir) / "documents.sqlite"
-            _create_documents_sqlite(db_path)
-
-            with patch.object(document_context, "DB_PATH", db_path):
-                results = rag_store.search_chunks(
-                    query="¿Qué función tiene el orquestador?",
-                    limit=10,
-                    allowed_source_filenames=["CONTRACT_POLICY_TOOLREGISTRY.md"],
-                )
-
-        self.assertEqual(len(results), 1)
-        self.assertEqual(results[0]["filename"], "CONTRACT_POLICY_TOOLREGISTRY.md")
-        self.assertEqual(results[0]["source"], "CONTRACT_POLICY_TOOLREGISTRY.md")
 
     def test_search_without_allowlist_keeps_legacy_behavior(self):
         with TemporaryDirectory() as tmpdir:

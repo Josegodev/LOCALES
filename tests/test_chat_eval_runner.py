@@ -150,9 +150,9 @@ class ChatEvalRunnerTests(unittest.TestCase):
 
     def test_run_summary_counts_total_passed_failed_errors_correctly(self):
         results = [
-            {"passed": True, "status": "ok"},
-            {"passed": False, "status": "ok"},
-            {"passed": False, "status": "error"},
+            {"passed": True, "status": "passed", "chat_status": "ok"},
+            {"passed": False, "status": "failed", "chat_status": "ok"},
+            {"passed": False, "status": "failed", "chat_status": "error"},
         ]
 
         summary = runner.summarize_results(results)
@@ -170,6 +170,7 @@ class ChatEvalRunnerTests(unittest.TestCase):
             run_id="run_1",
             created_at=created_at.isoformat(),
             base_url="http://127.0.0.1:8000",
+            source="cli",
             cases_path="evals/cases/chat_cases.json",
             baseline_path="evals/baselines/chat_baseline.json",
             results=[],
@@ -180,6 +181,9 @@ class ChatEvalRunnerTests(unittest.TestCase):
         self.assertIn("summary", payload)
         self.assertIn("results", payload)
         self.assertIn("run_id", payload)
+        self.assertEqual(payload["source"], "cli")
+        self.assertEqual(payload["cases_file"], "evals/cases/chat_cases.json")
+        self.assertEqual(payload["baseline_file"], "evals/baselines/chat_baseline.json")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,43 @@
+-Revisado el endponit del chat. En la función:
+
+async function sendChat() {
+  updateBackendLinks();
+  setChatPending(true);
+  const payload = {
+    message: elements.messageInput.value.trim(),
+    use_rag: elements.useRagInput.checked,
+  };
+}
+
+El usuario introduce manualmente el modelo. (Queremos un desplegable).
+
+CRITICAL potencial
+
+Antes de añadir UI hay que comprobar si /chat acepta campos extra.
+
+Si FastAPI tiene un schema estricto como:
+
+class ChatRequest(BaseModel):
+    message: str
+    use_rag: bool = True
+
+y tú mandas:
+
+{
+  "message": "...",
+  "use_rag": true,
+  "generation": {
+    "provider": "ollama",
+    "model": "qwen2.5-coder:7b"
+  }
+}
+
+pueden pasar tres cosas:
+
+1. FastAPI ignora generation
+2. FastAPI rechaza el request
+3. FastAPI lo acepta pero nadie lo usa
+
+La opción 3 es la más peligrosa porque parece que funciona, pero no gobierna nada.
+
+

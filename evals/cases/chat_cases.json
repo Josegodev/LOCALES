@@ -1,6 +1,6 @@
 {
   "version": "chat_eval_cases.v1",
-  "description": "Chat-only evaluation cases for the /chat runtime. These cases are not executed automatically yet.",
+  "description": "Chat-only evaluation cases for the /chat runtime. These cases can be executed by the CLI runner or by POST /api/evals/chat/run.",
   "cases": [
     {
       "id": "rag_transformer_definition_001",

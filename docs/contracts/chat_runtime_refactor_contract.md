@@ -108,7 +108,9 @@ Contrato propuesto para `EvalRun`:
 
 ## Chat eval foundation
 
-`GET /api/evals/chat` existe ahora solo para compatibilidad del frontend y lista trazas recientes del runtime chat-only.
+`GET /api/evals/chat` existe ahora solo para compatibilidad y lista trazas recientes del runtime chat-only.
+
+`POST /api/evals/chat/run` ejecuta los chat evals contra el mismo contrato estable de `/chat` y persiste el run en `evals/runs/`.
 
 Esto significa:
 
@@ -116,9 +118,8 @@ Esto significa:
 - `/api/evals/chat` no llama a `POST /chat`
 - los casos existen como contrato estatico en `evals/cases/chat_cases.json`
 - los baselines existen como contrato estatico en `evals/baselines/chat_baseline.json`
-- todavia no existe un eval runner
-- el futuro eval runner debe ejecutar casos contra `POST /chat`
-- los futuros resultados de eval deben almacenarse separados de las runtime traces
+- el eval runner ejecuta casos contra el mismo contrato estable de `/chat`
+- los resultados de eval se almacenan separados de las runtime traces
 
 ## Non-goals
 
