@@ -233,6 +233,18 @@ def list_chat_traces(limit: int = 50, *, path: Path | None = None) -> list[ChatT
     return _load_jsonl_chat_traces(limit=limit, path=resolved_path)
 
 
+def clear_chat_traces(*, path: Path | None = None) -> int:
+    output_path = _trace_path(path)
+    if not output_path.exists():
+        return 0
+
+    removed_count = sum(
+        1 for line in output_path.read_text(encoding="utf-8").splitlines() if line.strip()
+    )
+    output_path.write_text("", encoding="utf-8")
+    return removed_count
+
+
 def write_chat_trace(**kwargs: Any) -> None:
     record = ChatTraceRecord(
         trace_id=kwargs["trace_id"],

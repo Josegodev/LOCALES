@@ -13,7 +13,7 @@
         <h1>LOCALES / NUCLEO - Local AI Runtime Console</h1>
         <p class="lead">
           Panel ligero para explicar, probar y diagnosticar el runtime local:
-          Backend API, RAG local, runtime de modelos y clientes web o Telegram.
+          Backend API, RAG local, runtime de modelos y cliente web.
         </p>
       </div>
       <div class="runtime-card">
@@ -26,9 +26,7 @@
     <main>
       <nav class="tab-list" aria-label="Modos operativos">
         <button class="tab-button active" type="button" data-tab-target="principal" aria-controls="tab-principal" aria-selected="true">Principal</button>
-        <button class="tab-button" type="button" data-tab-target="telegram" aria-controls="tab-telegram" aria-selected="false">Telegram legacy</button>
-        <button class="tab-button" type="button" data-tab-target="telegram-evals" aria-controls="tab-telegram-evals" aria-selected="false">Telegram Evals legacy</button>
-        <button class="tab-button" type="button" data-tab-target="lan" aria-controls="tab-lan" aria-selected="false">LAN opcional</button>
+        <button class="tab-button" type="button" data-tab-target="chat-runs" aria-controls="tab-chat-runs" aria-selected="false">Runs /chat</button>
       </nav>
 
       <div id="tab-principal" class="tab-panel active" data-tab-panel="principal">
@@ -36,10 +34,10 @@
         <h2>Arquitectura actual</h2>
         <p>
           El runtime de IA se organiza por roles. El Backend API funciona como
-          capa de control, el RAG local recupera evidencia desde documentos, el
-          runtime de modelos genera respuestas y Telegram puede actuar como otro
-          cliente del mismo backend. El frontend no lee SQLite, PDFs ni chunks
-          directamente.
+          capa de control, el RAG local recupera evidencia desde documentos y el
+          runtime de modelos genera respuestas. Cada peticion enviada desde esta
+          consola a <code>/chat</code> debe quedar registrada como run del backend.
+          El frontend no lee SQLite, PDFs ni chunks directamente.
         </p>
         <div class="diagram-grid single">
           <article>
@@ -133,66 +131,17 @@
       </section>
 
       <section class="panel">
-        <div class="section-heading-row">
-          <div>
-            <h2>Trazas /chat</h2>
-            <p class="muted-text">
-              Historial minimo del flujo principal. Solo devuelve fuentes <code>frontend</code>
-              o <code>chat</code>; no mezcla Telegram.
-            </p>
-          </div>
-          <div class="button-row">
-            <label for="chatEvalsLimit">Runs</label>
-            <select id="chatEvalsLimit">
-              <option value="10">10</option>
-              <option value="25" selected>25</option>
-              <option value="50">50</option>
-            </select>
-            <button id="chatEvalsLoadButton" type="button">Cargar trazas</button>
-          </div>
-        </div>
-        <div id="chatEvalsStatus" class="status muted">Sin ejecutar</div>
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>created_at</th>
-                <th>status</th>
-                <th>provider</th>
-                <th>model</th>
-                <th>trace_id</th>
-                <th>input</th>
-                <th>response</th>
-                <th>retrieval_status</th>
-                <th>chunk_ids</th>
-                <th>latency_ms</th>
-                <th>error_code</th>
-                <th>error_message</th>
-              </tr>
-            </thead>
-            <tbody id="chatEvalsTableBody">
-              <tr><td colspan="12">Pulsa Cargar trazas.</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <pre id="chatEvalsRaw" class="output small">-</pre>
-      </section>
-
-      <section class="panel">
         <h2>Que se ha construido</h2>
         <div class="timeline">
           <span>Runtime local de modelos</span>
           <span>Backend FastAPI</span>
-          <span>Bot de Telegram</span>
           <span>Chunking documental en SQLite</span>
           <span>RAG sobre documents.sqlite</span>
           <span>Trazas de evidencia y fallback</span>
           <span>Hardening del esquema SQLite</span>
-          <span>Experimento Samba</span>
-          <span>Remote RAG Service por LAN</span>
-          <span>Paridad de filtros de fuentes</span>
           <span>Linux como runtime principal</span>
           <span>Frontend como cliente del backend</span>
+          <span>Persistencia de runs /chat</span>
         </div>
       </section>
 
@@ -204,18 +153,11 @@
             <pre>cd /home/jose-gonzalez-oliva/LOCALES
 source .venv/bin/activate
 export APP_ENV=local
-export BACKEND_BASE_URL=http://127.0.0.1:8000
+export BACKEND_BASE_URL=&lt;backend-api-url&gt;
 export OLLAMA_BASE_URL=&lt;model-runtime-url&gt;
 export USE_REMOTE_RAG=false
 export DOCUMENTS_DB_PATH=/home/jose-gonzalez-oliva/LOCALES/DB/chunks/documents.sqlite
-uvicorn app.main:app --host 127.0.0.1 --port 8000</pre>
-          </article>
-          <article>
-            <h3>Telegram legacy</h3>
-            <pre>cd /home/jose-gonzalez-oliva/LOCALES
-source .venv/bin/activate
-export TELEGRAM_ENABLED=true
-python scripts/run_telegram.py</pre>
+uvicorn app.main:app --host &lt;backend-host&gt; --port &lt;backend-port&gt;</pre>
           </article>
           <article>
             <h3>Frontend test</h3>
@@ -235,178 +177,69 @@ python scripts/run_telegram.py</pre>
           <article><strong>Timeout</strong><p>Firewall, IP incorrecta, ruta de red o servicio no accesible.</p></article>
           <article><strong>CORS error</strong><p>El origen del frontend no esta permitido por el Backend API.</p></article>
           <article><strong>NO_EVIDENCE_FOR_ANSWER</strong><p>RAG no encontro evidencia usable; el fallback puede responder con conocimiento del modelo.</p></article>
-          <article><strong>RAG_SERVICE_UNAVAILABLE</strong><p>El servicio RAG remoto esta caido; solo aplica al modo distribuido.</p></article>
+          <article><strong>Run no aparece</strong><p>Revisa que el backend tenga ruta de trazas escribible y que <code>/api/traces/chat</code> responda.</p></article>
           <article><strong>sqlite no such table documents</strong><p>Fallo antiguo ya protegido; si reaparece indica DB o esquema invalido.</p></article>
         </div>
       </section>
       </div>
 
-      <div id="tab-telegram" class="tab-panel" data-tab-panel="telegram" hidden>
-        <section class="panel">
-          <h2>Modo Telegram legacy</h2>
-          <p>
-            Telegram queda como adaptador legacy opcional. Ya no forma parte del
-            contrato principal de arranque de Uvicorn y no debe bloquear el flujo
-            principal navegador -> FastAPI -> /chat.
-          </p>
-          <div class="diagram-grid single">
-            <article>
-              <h3>Flujo Telegram</h3>
-              <pre>Telegram
-   -> Bot Telegram
-        -> Backend API
-             -> RAG local
-             -> Runtime de modelos</pre>
-            </article>
-          </div>
-        </section>
-
+      <div id="tab-chat-runs" class="tab-panel" data-tab-panel="chat-runs" hidden>
         <section class="panel">
           <div class="section-heading-row">
             <div>
-              <h2>Observabilidad Telegram</h2>
+              <h2>Runs /chat</h2>
               <p class="muted-text">
-                Legacy temporal. Estos endpoints siguen existiendo para operaciones
-                manuales, pero ya no participan en el arranque principal.
-              </p>
-            </div>
-            <span class="badge pending">Pendiente de backend</span>
-          </div>
-
-          <div class="telegram-control-panel">
-            <article>
-              <h3>Control del servicio</h3>
-              <div class="button-row">
-                <button id="telegramStatusButton" type="button">Consultar status</button>
-                <button id="telegramConfigButton" type="button">Consultar config</button>
-                <button id="telegramStartButton" type="button">Arrancar Telegram</button>
-                <button id="telegramStopButton" type="button">Parar Telegram</button>
-              </div>
-              <div id="telegramStatus" class="status muted">Sin ejecutar</div>
-              <pre id="telegramRaw" class="output small">Los endpoints de Telegram usan el Backend base URL configurado.</pre>
-            </article>
-            <article>
-              <h3>Config runtime</h3>
-              <label for="telegramModelInput">Modelo por defecto</label>
-              <input id="telegramModelInput" type="text" value="granite4.1:8b" />
-              <label for="telegramTemperatureInput">Temperatura</label>
-              <input id="telegramTemperatureInput" type="number" min="0" max="1" step="0.1" value="0.2" />
-              <label class="checkbox">
-                <input id="telegramRagInput" type="checkbox" checked />
-                RAG por defecto activo
-              </label>
-              <button id="telegramSaveConfigButton" type="button">Guardar config</button>
-              <p class="muted-text">El token no se muestra ni se envia desde el frontend.</p>
-            </article>
-          </div>
-
-          <div class="placeholder-grid">
-            <article>
-              <h3>Metricas</h3>
-              <p>Pendiente de conectar a endpoint de metricas.</p>
-              <div class="field-list">
-                <span>trace_id / run_id</span><span>timestamp</span><span>chat_id / user_id / session_id</span>
-                <span>source = telegram</span><span>model</span><span>retrieval_status</span><span>chunk_ids</span>
-                <span>tokens_input</span><span>tokens_output</span><span>tokens_total</span><span>latency_ms</span>
-                <span>output_tokens_per_second</span><span>status</span><span>error_code</span><span>error_message</span><span>warnings</span>
-              </div>
-            </article>
-            <article>
-              <h3>Trazas</h3>
-              <p>Pendiente de conectar a trazas por trace_id.</p>
-              <div class="field-list">
-                <span>trace_id</span><span>request_received</span><span>retrieval_started</span>
-                <span>retrieval_finished</span><span>llm_started</span><span>llm_finished</span>
-                <span>response_sent</span><span>failure_stage</span>
-              </div>
-            </article>
-            <article>
-              <h3>Evals</h3>
-              <p>Pendiente de conectar a eval_runs.</p>
-              <div class="field-list">
-                <span>eval_run_id</span><span>query</span><span>expected_terms</span>
-                <span>forbidden_terms</span><span>required_sources</span><span>passed</span>
-                <span>score</span><span>notes</span>
-              </div>
-            </article>
-            <article>
-              <h3>Coste / latencia</h3>
-              <p>Pendiente de conectar a agregados de coste y rendimiento.</p>
-              <div class="field-list">
-                <span>latency_ms</span><span>tokens_total</span><span>output_tokens_per_second</span><span>cost estimate</span>
-              </div>
-            </article>
-            <article>
-              <h3>Errores</h3>
-              <p>Pendiente de conectar a eventos de error y fallos por etapa.</p>
-              <div class="field-list">
-                <span>status</span><span>error_code</span><span>error_message</span><span>failure_stage</span><span>warnings</span>
-              </div>
-            </article>
-          </div>
-        </section>
-      </div>
-
-      <div id="tab-telegram-evals" class="tab-panel" data-tab-panel="telegram-evals" hidden>
-        <section class="panel">
-          <div class="section-heading-row">
-            <div>
-              <h2>Telegram Evals</h2>
-              <p class="muted-text">
-                Vista minima de evals normalizadas. Usa el Backend base URL configurado y consulta
-                <code>/api/evals/telegram?limit=&lt;limite&gt;</code>.
+                Historial minimo del flujo principal. Cada envio desde el panel
+                <code>Chat / RAG test</code> llama a <code>/chat</code> y luego refresca
+                <code>/api/traces/chat?limit=&lt;limite&gt;</code>.
               </p>
             </div>
             <div class="inline-controls">
-              <label for="telegramEvalsLimit">Runs</label>
-              <select id="telegramEvalsLimit">
+              <label for="chatEvalsLimit">Runs</label>
+              <select id="chatEvalsLimit">
+                <option value="10">10</option>
                 <option value="25">25</option>
                 <option value="50">50</option>
                 <option value="100" selected>100</option>
-                <option value="250">250</option>
-                <option value="500">500</option>
               </select>
-              <button id="telegramEvalsLoadButton" type="button">Cargar evals</button>
+              <button id="chatEvalsLoadButton" type="button">Cargar runs</button>
+              <button id="chatRunsResetButton" class="secondary-button danger-button" type="button">Reset runs</button>
             </div>
           </div>
-          <div id="telegramEvalsStatus" class="status muted">Sin ejecutar</div>
+          <div id="chatEvalsStatus" class="status muted">Sin ejecutar</div>
         </section>
 
         <section class="panel">
           <div class="section-heading-row">
             <div>
               <h2>KPIs</h2>
-              <p class="muted-text">KPIs frontend v1</p>
+              <p class="muted-text">Runs /chat frontend v1</p>
             </div>
           </div>
-          <div id="telegramEvalsKpis" class="metrics evals-kpis">
+          <div id="chatRunsKpis" class="metrics evals-kpis">
             <div>
               <span>total_runs</span>
-              <strong id="telegramKpiTotalRuns">-</strong>
+              <strong id="chatRunTotal">-</strong>
             </div>
             <div>
               <span>ok_runs</span>
-              <strong id="telegramKpiOkRuns">-</strong>
+              <strong id="chatRunOk">-</strong>
             </div>
             <div class="kpi-error">
               <span>error_runs</span>
-              <strong id="telegramKpiErrorRuns">-</strong>
+              <strong id="chatRunError">-</strong>
             </div>
             <div>
               <span>error_rate_percent</span>
-              <strong id="telegramKpiErrorRate">-</strong>
+              <strong id="chatRunErrorRate">-</strong>
             </div>
             <div>
-              <span>avg_latency_ok_ms</span>
-              <strong id="telegramKpiAvgLatencyOk">-</strong>
-            </div>
-            <div>
-              <span>avg_latency_error_ms</span>
-              <strong id="telegramKpiAvgLatencyError">-</strong>
+              <span>avg_latency_ms</span>
+              <strong id="chatRunAvgLatency">-</strong>
             </div>
             <div>
               <span>evidence_found_rate_percent</span>
-              <strong id="telegramKpiEvidenceRate">-</strong>
+              <strong id="chatRunEvidenceRate">-</strong>
             </div>
           </div>
         </section>
@@ -418,105 +251,32 @@ python scripts/run_telegram.py</pre>
               <thead>
                 <tr>
                   <th>created_at</th>
-                  <th>model</th>
                   <th>status</th>
+                  <th>provider</th>
+                  <th>model</th>
+                  <th>trace_id</th>
+                  <th>input</th>
+                  <th>response</th>
                   <th>retrieval_status</th>
+                  <th>chunk_ids</th>
                   <th>latency_ms</th>
                   <th>tokens_input</th>
                   <th>tokens_output</th>
-                  <th>output_tokens_per_second</th>
-                  <th>error_category</th>
-                  <th>failed_phase</th>
+                  <th>tokens_total</th>
                   <th>error_code</th>
+                  <th>error_message</th>
                 </tr>
               </thead>
-              <tbody id="telegramEvalsTableBody">
-                <tr><td colspan="11">Pulsa Cargar evals.</td></tr>
+              <tbody id="chatEvalsTableBody">
+                <tr><td colspan="15">Pulsa Cargar runs.</td></tr>
               </tbody>
             </table>
           </div>
         </section>
 
         <section class="panel">
-          <h2>Errores explicables</h2>
-          <div class="metrics">
-            <div>
-              <span>Errores backend_connectivity</span>
-              <strong id="telegramBackendConnectivityErrors">-</strong>
-            </div>
-            <div>
-              <span>Errores de modelo</span>
-              <strong id="telegramModelErrors">-</strong>
-            </div>
-          </div>
-          <div class="charts-grid">
-            <article>
-              <h3>Errores por categoria</h3>
-              <div id="telegramErrorsByCategory" class="bar-chart empty">Sin datos</div>
-            </article>
-            <article>
-              <h3>Timeouts probables</h3>
-              <div id="telegramProbableTimeouts" class="bar-chart empty">Sin datos</div>
-            </article>
-          </div>
-        </section>
-
-        <section class="panel">
-          <h2>Graficos</h2>
-          <div class="charts-grid">
-            <article>
-              <h3>latency_ms en el tiempo</h3>
-              <div id="telegramLatencyTimeline" class="mini-chart empty">Sin datos</div>
-            </article>
-            <article>
-              <h3>Media latency_ms por modelo</h3>
-              <div id="telegramLatencyByModel" class="bar-chart empty">Sin datos</div>
-            </article>
-            <article>
-              <h3>Media tokens/s por modelo</h3>
-              <div id="telegramTokensByModel" class="bar-chart empty">Sin datos</div>
-            </article>
-            <article>
-              <h3>Conteo por retrieval_status</h3>
-              <div id="telegramRetrievalCounts" class="bar-chart empty">Sin datos</div>
-            </article>
-          </div>
-        </section>
-
-        <section class="panel">
           <h2>Raw</h2>
-          <pre id="telegramEvalsRaw" class="output small">-</pre>
-        </section>
-      </div>
-
-      <div id="tab-lan" class="tab-panel" data-tab-panel="lan" hidden>
-        <section class="panel">
-          <h2>LAN opcional</h2>
-          <p>
-            Este modo existe para aprender sistemas distribuidos en LAN. No es
-            el runtime principal recomendado: aumenta superficie de debug y separa
-            FastAPI del corpus RAG local.
-          </p>
-          <div class="diagram-grid single">
-            <article>
-              <h3>Modo distribuido experimental</h3>
-              <pre>Frontend / cliente LAN
-   -> Servicio RAG
-   -> Runtime de modelos</pre>
-            </article>
-          </div>
-        </section>
-
-        <section class="panel">
-          <h2>Notas operativas LAN</h2>
-          <div class="failure-grid">
-            <article><strong>CORS</strong><p>Permitir solo origenes de desarrollo concretos. Evitar <code>*</code> salvo laboratorio muy controlado.</p></article>
-            <article><strong>IP fija / DHCP reservado</strong><p>Reservar una direccion estable para el servidor reduce fallos por cambios de red.</p></article>
-            <article><strong>Firewall</strong><p>Abrir unicamente los puertos necesarios en la LAN confiable.</p></article>
-            <article><strong>Puertos esperados</strong><p>Documentar los puertos de Backend API, Servicio RAG y Runtime de modelos en la configuracion de despliegue.</p></article>
-            <article><strong>Runtime recomendado</strong><p>El modo all-in-one sigue siendo la ruta principal: menos piezas, corpus local y menos puntos de fallo.</p></article>
-            <article><strong>Sin red nueva</strong><p>Esta pestana solo documenta el modo; no crea llamadas ni endpoints adicionales.</p></article>
-          </div>
+          <pre id="chatEvalsRaw" class="output small">-</pre>
         </section>
       </div>
     </main>

@@ -66,6 +66,38 @@ class ChatEvalsTests(unittest.TestCase):
         self.assertEqual(payload["items"][0]["trace_id"], "frontend-trace")
         self.assertEqual(payload["items"][0]["source"], "frontend")
 
+    def test_chat_trace_reset_endpoint_clears_runs(self):
+        with TemporaryDirectory() as tmpdir:
+            trace_path = Path(tmpdir) / "chat_traces.jsonl"
+            trace_path.write_text(
+                json.dumps(
+                    {
+                        "trace_id": "frontend-trace",
+                        "created_at": "2026-05-14T10:00:00+00:00",
+                        "source": "frontend",
+                        "endpoint": "/chat",
+                        "input": "hola",
+                        "response": "ok",
+                        "status": "ok",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with patch("app.auth.settings.chat_auth_mode", "local_open"):
+                with patch("app.config.settings.chat_trace_path", str(trace_path)):
+                    client = TestClient(app)
+                    response = client.post("/api/traces/chat/reset")
+                    list_response = client.get("/api/traces/chat?limit=10")
+                    trace_content_after_reset = trace_path.read_text(encoding="utf-8")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "ok", "removed_count": 1})
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(list_response.json()["count"], 0)
+        self.assertEqual(trace_content_after_reset, "")
+
     def test_chat_post_generates_trace_in_local_open_mode(self):
         with TemporaryDirectory() as tmpdir:
             trace_path = Path(tmpdir) / "chat_traces.jsonl"

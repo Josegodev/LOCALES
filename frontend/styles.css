@@ -265,6 +265,11 @@ button,
   opacity: 0.72;
 }
 
+.danger-button {
+  color: var(--danger);
+  border-color: rgba(255, 114, 114, 0.38);
+}
+
 .button-row {
   display: flex;
   gap: 10px;
@@ -350,14 +355,6 @@ dd {
   gap: 14px;
 }
 
-.telegram-control-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
-  gap: 14px;
-  margin: 18px 0;
-}
-
-.telegram-control-panel article,
 .placeholder-grid article {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -551,7 +548,6 @@ dd {
   .diagram-grid,
   .command-grid,
   .failure-grid,
-  .telegram-control-panel,
   .placeholder-grid {
     grid-template-columns: 1fr;
   }
