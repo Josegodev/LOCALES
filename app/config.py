@@ -30,7 +30,10 @@ class Settings(BaseSettings):
     rag_service_url: str = "http://127.0.0.1:9000"
     rag_timeout_seconds: float = 10.0
     rag_top_k: int = 5
-    chat_trace_path: str = "data/chat_traces.jsonl"
+    chat_runs_path: str = Field(
+        default="data/chat_runs.jsonl",
+        validation_alias=AliasChoices("CHAT_RUNS_PATH", "CHAT_TRACE_PATH"),
+    )
     jose_dev_token: str | None = None
     chat_auth_mode: Literal["local_open", "bearer_required", "disabled"] = "local_open"
 

@@ -10,6 +10,15 @@ const elements = {
   healthState: document.querySelector("#healthState"),
   healthLatency: document.querySelector("#healthLatency"),
   healthRaw: document.querySelector("#healthRaw"),
+  chatStatsLoadButton: document.querySelector("#chatStatsLoadButton"),
+  chatStatsStatus: document.querySelector("#chatStatsStatus"),
+  chatStatsTotalRuns: document.querySelector("#chatStatsTotalRuns"),
+  chatStatsTotalOk: document.querySelector("#chatStatsTotalOk"),
+  chatStatsTotalError: document.querySelector("#chatStatsTotalError"),
+  chatStatsAvgLatency: document.querySelector("#chatStatsAvgLatency"),
+  chatStatsAvgTokens: document.querySelector("#chatStatsAvgTokens"),
+  chatStatsTableBody: document.querySelector("#chatStatsTableBody"),
+  chatStatsRaw: document.querySelector("#chatStatsRaw"),
   messageInput: document.querySelector("#messageInput"),
   modelSelect: document.querySelector("#modelSelect"),
   useRagInput: document.querySelector("#useRagInput"),
@@ -26,15 +35,12 @@ const elements = {
   warningsText: document.querySelector("#warningsText"),
   chatRaw: document.querySelector("#chatRaw"),
   evidenceList: document.querySelector("#evidenceList"),
-  chatRunsLoadButton: document.querySelector("#chatRunsLoadButton"),
-  chatRunsStatus: document.querySelector("#chatRunsStatus"),
-  runsTotal: document.querySelector("#runsTotal"),
-  runsOkError: document.querySelector("#runsOkError"),
-  runsModels: document.querySelector("#runsModels"),
-  runsAvgLatency: document.querySelector("#runsAvgLatency"),
-  runsAvgTokens: document.querySelector("#runsAvgTokens"),
-  chatRunsTableBody: document.querySelector("#chatRunsTableBody"),
-  chatRunsRaw: document.querySelector("#chatRunsRaw"),
+  chatTracesLimit: document.querySelector("#chatTracesLimit"),
+  chatTracesLoadButton: document.querySelector("#chatTracesLoadButton"),
+  chatTracesResetButton: document.querySelector("#chatTracesResetButton"),
+  chatTracesStatus: document.querySelector("#chatTracesStatus"),
+  chatTracesTableBody: document.querySelector("#chatTracesTableBody"),
+  chatTracesRaw: document.querySelector("#chatTracesRaw"),
 };
 
 function setActiveTab(tabName) {
@@ -98,6 +104,15 @@ function summarizeChatPayload(data) {
     payload.answer = truncateText(payload.answer, 4000);
   }
   return payload;
+}
+
+function clearChatStatsOutput() {
+  elements.chatStatsTotalRuns.textContent = "-";
+  elements.chatStatsTotalOk.textContent = "-";
+  elements.chatStatsTotalError.textContent = "-";
+  elements.chatStatsAvgLatency.textContent = "-";
+  elements.chatStatsAvgTokens.textContent = "-";
+  elements.chatStatsTableBody.innerHTML = '<tr><td colspan="7">Pulsa Refresh.</td></tr>';
 }
 
 function updateBackendLinks() {
@@ -264,6 +279,66 @@ function visibleChatErrorMessage(error) {
   return error?.message || "Error inesperado llamando al backend.";
 }
 
+function summarizeChatRuns(items) {
+  const totalRuns = items.length;
+  const okRuns = items.filter((item) => String(item.status || "").toLowerCase() === "ok").length;
+  const errorRuns = items.filter((item) => String(item.status || "").toLowerCase() === "error").length;
+  const latencyValues = items
+    .map((item) => Number(item.latency_ms))
+    .filter((value) => Number.isFinite(value));
+  const tokenValues = items
+    .map((item) => Number(item.tokens_total))
+    .filter((value) => Number.isFinite(value));
+
+  const avgLatencyMs = latencyValues.length
+    ? Math.round(latencyValues.reduce((total, value) => total + value, 0) / latencyValues.length)
+    : null;
+  const avgTokensTotal = tokenValues.length
+    ? Math.round(tokenValues.reduce((total, value) => total + value, 0) / tokenValues.length)
+    : null;
+
+  return {
+    totalRuns,
+    okRuns,
+    errorRuns,
+    avgLatencyMs,
+    avgTokensTotal,
+  };
+}
+
+function renderChatStats(items) {
+  const summary = summarizeChatRuns(items);
+  elements.chatStatsTotalRuns.textContent = valueOrDash(summary.totalRuns);
+  elements.chatStatsTotalOk.textContent = valueOrDash(summary.okRuns);
+  elements.chatStatsTotalError.textContent = valueOrDash(summary.errorRuns);
+  elements.chatStatsAvgLatency.textContent = valueOrDash(summary.avgLatencyMs);
+  elements.chatStatsAvgTokens.textContent = valueOrDash(summary.avgTokensTotal);
+  elements.chatStatsTableBody.innerHTML = "";
+
+  if (!items.length) {
+    elements.chatStatsTableBody.innerHTML = '<tr><td colspan="7">No hay runs guardados.</td></tr>';
+    return;
+  }
+
+  for (const item of items) {
+    const row = document.createElement("tr");
+    [
+      item.created_at,
+      item.status,
+      item.provider,
+      item.model,
+      item.latency_ms,
+      item.tokens_total,
+      item.retrieval_status,
+    ].forEach((cellValue) => {
+      const cell = document.createElement("td");
+      cell.textContent = valueOrDash(cellValue);
+      row.appendChild(cell);
+    });
+    elements.chatStatsTableBody.appendChild(row);
+  }
+}
+
 function renderEvidence(data) {
   const chunks = Array.isArray(data.chunks) ? data.chunks : [];
   const filenames = Array.isArray(data.source_filenames) ? data.source_filenames : [];
@@ -335,44 +410,51 @@ async function loadChatModels() {
   }
 }
 
-function formatModels(models) {
-  if (!models || typeof models !== "object" || !Object.keys(models).length) {
-    return "-";
+async function loadChatStats() {
+  updateBackendLinks();
+  elements.chatStatsLoadButton.disabled = true;
+  clearChatStatsOutput();
+  setStatus(elements.chatStatsStatus, "Cargando /api/chat/runs...", "muted");
+  elements.chatStatsRaw.textContent = prettyJson({ request: { method: "GET", path: "/api/chat/runs" } });
+
+  try {
+    const { data, latencyMs } = await backendFetch("/api/chat/runs?limit=100");
+    const items = normalizeChatTracesPayload(data);
+    renderChatStats(items);
+    elements.chatStatsRaw.textContent = prettyJson(data);
+    setStatus(elements.chatStatsStatus, `Estadisticas cargadas: ${items.length} runs (${latencyMs} ms)`, "ok");
+  } catch (error) {
+    setStatus(elements.chatStatsStatus, "Error cargando estadisticas /chat", "error");
+    elements.chatStatsRaw.textContent = error.data ? prettyJson(error.data) : visibleChatErrorMessage(error);
+    elements.chatStatsTableBody.innerHTML = `<tr><td colspan="7">${visibleChatErrorMessage(error)}</td></tr>`;
+  } finally {
+    elements.chatStatsLoadButton.disabled = false;
   }
-  return Object.entries(models)
-    .map(([model, count]) => `${model}: ${count}`)
-    .join(", ");
 }
 
-function normalizeSavedRunsPayload(data) {
-  if (!data || typeof data !== "object") {
-    throw new Error("Respuesta JSON invalida del endpoint de runs.");
-  }
-  return {
-    total_runs: Number.isFinite(data.total_runs) ? data.total_runs : 0,
-    ok_runs: Number.isFinite(data.ok_runs) ? data.ok_runs : 0,
-    error_runs: Number.isFinite(data.error_runs) ? data.error_runs : 0,
-    models: data.models && typeof data.models === "object" ? data.models : {},
-    avg_latency_ms: data.avg_latency_ms,
-    avg_tokens_total: data.avg_tokens_total,
-    runs: Array.isArray(data.runs) ? data.runs : [],
-  };
+function selectedChatTracesLimit() {
+  const limit = Number(elements.chatTracesLimit.value);
+  return [10, 25, 50].includes(limit) ? limit : 25;
 }
 
-function renderSavedRuns(payload) {
-  elements.runsTotal.textContent = valueOrDash(payload.total_runs);
-  elements.runsOkError.textContent = `${valueOrDash(payload.ok_runs)} / ${valueOrDash(payload.error_runs)}`;
-  elements.runsModels.textContent = formatModels(payload.models);
-  elements.runsAvgLatency.textContent = valueOrDash(payload.avg_latency_ms);
-  elements.runsAvgTokens.textContent = valueOrDash(payload.avg_tokens_total);
+function normalizeChatTracesPayload(data) {
+  if (Array.isArray(data)) {
+    return data;
+  }
+  if (Array.isArray(data?.items)) {
+    return data.items;
+  }
+  return [];
+}
 
-  elements.chatRunsTableBody.innerHTML = "";
-  if (!payload.runs.length) {
-    elements.chatRunsTableBody.innerHTML = '<tr><td colspan="7">No hay runs guardados todavia. Ejecuta una pregunta desde Chat.</td></tr>';
+function renderChatTraces(items) {
+  elements.chatTracesTableBody.innerHTML = "";
+  if (!items.length) {
+    elements.chatTracesTableBody.innerHTML = '<tr><td colspan="12">No hay runs disponibles.</td></tr>';
     return;
   }
 
-  for (const item of payload.runs) {
+  for (const item of items) {
     const row = document.createElement("tr");
     if (String(item.status || "").trim().toLowerCase() === "error") {
       row.classList.add("error-row");
@@ -380,43 +462,79 @@ function renderSavedRuns(payload) {
 
     [
       item.created_at,
-      item.model,
       item.status,
-      item.retrieval_status,
-      item.latency_ms,
-      item.tokens_total,
+      item.provider,
+      item.model,
       item.trace_id,
+      truncateText(item.input, 120),
+      truncateText(item.response, 120),
+      item.retrieval_status,
+      Array.isArray(item.chunk_ids) ? item.chunk_ids.join(", ") : item.chunk_ids,
+      item.latency_ms,
+      item.error_code,
+      truncateText(item.error_message, 120),
     ].forEach((cellValue) => {
       const cell = document.createElement("td");
       cell.textContent = valueOrDash(cellValue);
       row.appendChild(cell);
     });
 
-    elements.chatRunsTableBody.appendChild(row);
+    elements.chatTracesTableBody.appendChild(row);
   }
 }
 
-async function loadSavedRuns() {
+async function loadChatTraces() {
   updateBackendLinks();
-  setStatus(elements.chatRunsStatus, "Cargando runs guardados...", "muted");
-  elements.chatRunsLoadButton.disabled = true;
-  elements.chatRunsTableBody.innerHTML = '<tr><td colspan="7">Cargando...</td></tr>';
-  elements.chatRunsRaw.textContent = "-";
+  const limit = selectedChatTracesLimit();
+  setStatus(elements.chatTracesStatus, "Cargando runs /chat...", "muted");
+  elements.chatTracesLoadButton.disabled = true;
+  elements.chatTracesTableBody.innerHTML = '<tr><td colspan="12">Cargando...</td></tr>';
+  elements.chatTracesRaw.textContent = "-";
 
   try {
-    const { data, latencyMs } = await backendFetch("/api/evals/runs");
-    const payload = normalizeSavedRunsPayload(data);
-    renderSavedRuns(payload);
-    elements.chatRunsRaw.textContent = prettyJson(data);
-    setStatus(elements.chatRunsStatus, `Runs cargados: ${payload.runs.length} (${latencyMs} ms)`, "ok");
+    const { data, latencyMs } = await backendFetch(`/api/chat/runs?limit=${limit}`);
+    const items = normalizeChatTracesPayload(data);
+    renderChatTraces(items);
+    elements.chatTracesRaw.textContent = prettyJson(data);
+    setStatus(elements.chatTracesStatus, `Runs cargados: ${items.length} (${latencyMs} ms)`, "ok");
   } catch (error) {
-    setStatus(elements.chatRunsStatus, "Error cargando runs guardados", "error");
-    elements.chatRunsTableBody.innerHTML = '<tr><td colspan="7">No se pudo cargar el endpoint de runs.</td></tr>';
-    elements.chatRunsRaw.textContent = error.data ? prettyJson(error.data) : visibleChatErrorMessage(error);
+    setStatus(elements.chatTracesStatus, "Error cargando runs /chat", "error");
+    elements.chatTracesTableBody.innerHTML = '<tr><td colspan="12">No se pudo cargar el endpoint de runs.</td></tr>';
+    elements.chatTracesRaw.textContent = error.data ? prettyJson(error.data) : visibleChatErrorMessage(error);
   } finally {
-    elements.chatRunsLoadButton.disabled = false;
+    elements.chatTracesLoadButton.disabled = false;
   }
 }
+
+async function resetChatTraces() {
+  const confirmed = window.confirm("Vas a borrar los runs /chat guardados en el backend. ¿Continuar?");
+  if (!confirmed) {
+    return;
+  }
+
+  updateBackendLinks();
+  setStatus(elements.chatTracesStatus, "Reseteando runs /chat...", "muted");
+  elements.chatTracesResetButton.disabled = true;
+
+  try {
+    const { data, latencyMs } = await backendFetch("/api/traces/chat/reset", {
+      method: "POST",
+    });
+    renderChatTraces([]);
+    elements.chatTracesRaw.textContent = prettyJson(data);
+    setStatus(
+      elements.chatTracesStatus,
+      `Runs reseteados: ${valueOrDash(data.removed_count)} (${latencyMs} ms)`,
+      "ok",
+    );
+  } catch (error) {
+    setStatus(elements.chatTracesStatus, "Error reseteando runs /chat", "error");
+    elements.chatTracesRaw.textContent = error.data ? prettyJson(error.data) : visibleChatErrorMessage(error);
+  } finally {
+    elements.chatTracesResetButton.disabled = false;
+  }
+}
+
 async function sendChat() {
   updateBackendLinks();
   setChatPending(true);
@@ -476,9 +594,9 @@ async function sendChat() {
     renderEvidence({});
   } finally {
     try {
-      await loadSavedRuns();
+      await Promise.all([loadChatTraces(), loadChatStats()]);
     } catch {
-      // La UI principal no debe quedarse bloqueada si falla la carga de trazas.
+      // La UI principal no debe quedarse bloqueada si falla la recarga de observabilidad.
     }
     setChatPending(false);
   }
@@ -513,8 +631,11 @@ elements.docsLink.addEventListener("click", (event) => {
     setStatus(elements.healthStatus, "Configura Backend base URL antes de abrir /docs", "error");
   }
 });
+elements.chatStatsLoadButton.addEventListener("click", loadChatStats);
 elements.healthButton.addEventListener("click", checkHealth);
 elements.chatButton.addEventListener("click", sendChat);
-elements.chatRunsLoadButton.addEventListener("click", loadSavedRuns);
+elements.chatTracesLoadButton.addEventListener("click", loadChatTraces);
+elements.chatTracesResetButton.addEventListener("click", resetChatTraces);
 loadChatModels().catch(() => {});
-loadSavedRuns().catch(() => {});
+loadChatStats().catch(() => {});
+loadChatTraces().catch(() => {});

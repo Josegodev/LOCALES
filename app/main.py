@@ -12,18 +12,19 @@ import app.chat_eval_runner as chat_eval_runner
 from app.auth import bearer_scheme, require_chat_access
 from app.config import settings
 from app.rag_client import query_remote_rag
-from app.observability.chat_trace import clear_chat_traces, list_chat_traces, write_chat_trace
+from app.observability.chat_runs import clear_chat_runs, list_chat_runs, write_chat_run
 from app.observability.logging import get_logger, log_event
 from app.observability.trace import new_trace_id
 from app.llm_client import LLMClientError, ask_chat, resolve_provider_model
 from app.llm_client import list_chat_models
 from app.schemas import (
     ChatEvalListResponse,
+    ChatEvalRunsListResponse,
     ChatEvalRunResponse,
     ChatModelListResponse,
+    ChatRunListResponse,
     ChatRequest,
     ChatResponse,
-    ChatRunsStatsResponse,
     ChatTraceListResponse,
     ChatTraceResetResponse,
 )
@@ -421,7 +422,7 @@ def _extract_chunk_response_data(chunks: list[dict]) -> tuple[list[str], list[in
     return chunk_texts, chunk_ids, document_ids, sorted(source_filenames)
 
 
-def _persist_chat_trace(
+def _persist_chat_run(
     *,
     trace_id: str,
     request: ChatRequest,
@@ -445,7 +446,7 @@ def _persist_chat_trace(
     tokens_output: int | float | None,
     tokens_total: int | float | None,
 ) -> None:
-    write_chat_trace(
+    write_chat_run(
         trace_id=trace_id,
         source=_chat_trace_source(request.user_id, request.chat_id),
         input_text=request.message,
@@ -473,57 +474,6 @@ def _persist_chat_trace(
     )
 
 
-def _persist_front_chat_run(
-    *,
-    trace_id: str,
-    request: ChatRequest,
-    final_answer: str,
-    provider: str,
-    model: str,
-    status: str,
-    retrieval_status: str,
-    chunk_ids: list[int],
-    source_filenames: list[str],
-    latency_ms: int,
-    error_code: str | None,
-    error_message: str | None,
-    warnings: list[str],
-    use_rag: bool,
-    tokens_input: int | float | None,
-    tokens_output: int | float | None,
-    tokens_total: int | float | None,
-) -> None:
-    if _chat_trace_source(request.user_id, request.chat_id) != "frontend":
-        return
-
-    created_at = datetime.now(timezone.utc)
-    chat_eval_runner.write_front_chat_run(
-        {
-            "created_at": created_at.isoformat(),
-            "trace_id": trace_id,
-            "source": "front",
-            "endpoint": "/chat",
-            "model": model,
-            "provider": provider,
-            "input": request.message,
-            "response": final_answer if final_answer else None,
-            "status": status,
-            "retrieval_status": retrieval_status,
-            "use_rag": use_rag,
-            "tokens_input": tokens_input,
-            "tokens_output": tokens_output,
-            "tokens_total": tokens_total,
-            "latency_ms": latency_ms,
-            "source_filenames": source_filenames,
-            "chunk_ids": chunk_ids,
-            "warnings": warnings,
-            "error_code": error_code,
-            "error_message": error_message,
-        },
-        created_at=created_at,
-    )
-
-
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
@@ -541,7 +491,18 @@ def chat_trace_runs(
     authorization: str | None = Header(default=None),
 ) -> dict:
     require_chat_access(_, auth_header_present=authorization is not None)
-    items = [record.model_dump() for record in list_chat_traces(limit=limit)]
+    items = [record.model_dump() for record in list_chat_runs(limit=limit)]
+    return {"status": "ok", "items": items, "count": len(items)}
+
+
+@app.get("/api/chat/runs", response_model=ChatRunListResponse)
+def chat_runs(
+    limit: int = Query(default=50, ge=1, le=200),
+    _: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    authorization: str | None = Header(default=None),
+) -> dict:
+    require_chat_access(_, auth_header_present=authorization is not None)
+    items = [record.model_dump() for record in list_chat_runs(limit=limit)]
     return {"status": "ok", "items": items, "count": len(items)}
 
 
@@ -551,7 +512,7 @@ def reset_chat_trace_runs(
     authorization: str | None = Header(default=None),
 ) -> dict:
     require_chat_access(_, auth_header_present=authorization is not None)
-    removed_count = clear_chat_traces()
+    removed_count = clear_chat_runs()
     log_event(
         component="frontend.chat.traces",
         event="chat_trace_runs_reset",
@@ -568,7 +529,7 @@ def chat_eval_runs(
 ) -> dict:
     require_chat_access(_, auth_header_present=authorization is not None)
     normalized_limit = max(1, min(int(limit), 100))
-    items = [record.model_dump() for record in list_chat_traces(limit=normalized_limit)]
+    items = [record.model_dump() for record in list_chat_runs(limit=normalized_limit)]
     return {
         "items": items,
         "count": len(items),
@@ -576,13 +537,13 @@ def chat_eval_runs(
     }
 
 
-@app.get("/api/evals/runs", response_model=ChatRunsStatsResponse)
-def saved_chat_runs(
+@app.get("/api/evals/runs", response_model=ChatEvalRunsListResponse)
+def saved_chat_eval_runs(
     _: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     authorization: str | None = Header(default=None),
 ) -> dict:
     require_chat_access(_, auth_header_present=authorization is not None)
-    return chat_eval_runner.list_front_chat_runs()
+    return chat_eval_runner.list_saved_eval_runs(out_dir_str=chat_eval_runner.DEFAULT_OUT_DIR)
 
 
 def _execute_chat_eval_case(payload: dict[str, object]) -> dict[str, object]:
@@ -862,6 +823,9 @@ def _run_chat_request(
             return internal_response
 
         chunk_texts, chunk_ids, document_ids, source_filenames = _extract_chunk_response_data(context.get("chunks", [])) if use_rag else ([], [], [], [])
+        context["chunk_ids"] = list(chunk_ids)
+        context["document_ids"] = list(document_ids)
+        context["source_filenames"] = list(source_filenames)
         response_payload = dict(result)
         response_payload.pop("retrieval_status", None)
         response_payload.pop("chunks", None)
@@ -1006,9 +970,13 @@ def _run_chat_request(
             },
         )
     except HTTPException as exc:
-        if isinstance(exc.detail, dict):
-            error_code = exc.detail.get("code") if isinstance(exc.detail.get("code"), str) else error_code
-            error_message = exc.detail.get("message") if isinstance(exc.detail.get("message"), str) else error_message
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        if isinstance(detail, dict):
+            error_code = detail.get("code") if isinstance(detail.get("code"), str) else error_code
+            error_message = detail.get("message") if isinstance(detail.get("message"), str) else error_message
+            detail_retrieval_status = detail.get("retrieval_status")
+            if isinstance(detail_retrieval_status, str) and detail_retrieval_status.strip():
+                retrieval_status = detail_retrieval_status
         raise
     except Exception as exc:
         error_code = "chat_internal_error"
@@ -1045,7 +1013,7 @@ def _run_chat_request(
         trace_latency_ms = int((time.perf_counter() - started_at) * 1000)
         if persist_trace:
             try:
-                _persist_chat_trace(
+                _persist_chat_run(
                     trace_id=trace_id,
                     request=request,
                     final_answer=final_answer,
@@ -1074,34 +1042,6 @@ def _run_chat_request(
                     event="fastapi.chat.trace.persist_failed",
                     trace_id=trace_id,
                     error_code="chat_trace_persist_failed",
-                    error_message=str(exc),
-                )
-            try:
-                _persist_front_chat_run(
-                    trace_id=trace_id,
-                    request=request,
-                    final_answer=final_answer,
-                    provider=provider,
-                    model=model,
-                    status=status,
-                    retrieval_status=retrieval_status,
-                    chunk_ids=trace_chunk_ids,
-                    source_filenames=context.get("source_filenames", []),
-                    latency_ms=trace_latency_ms,
-                    error_code=error_code,
-                    error_message=error_message,
-                    warnings=trace_warnings,
-                    use_rag=use_rag,
-                    tokens_input=llm_metrics["tokens_input"],
-                    tokens_output=llm_metrics["tokens_output"],
-                    tokens_total=llm_metrics["tokens_total"],
-                )
-            except Exception as exc:
-                log_event(
-                    component="fastapi.chat.eval_runs",
-                    event="fastapi.chat.eval_run.persist_failed",
-                    trace_id=trace_id,
-                    error_code="chat_eval_run_persist_failed",
                     error_message=str(exc),
                 )
         log_event(

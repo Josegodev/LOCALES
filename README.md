@@ -16,7 +16,7 @@ Los futuros evals deben apuntar directamente a `/chat`.
 - `app/auth.py`
 - `app/llm_client.py`
 - `app/rag_client.py`
-- `app/observability/chat_trace.py`
+- `app/observability/chat_runs.py`
 - `app/observability/logging.py`
 - `DB/chunks/document_context.py`
 - `frontend/index.html`
@@ -30,7 +30,7 @@ Los futuros evals deben apuntar directamente a `/chat`.
 APP_ENV=local
 BACKEND_BASE_URL=http://127.0.0.1:8000
 CHAT_AUTH_MODE=local_open
-CHAT_TRACE_PATH=data/chat_traces.jsonl
+CHAT_RUNS_PATH=data/chat_runs.jsonl
 OLLAMA_BASE_URL=http://127.0.0.1:11434
 USE_REMOTE_RAG=false
 DOCUMENTS_DB_PATH=/home/jose-gonzalez-oliva/LOCALES/DB/chunks/documents.sqlite
@@ -81,7 +81,7 @@ Comprobaciones HTTP mínimas:
 ```bash
 curl http://127.0.0.1:8000/health
 curl -X POST http://127.0.0.1:8000/chat -H "Content-Type: application/json" -d '{"message":"hola","use_rag":true}'
-curl http://127.0.0.1:8000/api/traces/chat?limit=10
+curl http://127.0.0.1:8000/api/chat/runs?limit=10
 bash scripts/run_chat_eval_e2e.sh
 ```
 

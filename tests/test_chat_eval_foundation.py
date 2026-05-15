@@ -8,7 +8,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.observability.chat_trace import write_chat_trace
+from app.observability.chat_runs import write_chat_run
 
 
 class ChatEvalFoundationTests(unittest.TestCase):
@@ -87,7 +87,7 @@ class ChatEvalFoundationTests(unittest.TestCase):
             trace_path = Path(tmpdir) / "chat_traces.jsonl"
 
             with patch("app.auth.settings.chat_auth_mode", "local_open"):
-                with patch("app.observability.chat_trace.settings.chat_trace_path", str(trace_path)):
+                with patch("app.observability.chat_runs.settings.chat_runs_path", str(trace_path)):
                     response = TestClient(app).get("/api/evals/chat?limit=25")
 
         self.assertEqual(response.status_code, 200)
@@ -109,7 +109,7 @@ class ChatEvalFoundationTests(unittest.TestCase):
     def test_chat_eval_endpoint_lists_chat_traces_without_running_evals(self):
         with TemporaryDirectory() as tmpdir:
             trace_path = Path(tmpdir) / "chat_traces.jsonl"
-            write_chat_trace(
+            write_chat_run(
                 trace_id="12345678123456781234567812345678",
                 source="frontend",
                 input_text="Que es un transformer?",
@@ -133,7 +133,7 @@ class ChatEvalFoundationTests(unittest.TestCase):
             )
 
             with patch("app.auth.settings.chat_auth_mode", "local_open"):
-                with patch("app.observability.chat_trace.settings.chat_trace_path", str(trace_path)):
+                with patch("app.observability.chat_runs.settings.chat_runs_path", str(trace_path)):
                     response = TestClient(app).get("/api/evals/chat?limit=25")
 
         self.assertEqual(response.status_code, 200)
@@ -233,70 +233,35 @@ class ChatEvalFoundationTests(unittest.TestCase):
                                 "/chat",
                                 json={"message": "hola", "provider": "ollama", "model": "granite4.1:8b"},
                             )
-            run_files = list(runs_dir.glob("*_front_chat_run.json"))
-            payload = json.loads(run_files[0].read_text(encoding="utf-8"))
-
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(run_files), 1)
-        self.assertEqual(payload["source"], "front")
-        self.assertEqual(payload["endpoint"], "/chat")
-        self.assertEqual(payload["status"], "ok")
-        self.assertEqual(payload["model"], "granite4.1:8b")
+        self.assertFalse(runs_dir.exists() and list(runs_dir.glob("*_front_chat_run.json")))
 
-    def test_saved_runs_endpoint_reads_front_run_files_and_stats(self):
+    def test_saved_eval_runs_endpoint_lists_only_eval_artifacts(self):
         with TemporaryDirectory() as tmpdir:
             runs_dir = Path(tmpdir) / "runs"
             runs_dir.mkdir()
-            (runs_dir / "20260101_000000_000000_aaa_front_chat_run.json").write_text(
+            (runs_dir / "20260101_000000_chat_eval_run.json").write_text(
                 json.dumps(
                     {
+                        "version": "chat_eval_run.v1",
+                        "run_id": "eval-run-1",
                         "created_at": "2026-01-01T00:00:00+00:00",
-                        "trace_id": "aaa",
-                        "source": "front",
-                        "endpoint": "/chat",
-                        "model": "granite4.1:8b",
-                        "provider": "ollama",
-                        "input": "hola",
-                        "response": "ok",
-                        "status": "ok",
-                        "retrieval_status": "EVIDENCE_FOUND",
-                        "use_rag": True,
-                        "tokens_input": None,
-                        "tokens_output": None,
-                        "tokens_total": 12,
-                        "latency_ms": 100,
-                        "source_filenames": [],
-                        "chunk_ids": [],
-                        "warnings": [],
-                        "error_code": None,
-                        "error_message": None,
+                        "source": "frontend",
+                        "cases_file": "evals/cases/chat_cases.json",
+                        "baseline_file": "evals/baselines/chat_baseline.json",
+                        "summary": {"total": 2, "passed": 2, "failed": 0, "errors": 0, "pass_rate": 1.0},
+                        "results": [],
                     }
                 ),
                 encoding="utf-8",
             )
-            (runs_dir / "20260102_000000_000000_bbb_front_chat_run.json").write_text(
+            (runs_dir / "20260101_000001_front_chat_run.json").write_text(
                 json.dumps(
                     {
-                        "created_at": "2026-01-02T00:00:00+00:00",
-                        "trace_id": "bbb",
                         "source": "front",
                         "endpoint": "/chat",
-                        "model": "mistral",
-                        "provider": "ollama",
-                        "input": "hola",
-                        "response": None,
-                        "status": "error",
-                        "retrieval_status": "unknown",
-                        "use_rag": False,
-                        "tokens_input": None,
-                        "tokens_output": None,
-                        "tokens_total": None,
-                        "latency_ms": 300,
-                        "source_filenames": [],
-                        "chunk_ids": [],
-                        "warnings": [],
-                        "error_code": "llm_unavailable",
-                        "error_message": "down",
+                        "trace_id": "front-1",
+                        "status": "ok",
                     }
                 ),
                 encoding="utf-8",
@@ -308,13 +273,12 @@ class ChatEvalFoundationTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         body = response.json()
-        self.assertEqual(body["total_runs"], 2)
-        self.assertEqual(body["ok_runs"], 1)
-        self.assertEqual(body["error_runs"], 1)
-        self.assertEqual(body["models"], {"granite4.1:8b": 1, "mistral": 1})
-        self.assertEqual(body["avg_latency_ms"], 200.0)
-        self.assertEqual(body["avg_tokens_total"], 12.0)
-        self.assertEqual(body["runs"][0]["trace_id"], "bbb")
+        self.assertEqual(body["status"], "ok")
+        self.assertEqual(body["total_runs"], 1)
+        self.assertEqual(body["total_cases"], 2)
+        self.assertEqual(len(body["items"]), 1)
+        self.assertEqual(body["items"][0]["run_id"], "eval-run-1")
+        self.assertTrue(body["items"][0]["run_path"].endswith("_chat_eval_run.json"))
 
     def test_importing_app_main_does_not_import_telegram_modules(self):
         telegram_modules = [name for name in sys.modules if "telegram" in name]

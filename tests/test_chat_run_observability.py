@@ -1,0 +1,199 @@
+import json
+import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
+
+from fastapi.testclient import TestClient
+
+from app.main import app
+
+
+class ChatRunObservabilityTests(unittest.TestCase):
+    CHAT_PAYLOAD = {
+        "message": "Que es un transformer?",
+        "provider": "ollama",
+        "model": "granite4.1:8b",
+        "use_rag": True,
+    }
+
+    def _successful_rag_context(self) -> dict:
+        return {
+            "status": "EVIDENCE_FOUND",
+            "prompt": "context prompt",
+            "chunks": [
+                {
+                    "text": "Transformer attention context",
+                    "id": 1,
+                    "document_id": 2,
+                    "filename": "doc.pdf",
+                    "score": 1,
+                }
+            ],
+            "warnings": [],
+            "query_original": self.CHAT_PAYLOAD["message"],
+            "query_normalized": self.CHAT_PAYLOAD["message"].strip().casefold(),
+            "query_terms": [],
+            "quoted_terms": [],
+            "source_intent": "mixed",
+            "selected_corpus": "mixed",
+            "candidate_filenames": ["doc.pdf"],
+            "selected_filenames": ["doc.pdf"],
+            "scores": [1],
+        }
+
+    def test_post_chat_persists_chat_run_line(self):
+        with TemporaryDirectory() as tmpdir:
+            runs_path = Path(tmpdir) / "chat_runs.jsonl"
+            with patch("app.auth.settings.chat_auth_mode", "local_open"):
+                with patch("app.main.settings.chat_runs_path", str(runs_path)):
+                    with patch("app.observability.chat_runs.settings.chat_runs_path", str(runs_path)):
+                        with patch("app.main.build_document_prompt", return_value=self._successful_rag_context()):
+                            with patch(
+                                "app.main.ask_chat",
+                                return_value={
+                                    "status": "ok",
+                                    "provider": "ollama",
+                                    "model": "granite4.1:8b",
+                                    "temperature": 0.2,
+                                    "use_rag": True,
+                                    "answer": "Transformer basado en attention.",
+                                    "prompt_eval_count": 12,
+                                    "eval_count": 20,
+                                },
+                            ):
+                                response = TestClient(app).post("/chat", json=self.CHAT_PAYLOAD)
+
+            self.assertEqual(response.status_code, 200)
+            lines = runs_path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(lines), 1)
+            payload = json.loads(lines[0])
+
+        self.assertEqual(payload["version"], "chat_run.v1")
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["model"], "granite4.1:8b")
+        self.assertEqual(payload["provider"], "ollama")
+        self.assertEqual(payload["input"], self.CHAT_PAYLOAD["message"])
+        self.assertEqual(payload["response"], "Transformer basado en attention.")
+        self.assertEqual(payload["chunk_ids"], [1])
+        self.assertEqual(payload["document_ids"], [2])
+        self.assertEqual(payload["source_filenames"], ["doc.pdf"])
+        self.assertEqual(payload["tokens_total"], 32)
+
+    def test_post_chat_preserves_model_sent_by_frontend(self):
+        with TemporaryDirectory() as tmpdir:
+            runs_path = Path(tmpdir) / "chat_runs.jsonl"
+            with patch("app.auth.settings.chat_auth_mode", "local_open"):
+                with patch("app.main.settings.chat_runs_path", str(runs_path)):
+                    with patch("app.observability.chat_runs.settings.chat_runs_path", str(runs_path)):
+                        with patch("app.main.build_document_prompt", return_value=self._successful_rag_context()):
+                            with patch(
+                                "app.main.ask_chat",
+                                return_value={
+                                    "status": "ok",
+                                    "provider": "openai",
+                                    "model": "gpt-5.5",
+                                    "temperature": 0.2,
+                                    "use_rag": True,
+                                    "answer": "Respuesta OpenAI.",
+                                },
+                            ):
+                                response = TestClient(app).post(
+                                    "/chat",
+                                    json={
+                                        "message": "Resume el documento",
+                                        "provider": "openai",
+                                        "model": "gpt-5.5",
+                                        "use_rag": True,
+                                    },
+                                )
+
+            self.assertEqual(response.status_code, 200)
+            payload = json.loads(runs_path.read_text(encoding="utf-8").splitlines()[0])
+
+        self.assertEqual(payload["provider"], "openai")
+        self.assertEqual(payload["model"], "gpt-5.5")
+
+    def test_controlled_error_also_persists_chat_run(self):
+        with TemporaryDirectory() as tmpdir:
+            runs_path = Path(tmpdir) / "chat_runs.jsonl"
+            with patch("app.auth.settings.chat_auth_mode", "local_open"):
+                with patch("app.main.settings.chat_runs_path", str(runs_path)):
+                    with patch("app.observability.chat_runs.settings.chat_runs_path", str(runs_path)):
+                        response = TestClient(app).post(
+                            "/chat",
+                            json={"message": "hola", "provider": "ollama"},
+                        )
+
+            self.assertEqual(response.status_code, 400)
+            payload = json.loads(runs_path.read_text(encoding="utf-8").splitlines()[0])
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["error_code"], "model_required")
+        self.assertEqual(payload["error_message"], "El contrato de /chat requiere un model explicito.")
+        self.assertEqual(payload["input"], "hola")
+
+    def test_get_chat_runs_returns_descending_order(self):
+        with TemporaryDirectory() as tmpdir:
+            runs_path = Path(tmpdir) / "chat_runs.jsonl"
+            runs_path.write_text(
+                "\n".join(
+                    [
+                        json.dumps(
+                            {
+                                "version": "chat_run.v1",
+                                "trace_id": "older",
+                                "created_at": "2026-05-15T10:00:00+00:00",
+                                "source": "frontend",
+                                "endpoint": "/chat",
+                                "input": "old",
+                                "response": "old response",
+                                "provider": "ollama",
+                                "model": "granite4.1:8b",
+                                "status": "ok",
+                                "retrieval_status": "EVIDENCE_FOUND",
+                                "chunk_ids": [],
+                                "document_ids": [],
+                                "source_filenames": [],
+                            }
+                        ),
+                        json.dumps(
+                            {
+                                "version": "chat_run.v1",
+                                "trace_id": "newer",
+                                "created_at": "2026-05-15T12:00:00+00:00",
+                                "source": "frontend",
+                                "endpoint": "/chat",
+                                "input": "new",
+                                "response": "new response",
+                                "provider": "openai",
+                                "model": "gpt-5.5",
+                                "status": "error",
+                                "retrieval_status": "NO_EVIDENCE_FOR_ANSWER",
+                                "chunk_ids": [],
+                                "document_ids": [],
+                                "source_filenames": [],
+                                "error_code": "rag_answer_contract_invalid",
+                                "error_message": "failure",
+                            }
+                        ),
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with patch("app.auth.settings.chat_auth_mode", "local_open"):
+                with patch("app.main.settings.chat_runs_path", str(runs_path)):
+                    with patch("app.observability.chat_runs.settings.chat_runs_path", str(runs_path)):
+                        response = TestClient(app).get("/api/chat/runs?limit=10")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["count"], 2)
+        self.assertEqual(body["items"][0]["trace_id"], "newer")
+        self.assertEqual(body["items"][1]["trace_id"], "older")
+
+
+if __name__ == "__main__":
+    unittest.main()

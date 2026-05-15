@@ -1,6 +1,5 @@
 import unittest
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -10,16 +9,6 @@ from app.main import app
 
 class DevTokenAuthTests(unittest.TestCase):
     CHAT_PAYLOAD = {"message": "hola", "provider": "ollama", "model": "granite4.1:8b"}
-    REPO_ROOT = Path(__file__).resolve().parents[1]
-
-    def setUp(self):
-        self._runs_tmp = TemporaryDirectory()
-        self._runs_patch = patch("app.main.chat_eval_runner.DEFAULT_OUT_DIR", str(Path(self._runs_tmp.name) / "runs"))
-        self._runs_patch.start()
-
-    def tearDown(self):
-        self._runs_patch.stop()
-        self._runs_tmp.cleanup()
 
     def test_health_remains_open_without_token(self):
         with patch("app.auth.settings.jose_dev_token", "test-dev-token"):
@@ -133,6 +122,13 @@ class DevTokenAuthTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "ok")
 
+    def test_chat_runs_endpoint_is_open_in_local_open_mode(self):
+        with patch("app.auth.settings.chat_auth_mode", "local_open"):
+            response = TestClient(app).get("/api/chat/runs?limit=1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "ok")
+
     def test_chat_without_model_returns_explicit_contract_error(self):
         with patch("app.auth.settings.chat_auth_mode", "local_open"):
             response = TestClient(app).post("/chat", json={"message": "hola", "provider": "ollama"})
@@ -162,29 +158,37 @@ class DevTokenAuthTests(unittest.TestCase):
         self.assertEqual(response.json()["items"][0]["model"], "granite4.1:8b")
         self.assertEqual(response.json()["items"][1]["provider"], "openai")
 
+    def test_saved_eval_runs_endpoint_is_open_in_local_open_mode(self):
+        with patch("app.auth.settings.chat_auth_mode", "local_open"):
+            response = TestClient(app).get("/api/evals/runs")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "ok")
+
     def test_frontend_files_do_not_reference_operational_token_name(self):
-        frontend_js = (self.REPO_ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
-        frontend_html = (self.REPO_ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+        frontend_js = Path("/home/jose-gonzalez-oliva/LOCALES/frontend/app.js").read_text(encoding="utf-8")
+        frontend_html = Path("/home/jose-gonzalez-oliva/LOCALES/frontend/index.html").read_text(encoding="utf-8")
 
         self.assertNotIn("JOSE_DEV_TOKEN", frontend_js)
         self.assertNotIn("JOSE_DEV_TOKEN", frontend_html)
 
     def test_frontend_files_do_not_reference_telegram_endpoints(self):
-        frontend_js = (self.REPO_ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
-        frontend_html = (self.REPO_ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+        frontend_js = Path("/home/jose-gonzalez-oliva/LOCALES/frontend/app.js").read_text(encoding="utf-8")
+        frontend_html = Path("/home/jose-gonzalez-oliva/LOCALES/frontend/index.html").read_text(encoding="utf-8")
 
         self.assertNotIn("/telegram/", frontend_js)
         self.assertNotIn("/api/evals/telegram", frontend_js)
         self.assertNotIn("/api/evals/chat/run", frontend_js)
-        self.assertIn("/api/evals/runs", frontend_js)
+        self.assertIn("/api/chat/runs", frontend_js)
         self.assertIn("/api/models/chat", frontend_js)
         self.assertIn("/api/models/chat", frontend_html)
-        self.assertNotIn("Run evals", frontend_html)
+        self.assertIn("Estadisticas /chat", frontend_html)
+        self.assertIn("Trazas /chat", frontend_html)
         self.assertNotIn("Telegram legacy", frontend_html)
         self.assertNotIn("Telegram Evals", frontend_html)
 
     def test_frontend_model_selector_does_not_hardcode_granite_option(self):
-        frontend_html = (self.REPO_ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+        frontend_html = Path("/home/jose-gonzalez-oliva/LOCALES/frontend/index.html").read_text(encoding="utf-8")
 
         self.assertNotIn('<option value="granite"', frontend_html)
         self.assertIn("Carga modelos del backend", frontend_html)

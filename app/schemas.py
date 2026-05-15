@@ -165,7 +165,8 @@ class ErrorResponse(BaseModel):
     code: str
     message: str
 
-class ChatTraceResponse(BaseModel):
+class ChatRunResponse(BaseModel):
+    version: str | None = None
     trace_id: str | None = None
     created_at: str | None = None
     source: str | None = None
@@ -190,6 +191,16 @@ class ChatTraceResponse(BaseModel):
     evidence_used: bool | None = None
     fallback_used: bool | None = None
     answer_mode: str | None = None
+
+
+class ChatTraceResponse(ChatRunResponse):
+    pass
+
+
+class ChatRunListResponse(BaseModel):
+    status: str
+    items: list[ChatRunResponse] = Field(default_factory=list)
+    count: int
 
 
 class ChatTraceListResponse(BaseModel):
@@ -250,6 +261,26 @@ class ChatEvalRunSummary(BaseModel):
     failed: int
     errors: int
     pass_rate: float
+
+
+class ChatEvalSavedRunItem(BaseModel):
+    run_id: str | None = None
+    created_at: str | None = None
+    source: str | None = None
+    cases_file: str | None = None
+    baseline_file: str | None = None
+    summary: ChatEvalRunSummary
+    run_path: str | None = None
+
+
+class ChatEvalRunsListResponse(BaseModel):
+    status: str
+    total_runs: int
+    total_cases: int
+    total_passed: int
+    total_failed: int
+    avg_pass_rate: float
+    items: list[ChatEvalSavedRunItem] = Field(default_factory=list)
 
 
 class ChatEvalRunResponse(BaseModel):
