@@ -147,6 +147,7 @@ def _normalize_run(payload: dict[str, Any], *, raw_filename: str) -> RunRecord:
         tokens_total=_tokens_total(payload, tokens_input, tokens_output),
         output_tokens_per_second=_output_tokens_per_second(payload, tokens_output),
         status=_nullable_str(payload.get("status")),
+        error_type=_nullable_str(payload.get("error_type")),
         error_code=_nullable_str(payload.get("error_code")) or _nullable_str(payload.get("code")),
         error_message=_nullable_str(payload.get("error_message")) or _nullable_str(payload.get("message")),
         retrieval_status=_normalize_retrieval_status(payload.get("retrieval_status")),

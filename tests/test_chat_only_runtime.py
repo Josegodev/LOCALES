@@ -18,6 +18,7 @@ class ChatOnlyRuntimeTests(unittest.TestCase):
         self.assertIn("/api/chat/runs", paths)
         self.assertIn("/api/runs", paths)
         self.assertIn("/api/runs/summary", paths)
+        self.assertIn("/api/runs/operational-stats", paths)
         self.assertIn("/api/runs/timeseries", paths)
         self.assertIn("/api/evals/chat", paths)
         self.assertIn("/api/evals/chat/run", paths)

@@ -68,3 +68,25 @@ class RunsRouterTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["count"], 1)
         self.assertEqual(response.json()["items"][0]["trace_id"], "trace-1")
+
+    def test_get_runs_operational_stats_returns_200(self):
+        with TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir) / "CHAT_RUNS"
+            runs_dir.mkdir()
+            self._write_run(
+                runs_dir,
+                trace_id="trace-1",
+                created_at="2026-05-16T10:00:00+00:00",
+                model="granite4.1:8b",
+                status="ok",
+            )
+
+            with patch("app.auth.settings.chat_auth_mode", "local_open"):
+                with patch("app.evals.router.settings.operation_timeout_ms", 10000):
+                    with patch.dict(os.environ, {"CHAT_RUNS_DIR": str(runs_dir)}, clear=False):
+                        response = TestClient(app).get("/api/runs/operational-stats")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["timeout_ms"], 10000)
+        self.assertEqual(len(response.json()["models"]), 1)
+        self.assertEqual(response.json()["models"][0]["model"], "granite4.1:8b")

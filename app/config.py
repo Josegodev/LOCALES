@@ -34,6 +34,7 @@ class Settings(BaseSettings):
         default="CHAT_RUNS",
         validation_alias=AliasChoices("CHAT_RUNS_PATH", "CHAT_TRACE_PATH"),
     )
+    operation_timeout_ms: int = Field(default=10000, validation_alias=AliasChoices("OPERATION_TIMEOUT_MS"))
     jose_dev_token: str | None = None
     chat_auth_mode: Literal["local_open", "bearer_required", "disabled"] = "local_open"
 

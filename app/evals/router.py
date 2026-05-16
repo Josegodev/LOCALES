@@ -2,11 +2,13 @@ from fastapi import APIRouter, Depends, Header, Query
 from fastapi.security import HTTPAuthorizationCredentials
 
 from app.auth import bearer_scheme, require_chat_access
+from app.config import settings
 from app.evals.loader import load_runs
-from app.evals.metrics import build_timeseries, compute_by_model, compute_summary
+from app.evals.metrics import build_model_operational_stats, build_timeseries, compute_by_model, compute_summary
 from app.evals.schemas import (
     MetricsSummaryResponse,
     ModelMetrics,
+    OperationalStatsResponse,
     RunsByModelResponse,
     RunsListResponse,
     TimeSeriesResponse,
@@ -74,6 +76,25 @@ def runs_timeseries(
     return TimeSeriesResponse(
         count=len(points),
         items=points,
+        corrupt_files_count=len(loaded_runs.corrupt_files),
+        skipped_files_count=len(loaded_runs.skipped_files),
+        runs_dir=str(loaded_runs.runs_dir),
+    )
+
+
+@router.get("/runs/operational-stats", response_model=OperationalStatsResponse)
+def runs_operational_stats(
+    _: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    authorization: str | None = Header(default=None),
+) -> OperationalStatsResponse:
+    _require_access(_, authorization)
+    loaded_runs = load_runs()
+    return OperationalStatsResponse(
+        timeout_ms=settings.operation_timeout_ms,
+        models=build_model_operational_stats(
+            loaded_runs.items,
+            timeout_ms=settings.operation_timeout_ms,
+        ),
         corrupt_files_count=len(loaded_runs.corrupt_files),
         skipped_files_count=len(loaded_runs.skipped_files),
         runs_dir=str(loaded_runs.runs_dir),
