@@ -3,7 +3,13 @@ from __future__ import annotations
 from math import isfinite, sqrt
 from typing import Any
 
-from app.evals.schemas import ModelMetrics, OperationalModelStats, RunRecord, TimeSeriesPoint
+from app.evals.schemas import (
+    ModelMetrics,
+    OperationalModelStats,
+    OperationalModelTemperatureStats,
+    RunRecord,
+    TimeSeriesPoint,
+)
 
 
 NO_EVIDENCE_STATUS = "NO_EVIDENCE"
@@ -166,6 +172,10 @@ def _operational_model_label(run: RunRecord | dict[str, Any]) -> str:
     return model or "unknown"
 
 
+def _operational_temperature_value(run: RunRecord | dict[str, Any]) -> float | None:
+    return safe_number(_run_value(run, "temperature"))
+
+
 def is_ok_run(run: RunRecord | dict[str, Any]) -> bool:
     return _normalized_text(_run_value(run, "status")) == "ok"
 
@@ -236,55 +246,29 @@ def build_model_operational_stats(
     for run in runs:
         grouped.setdefault(_operational_model_label(run), []).append(run)
 
-    metrics: list[OperationalModelStats] = []
-    for model_name, model_runs in grouped.items():
-        latency_values = [safe_number(_run_value(run, "latency_ms")) for run in model_runs]
-        tokens_input_values = [safe_number(_run_value(run, "tokens_input")) for run in model_runs]
-        tokens_output_values = [safe_number(_run_value(run, "tokens_output")) for run in model_runs]
-        tokens_total_values = [_derived_tokens_total(run) for run in model_runs]
-        tokens_per_second_values = [_tokens_per_second(run) for run in model_runs]
+    return _build_grouped_operational_stats(grouped, timeout_ms=timeout_ms)
 
-        ok_count = 0
-        error_count = 0
-        timeout_count = 0
-        for run in model_runs:
-            if is_timeout_run(run, timeout_ms):
-                timeout_count += 1
-            elif is_ok_run(run):
-                ok_count += 1
-            else:
-                error_count += 1
 
+def build_model_temperature_operational_stats(
+    runs: list[RunRecord | dict[str, Any]],
+    timeout_ms: int = 10_000,
+) -> list[OperationalModelTemperatureStats]:
+    grouped: dict[tuple[str, float | None], list[RunRecord | dict[str, Any]]] = {}
+    for run in runs:
+        group_key = (_operational_model_label(run), _operational_temperature_value(run))
+        grouped.setdefault(group_key, []).append(run)
+
+    metrics: list[OperationalModelTemperatureStats] = []
+    for (model_name, temperature), model_runs in grouped.items():
+        base_metrics = _build_operational_stats_item(
+            model_name=model_name,
+            model_runs=model_runs,
+            timeout_ms=timeout_ms,
+        )
         metrics.append(
-            OperationalModelStats(
-                model=model_name,
-                runs=len(model_runs),
-                samples_valid_latency=sum(1 for value in latency_values if value is not None),
-                samples_valid_tokens=sum(1 for value in tokens_total_values if value is not None),
-                ok_count=ok_count,
-                error_count=error_count,
-                timeout_count=timeout_count,
-                success_rate=rate(ok_count, len(model_runs)),
-                error_rate=rate(error_count, len(model_runs)),
-                timeout_rate=rate(timeout_count, len(model_runs)),
-                avg_latency_ms=mean(latency_values),
-                p50_latency_ms=percentile(latency_values, 50),
-                p90_latency_ms=percentile(latency_values, 90),
-                p95_latency_ms=percentile(latency_values, 95),
-                p99_latency_ms=percentile(latency_values, 99),
-                min_latency_ms=safe_min(latency_values),
-                max_latency_ms=safe_max(latency_values),
-                std_latency_ms=stddev(latency_values),
-                avg_tokens_input=mean(tokens_input_values),
-                avg_tokens_output=mean(tokens_output_values),
-                avg_tokens_total=mean(tokens_total_values),
-                min_tokens_total=safe_min(tokens_total_values),
-                max_tokens_total=safe_max(tokens_total_values),
-                p50_tokens_total=percentile(tokens_total_values, 50),
-                p95_tokens_total=percentile(tokens_total_values, 95),
-                avg_tokens_per_second=mean(tokens_per_second_values),
-                p50_tokens_per_second=percentile(tokens_per_second_values, 50),
-                p95_tokens_per_second=percentile(tokens_per_second_values, 95),
+            OperationalModelTemperatureStats(
+                **base_metrics.model_dump(),
+                temperature=temperature,
             )
         )
 
@@ -293,9 +277,89 @@ def build_model_operational_stats(
             item.avg_latency_ms is None,
             item.avg_latency_ms if item.avg_latency_ms is not None else 0.0,
             item.model.casefold(),
+            item.temperature is None,
+            item.temperature if item.temperature is not None else 0.0,
         )
     )
     return metrics
+
+
+def _build_grouped_operational_stats(
+    grouped: dict[str, list[RunRecord | dict[str, Any]]],
+    *,
+    timeout_ms: int,
+) -> list[OperationalModelStats]:
+    metrics = [
+        _build_operational_stats_item(
+            model_name=model_name,
+            model_runs=model_runs,
+            timeout_ms=timeout_ms,
+        )
+        for model_name, model_runs in grouped.items()
+    ]
+    metrics.sort(
+        key=lambda item: (
+            item.avg_latency_ms is None,
+            item.avg_latency_ms if item.avg_latency_ms is not None else 0.0,
+            item.model.casefold(),
+        )
+    )
+    return metrics
+
+
+def _build_operational_stats_item(
+    *,
+    model_name: str,
+    model_runs: list[RunRecord | dict[str, Any]],
+    timeout_ms: int,
+) -> OperationalModelStats:
+    latency_values = [safe_number(_run_value(run, "latency_ms")) for run in model_runs]
+    tokens_input_values = [safe_number(_run_value(run, "tokens_input")) for run in model_runs]
+    tokens_output_values = [safe_number(_run_value(run, "tokens_output")) for run in model_runs]
+    tokens_total_values = [_derived_tokens_total(run) for run in model_runs]
+    tokens_per_second_values = [_tokens_per_second(run) for run in model_runs]
+
+    ok_count = 0
+    error_count = 0
+    timeout_count = 0
+    for run in model_runs:
+        if is_timeout_run(run, timeout_ms):
+            timeout_count += 1
+        elif is_ok_run(run):
+            ok_count += 1
+        else:
+            error_count += 1
+
+    return OperationalModelStats(
+        model=model_name,
+        runs=len(model_runs),
+        samples_valid_latency=sum(1 for value in latency_values if value is not None),
+        samples_valid_tokens=sum(1 for value in tokens_total_values if value is not None),
+        ok_count=ok_count,
+        error_count=error_count,
+        timeout_count=timeout_count,
+        success_rate=rate(ok_count, len(model_runs)),
+        error_rate=rate(error_count, len(model_runs)),
+        timeout_rate=rate(timeout_count, len(model_runs)),
+        avg_latency_ms=mean(latency_values),
+        p50_latency_ms=percentile(latency_values, 50),
+        p90_latency_ms=percentile(latency_values, 90),
+        p95_latency_ms=percentile(latency_values, 95),
+        p99_latency_ms=percentile(latency_values, 99),
+        min_latency_ms=safe_min(latency_values),
+        max_latency_ms=safe_max(latency_values),
+        std_latency_ms=stddev(latency_values),
+        avg_tokens_input=mean(tokens_input_values),
+        avg_tokens_output=mean(tokens_output_values),
+        avg_tokens_total=mean(tokens_total_values),
+        min_tokens_total=safe_min(tokens_total_values),
+        max_tokens_total=safe_max(tokens_total_values),
+        p50_tokens_total=percentile(tokens_total_values, 50),
+        p95_tokens_total=percentile(tokens_total_values, 95),
+        avg_tokens_per_second=mean(tokens_per_second_values),
+        p50_tokens_per_second=percentile(tokens_per_second_values, 50),
+        p95_tokens_per_second=percentile(tokens_per_second_values, 95),
+    )
 
 
 def compute_summary(runs: list[RunRecord]) -> dict[str, int | float | list[ModelMetrics] | None]:

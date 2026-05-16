@@ -23,11 +23,15 @@ from app.schemas import (
     ChatEvalRunsListResponse,
     ChatEvalRunResponse,
     ChatModelListResponse,
+    ChatOptionsResponse,
     ChatRunListResponse,
     ChatRequest,
     ChatResponse,
     ChatTraceListResponse,
     ChatTraceResetResponse,
+    TEMPERATURE_DEFAULT,
+    TEMPERATURE_MAX,
+    TEMPERATURE_MIN,
 )
 
 NO_EVIDENCE_MARKER = "NO_EVIDENCE_FOR_ANSWER"
@@ -431,6 +435,7 @@ def _persist_chat_run(
     final_answer: str,
     provider: str,
     model: str,
+    temperature: float,
     status: str,
     retrieval_status: str,
     chunk_ids: list[int],
@@ -466,6 +471,8 @@ def _persist_chat_run(
             "response": final_answer or None,
             "provider": provider,
             "model": model,
+            "temperature": temperature,
+            "generation_config": {"temperature": temperature},
             "status": status,
             "retrieval_status": retrieval_status,
             "chunk_ids": chunk_ids,
@@ -500,6 +507,24 @@ def health() -> dict:
 @app.get("/api/models/chat", response_model=ChatModelListResponse)
 def chat_models() -> dict:
     return {"status": "ok", "items": list_chat_models()}
+
+
+@app.get("/api/chat/options", response_model=ChatOptionsResponse)
+def chat_options() -> dict:
+    return {
+        "status": "ok",
+        "temperature": {
+            "default": TEMPERATURE_DEFAULT,
+            "min": TEMPERATURE_MIN,
+            "max": TEMPERATURE_MAX,
+            "presets": [
+                {"value": 0.0, "label": "Deterministic"},
+                {"value": TEMPERATURE_DEFAULT, "label": "Technical default"},
+                {"value": 0.7, "label": "Balanced"},
+                {"value": 1.0, "label": "Exploratory"},
+            ],
+        },
+    }
 
 
 @app.get("/api/traces/chat", response_model=ChatTraceListResponse)
@@ -664,7 +689,7 @@ def _run_chat_request(
     retrieval_status = "unknown"
     provider = (request.provider or "ollama").strip().lower()
     model = request.model or ""
-    temperature = request.temperature
+    temperature = request.temperature if isinstance(request.temperature, (int, float)) else TEMPERATURE_DEFAULT
     temperature_ignored = False
     use_rag = request.use_rag
     answer_mode = "unknown"
@@ -798,7 +823,7 @@ def _run_chat_request(
             provider=provider,
             model=model,
             max_tokens=request.max_tokens,
-            temperature=request.temperature,
+            temperature=temperature,
             use_rag=llm_use_rag,
         )
         result["latency_ms"] = int((time.perf_counter() - llm_started_at) * 1000)
@@ -883,7 +908,7 @@ def _run_chat_request(
                 provider=provider,
                 model=model,
                 max_tokens=request.max_tokens,
-                temperature=request.temperature,
+                temperature=temperature,
                 use_rag=True,
             )
             internal_result["latency_ms"] = int((time.perf_counter() - fallback_started_at) * 1000)
@@ -1055,6 +1080,7 @@ def _run_chat_request(
                     final_answer=final_answer,
                     provider=provider,
                     model=model,
+                    temperature=temperature,
                     status=status,
                     retrieval_status=retrieval_status,
                     chunk_ids=trace_chunk_ids,

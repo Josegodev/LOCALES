@@ -6,6 +6,26 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+TEMPERATURE_DEFAULT = 0.2
+TEMPERATURE_MIN = 0.0
+TEMPERATURE_MAX = 1.5
+
+
+def normalize_temperature(value: Any, default: float = TEMPERATURE_DEFAULT) -> float:
+    if value is None:
+        normalized = float(default)
+    elif isinstance(value, bool):
+        raise ValueError("temperature_invalid")
+    else:
+        normalized = float(value)
+
+    if not math.isfinite(normalized):
+        raise ValueError("temperature_invalid")
+    if normalized < TEMPERATURE_MIN or normalized > TEMPERATURE_MAX:
+        raise ValueError("temperature_invalid")
+    return normalized
+
+
 class CreateDocumentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -55,7 +75,7 @@ class ChatRequest(BaseModel):
     provider: str | None = None
     model: str | None = None
     max_tokens: int | None = Field(default=None, ge=1, le=2048)
-    temperature: float = Field(default=0.2, ge=0.0, le=1.0)
+    temperature: float | None = Field(default=None, validate_default=True)
     use_rag: bool = True
     top_k: int | None = Field(default=3, ge=1, le=10)
     trace_id: str | None = Field(default=None, min_length=32, max_length=36)
@@ -86,10 +106,8 @@ class ChatRequest(BaseModel):
 
     @field_validator("temperature")
     @classmethod
-    def validate_temperature(cls, value: float) -> float:
-        if not math.isfinite(value):
-            raise ValueError("temperature_invalid")
-        return value
+    def validate_temperature(cls, value: float | None) -> float:
+        return normalize_temperature(value)
 
     @field_validator("allowed_source_filenames")
     @classmethod
@@ -110,7 +128,7 @@ class ChatResponse(BaseModel):
     status: str
     provider: str
     model: str
-    temperature: float = 0.2
+    temperature: float = TEMPERATURE_DEFAULT
     temperature_ignored: bool = False
     use_rag: bool = True
     answer: str
@@ -160,6 +178,23 @@ class ChatModelListResponse(BaseModel):
     items: list[ChatModelOption] = Field(default_factory=list)
 
 
+class ChatTemperaturePreset(BaseModel):
+    value: float
+    label: str
+
+
+class ChatTemperatureOptions(BaseModel):
+    default: float
+    min: float
+    max: float
+    presets: list[ChatTemperaturePreset] = Field(default_factory=list)
+
+
+class ChatOptionsResponse(BaseModel):
+    status: str
+    temperature: ChatTemperatureOptions
+
+
 class ErrorResponse(BaseModel):
     status: str
     code: str
@@ -176,6 +211,8 @@ class ChatRunResponse(BaseModel):
     response: str | None = None
     provider: str | None = None
     model: str | None = None
+    temperature: float | None = None
+    generation_config: dict[str, Any] | None = None
     status: str | None = None
     retrieval_status: str | None = None
     chunk_ids: list[int] = Field(default_factory=list)

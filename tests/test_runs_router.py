@@ -11,13 +11,24 @@ from app.main import app
 
 
 class RunsRouterTests(unittest.TestCase):
-    def _write_run(self, runs_dir: Path, *, trace_id: str, created_at: str, model: str, status: str) -> None:
+    def _write_run(
+        self,
+        runs_dir: Path,
+        *,
+        trace_id: str,
+        created_at: str,
+        model: str,
+        status: str,
+        temperature: float | None = None,
+    ) -> None:
         (runs_dir / f"{trace_id}.json").write_text(
             json.dumps(
                 {
                     "trace_id": trace_id,
                     "created_at": created_at,
                     "model": model,
+                    "temperature": temperature,
+                    "generation_config": {"temperature": temperature} if temperature is not None else None,
                     "status": status,
                     "latency_ms": 120,
                     "tokens_input": 10,
@@ -79,6 +90,15 @@ class RunsRouterTests(unittest.TestCase):
                 created_at="2026-05-16T10:00:00+00:00",
                 model="granite4.1:8b",
                 status="ok",
+                temperature=0.2,
+            )
+            self._write_run(
+                runs_dir,
+                trace_id="trace-2",
+                created_at="2026-05-16T10:01:00+00:00",
+                model="granite4.1:8b",
+                status="ok",
+                temperature=0.7,
             )
 
             with patch("app.auth.settings.chat_auth_mode", "local_open"):
@@ -90,3 +110,5 @@ class RunsRouterTests(unittest.TestCase):
         self.assertEqual(response.json()["timeout_ms"], 10000)
         self.assertEqual(len(response.json()["models"]), 1)
         self.assertEqual(response.json()["models"][0]["model"], "granite4.1:8b")
+        self.assertEqual(len(response.json()["by_model"]), 1)
+        self.assertEqual(len(response.json()["by_model_temperature"]), 2)

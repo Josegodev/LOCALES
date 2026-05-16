@@ -5,6 +5,7 @@ class RunRecord(BaseModel):
     trace_id: str | None = None
     created_at: str | None = None
     model: str | None = None
+    temperature: float | None = None
     latency_ms: float | None = None
     tokens_input: int | None = None
     tokens_output: int | None = None
@@ -95,10 +96,16 @@ class OperationalModelStats(BaseModel):
     p95_tokens_per_second: float | None = None
 
 
+class OperationalModelTemperatureStats(OperationalModelStats):
+    temperature: float | None = None
+
+
 class OperationalStatsResponse(BaseModel):
     status: str = "ok"
     timeout_ms: int
     models: list[OperationalModelStats] = Field(default_factory=list)
+    by_model: list[OperationalModelStats] = Field(default_factory=list)
+    by_model_temperature: list[OperationalModelTemperatureStats] = Field(default_factory=list)
     corrupt_files_count: int = 0
     skipped_files_count: int = 0
     runs_dir: str

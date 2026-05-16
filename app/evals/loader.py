@@ -11,6 +11,7 @@ from typing import Any
 from app.config import settings
 from app.evals.schemas import RunRecord
 from app.observability.logging import log_event
+from app.schemas import normalize_temperature
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -82,6 +83,27 @@ def _nullable_float(value: Any) -> float | None:
     return None
 
 
+def _nullable_temperature(payload: dict[str, Any]) -> float | None:
+    direct_value = payload.get("temperature")
+    if direct_value is not None:
+        try:
+            return normalize_temperature(direct_value)
+        except (TypeError, ValueError):
+            return None
+
+    generation_config = payload.get("generation_config")
+    if isinstance(generation_config, dict):
+        raw_temperature = generation_config.get("temperature")
+        if raw_temperature is None:
+            return None
+        try:
+            return normalize_temperature(raw_temperature)
+        except (TypeError, ValueError):
+            return None
+
+    return None
+
+
 def _normalize_retrieval_status(value: Any) -> str | None:
     normalized = _nullable_str(value)
     if normalized in NO_EVIDENCE_STATUSES:
@@ -141,6 +163,7 @@ def _normalize_run(payload: dict[str, Any], *, raw_filename: str) -> RunRecord:
         trace_id=_nullable_str(payload.get("trace_id")),
         created_at=_nullable_str(payload.get("created_at")) or _nullable_str(payload.get("timestamp")),
         model=_nullable_str(payload.get("model")),
+        temperature=_nullable_temperature(payload),
         latency_ms=_nullable_float(payload.get("latency_ms")),
         tokens_input=tokens_input,
         tokens_output=tokens_output,

@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.observability.logging import log_event
+from app.schemas import normalize_temperature
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -34,6 +35,28 @@ def _nullable_number(value: Any) -> int | float | None:
     if isinstance(value, bool):
         return None
     return value if isinstance(value, (int, float)) else None
+
+
+def _nullable_temperature(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return normalize_temperature(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalized_generation_config(record: dict[str, Any], temperature: float | None) -> dict[str, float] | None:
+    raw_generation_config = record.get("generation_config")
+    if isinstance(raw_generation_config, dict):
+        configured_temperature = _nullable_temperature(raw_generation_config.get("temperature"))
+        if configured_temperature is not None:
+            return {"temperature": configured_temperature}
+
+    if temperature is not None:
+        return {"temperature": temperature}
+
+    return None
 
 
 def _int_list(value: Any) -> list[int]:
@@ -139,6 +162,8 @@ class ChatRunRecord(BaseModel):
     response: str | None = None
     model: str | None = None
     provider: str | None = None
+    temperature: float | None = None
+    generation_config: dict[str, float] | None = None
     status: str
     retrieval_status: str | None = None
     chunk_ids: list[int] = Field(default_factory=list)
@@ -175,6 +200,9 @@ def normalize_chat_run_record(record: dict[str, Any]) -> ChatRunRecord:
     if tokens_output is None:
         tokens_output = eval_count
     use_rag = record.get("use_rag") if isinstance(record.get("use_rag"), bool) else None
+    temperature = _nullable_temperature(record.get("temperature"))
+    if temperature is None and isinstance(record.get("generation_config"), dict):
+        temperature = _nullable_temperature(record["generation_config"].get("temperature"))
 
     payload = {
         "version": _nullable_str(record.get("version")) or CHAT_RUN_VERSION,
@@ -187,6 +215,8 @@ def normalize_chat_run_record(record: dict[str, Any]) -> ChatRunRecord:
         "response": _nullable_str(record.get("response")),
         "model": _nullable_str(record.get("model")),
         "provider": _nullable_str(record.get("provider")),
+        "temperature": temperature,
+        "generation_config": _normalized_generation_config(record, temperature),
         "status": _nullable_str(record.get("status")) or "error",
         "retrieval_status": _normalize_retrieval_status(record.get("retrieval_status")),
         "chunk_ids": _int_list(record.get("chunk_ids")),
@@ -349,6 +379,8 @@ def write_chat_run(**kwargs: Any) -> Path:
         response=kwargs.get("response_text"),
         provider=kwargs.get("provider"),
         model=kwargs.get("model"),
+        temperature=_nullable_temperature(kwargs.get("temperature")),
+        generation_config=_normalized_generation_config(kwargs, _nullable_temperature(kwargs.get("temperature"))),
         status=kwargs.get("status") or "error",
         retrieval_status=_normalize_retrieval_status(kwargs.get("retrieval_status")),
         chunk_ids=_int_list(kwargs.get("chunk_ids")),

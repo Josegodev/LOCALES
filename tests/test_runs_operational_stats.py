@@ -1,6 +1,9 @@
 import unittest
 
-from app.evals.metrics import build_model_operational_stats
+from app.evals.metrics import (
+    build_model_operational_stats,
+    build_model_temperature_operational_stats,
+)
 
 
 class RunsOperationalStatsTests(unittest.TestCase):
@@ -155,6 +158,36 @@ class RunsOperationalStatsTests(unittest.TestCase):
         self.assertEqual(metrics.samples_valid_tokens, 2)
         self.assertEqual(metrics.avg_tokens_total, 30.0)
         self.assertEqual(metrics.p50_tokens_total, 30.0)
+
+    def test_groups_by_model_and_temperature(self):
+        runs = [
+            {"model": "m1", "temperature": 0.2, "status": "ok", "latency_ms": 100},
+            {"model": "m1", "temperature": 0.7, "status": "ok", "latency_ms": 200},
+            {"model": "m1", "temperature": 0.2, "status": "ok", "latency_ms": 300},
+        ]
+
+        stats = build_model_temperature_operational_stats(runs)
+
+        self.assertEqual(len(stats), 2)
+        first = next(item for item in stats if item.temperature == 0.2)
+        second = next(item for item in stats if item.temperature == 0.7)
+        self.assertEqual(first.runs, 2)
+        self.assertEqual(second.runs, 1)
+        self.assertEqual(first.p50_latency_ms, 200.0)
+
+    def test_legacy_runs_without_temperature_are_grouped_as_null(self):
+        runs = [
+            {"model": "legacy", "status": "ok", "latency_ms": 100},
+            {"model": "legacy", "temperature": 0.2, "status": "ok", "latency_ms": 200},
+        ]
+
+        stats = build_model_temperature_operational_stats(runs)
+
+        self.assertEqual(len(stats), 2)
+        null_group = next(item for item in stats if item.temperature is None)
+        explicit_group = next(item for item in stats if item.temperature == 0.2)
+        self.assertEqual(null_group.runs, 1)
+        self.assertEqual(explicit_group.runs, 1)
 
 
 if __name__ == "__main__":

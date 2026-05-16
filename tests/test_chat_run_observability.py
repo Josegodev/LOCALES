@@ -77,12 +77,43 @@ class ChatRunObservabilityTests(unittest.TestCase):
         self.assertEqual(payload["timestamp"], payload["created_at"])
         self.assertEqual(payload["model"], "granite4.1:8b")
         self.assertEqual(payload["provider"], "ollama")
+        self.assertEqual(payload["temperature"], 0.2)
+        self.assertEqual(payload["generation_config"]["temperature"], 0.2)
         self.assertEqual(payload["input"], self.CHAT_PAYLOAD["message"])
         self.assertEqual(payload["response"], "Transformer basado en attention.")
         self.assertEqual(payload["chunk_ids"], [1])
         self.assertEqual(payload["document_ids"], [2])
         self.assertEqual(payload["source_filenames"], ["doc.pdf"])
         self.assertEqual(payload["tokens_total"], 32)
+
+    def test_post_chat_persists_explicit_temperature_value(self):
+        with TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir) / "CHAT_RUNS"
+            with patch("app.auth.settings.chat_auth_mode", "local_open"):
+                with patch("app.main.settings.chat_runs_path", str(runs_dir)):
+                    with patch("app.observability.chat_runs.settings.chat_runs_path", str(runs_dir)):
+                        with patch("app.main.build_document_prompt", return_value=self._successful_rag_context()):
+                            with patch(
+                                "app.main.ask_chat",
+                                return_value={
+                                    "status": "ok",
+                                    "provider": "ollama",
+                                    "model": "granite4.1:8b",
+                                    "temperature": 0.7,
+                                    "use_rag": True,
+                                    "answer": "Respuesta creativa.",
+                                },
+                            ):
+                                response = TestClient(app).post(
+                                    "/chat",
+                                    json={**self.CHAT_PAYLOAD, "temperature": 0.7},
+                                )
+
+            self.assertEqual(response.status_code, 200)
+            payload = json.loads(next(runs_dir.glob("*.json")).read_text(encoding="utf-8"))
+
+        self.assertEqual(payload["temperature"], 0.7)
+        self.assertEqual(payload["generation_config"]["temperature"], 0.7)
 
     def test_post_chat_preserves_model_sent_by_frontend(self):
         with TemporaryDirectory() as tmpdir:
