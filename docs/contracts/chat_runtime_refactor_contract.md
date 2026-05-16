@@ -108,6 +108,18 @@ Contrato propuesto para `EvalRun`:
 
 ## Chat eval foundation
 
+Cada llamada real a `POST /chat` persiste un artefacto JSON independiente en el directorio configurado por `CHAT_RUNS_DIR` / `CHAT_RUNS_PATH`.
+
+El contrato activo de proyeccion de runs es:
+
+- `GET /api/runs`: listado normalizado de artefactos de run
+- `GET /api/runs/summary`: agregados globales y metricas por modelo calculadas en backend
+- `GET /api/runs/timeseries`: serie temporal normalizada con `created_at`, `model`, `latency_ms`, `tokens_input`, `tokens_output`, `tokens_total`, `status`, `retrieval_status`, `fallback_used` y `trace_id`
+- `GET /api/runs/operational-stats`: benchmark operacional agregado por modelo con latencias, percentiles, tasas, tokens y throughput calculados en backend
+- `GET /api/runs/by-model/{model_name}`: runs filtrados por modelo y metricas del modelo
+
+La UI de `frontend/` usa `operational-stats` para los paneles `Operational Benchmark` y `RUNS temperature`. El frontend solo renderiza tablas, tarjetas y barras; no recalcula percentiles, medias, tasas ni desviaciones.
+
 `GET /api/evals/chat` existe ahora solo para compatibilidad y lista trazas recientes del runtime chat-only.
 
 `POST /api/evals/chat/run` ejecuta los chat evals contra el mismo contrato estable de `/chat` y persiste el run en `evals/runs/`.

@@ -89,7 +89,7 @@ bash scripts/run_chat_eval_e2e.sh
 
 Cada llamada real a `POST /chat` escribe un JSON independiente en `CHAT_RUNS/`.
 Si la escritura del archivo falla, la respuesta del chat sigue devolviendose.
-Las metricas agregadas se calculan en backend y el frontend solo consume `/api/runs` y `/api/runs/summary`.
+Las metricas operacionales se calculan en backend. El frontend consume `/api/runs/operational-stats` para pintar los paneles `Operational Benchmark` y `RUNS temperature` sin recalcular percentiles, medias, tasas ni desviaciones en navegador.
 
 El comando E2E levanta una instancia temporal del backend actual en `127.0.0.1:8011`, ejecuta el endpoint de evals y la apaga al terminar.
 

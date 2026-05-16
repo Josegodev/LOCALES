@@ -39,7 +39,7 @@
         <h2>Autenticacion navegador</h2>
         <p class="muted-text">
           El navegador no envia tokens operacionales. El acceso a <code>/chat</code>,
-          <code>/api/runs</code> y <code>/api/runs/summary</code> depende de <code>CHAT_AUTH_MODE</code> en el backend.
+          <code>/api/runs</code> y <code>/api/runs/operational-stats</code> depende de <code>CHAT_AUTH_MODE</code> en el backend.
         </p>
       </section>
 
@@ -47,6 +47,7 @@
         <button class="tab-button active" type="button" data-tab-target="chat" aria-controls="tab-chat" aria-selected="true">Chat</button>
         <button class="tab-button" type="button" data-tab-target="health" aria-controls="tab-health" aria-selected="false">Health</button>
         <button class="tab-button" type="button" data-tab-target="runs" aria-controls="tab-runs" aria-selected="false">Runs</button>
+        <button class="tab-button" type="button" data-tab-target="runs-temperature" aria-controls="tab-runs-temperature" aria-selected="false">RUNS temperature</button>
         <button class="tab-button" type="button" data-tab-target="endpoints" aria-controls="tab-endpoints" aria-selected="false">Puertas FastAPI</button>
       </nav>
 
@@ -60,8 +61,27 @@
             <select id="modelSelect">
               <option value="" data-provider="ollama" selected>Carga modelos del backend</option>
             </select>
+            <label for="temperatureSelect">Temperatura</label>
+            <select id="temperatureSelect">
+              <option value="0.0">0,0</option>
+              <option value="0.1">0,1</option>
+              <option value="0.2" selected>0,2 - default</option>
+              <option value="0.3">0,3</option>
+              <option value="0.4">0,4</option>
+              <option value="0.5">0,5</option>
+              <option value="0.6">0,6</option>
+              <option value="0.7">0,7</option>
+              <option value="0.8">0,8</option>
+              <option value="0.9">0,9</option>
+              <option value="1.0">1,0</option>
+              <option value="1.1">1,1</option>
+              <option value="1.2">1,2</option>
+              <option value="1.3">1,3</option>
+              <option value="1.4">1,4</option>
+              <option value="1.5">1,5</option>
+            </select>
             <p class="muted-text compact-note">
-              El contrato de <code>/chat</code> exige un modelo explicito. La UI debe cargarlo desde <code>/api/models/chat</code> o seleccionarlo antes de enviar.
+              El contrato de <code>/chat</code> exige un modelo explicito. La UI carga modelos desde <code>/api/models/chat</code> y temperaturas desde <code>/api/chat/options</code>.
             </p>
             <label class="checkbox">
               <input id="useRagInput" type="checkbox" checked />
@@ -73,7 +93,7 @@
           <article class="panel">
             <h2>Observabilidad minima</h2>
             <div class="pill-list">
-              <span>trace_id</span><span>provider</span><span>model</span>
+              <span>trace_id</span><span>provider</span><span>model</span><span>temperature</span>
               <span>tokens_input</span><span>tokens_output</span><span>tokens_total</span>
               <span>latency_ms</span><span>retrieval_status</span><span>chunk_ids</span>
               <span>document_ids</span><span>source_filenames</span><span>warnings</span>
@@ -91,6 +111,7 @@
             <div><dt>fallback_used</dt><dd id="fallbackUsed">-</dd></div>
             <div><dt>chunks_found</dt><dd id="chunksFound">-</dd></div>
             <div><dt>provider/model</dt><dd id="providerModel">-</dd></div>
+            <div><dt>temperature</dt><dd id="responseTemperature">-</dd></div>
             <div><dt>trace_id</dt><dd id="traceId">-</dd></div>
             <div><dt>latency_ms</dt><dd id="chatLatency">-</dd></div>
           </dl>
@@ -126,12 +147,12 @@
       </div>
 
       <div id="tab-runs" class="tab-panel" data-tab-panel="runs" hidden>
-        <section class="panel">
+        <section class="panel benchmark-panel">
           <div class="section-heading-row">
             <div>
-              <h2>Runs guardados</h2>
+              <h2>Operational Benchmark</h2>
               <p class="muted-text">
-                Vista de solo lectura sobre los runs reales guardados automaticamente por llamadas a <code>/chat</code>.
+                Vista de solo lectura sobre estadisticas operacionales ya calculadas por el backend.
               </p>
             </div>
             <div class="button-row">
@@ -139,32 +160,137 @@
             </div>
           </div>
           <div id="chatRunsStatus" class="status muted">Sin ejecutar</div>
-          <dl class="metrics wide">
-            <div><dt>total runs</dt><dd id="runsTotal">-</dd></div>
-            <div><dt>ok/error</dt><dd id="runsOkError">-</dd></div>
-            <div><dt>modelos usados</dt><dd id="runsModels">-</dd></div>
-            <div><dt>latencia media</dt><dd id="runsAvgLatency">-</dd></div>
-            <div><dt>tokens medios</dt><dd id="runsAvgTokens">-</dd></div>
+          <dl class="metrics wide benchmark-summary">
+            <div><dt>Total runs</dt><dd id="benchmarkTotalRuns">-</dd></div>
+            <div><dt>Fastest avg latency model</dt><dd id="benchmarkFastestAvgLatency">-</dd></div>
+            <div><dt>Best p95 latency model</dt><dd id="benchmarkBestP95Latency">-</dd></div>
+            <div><dt>Highest output tokens model</dt><dd id="benchmarkHighestOutputTokens">-</dd></div>
+            <div><dt>Highest error rate model</dt><dd id="benchmarkHighestErrorRate">-</dd></div>
           </dl>
-          <div class="table-scroll">
-            <table class="data-table">
+          <h3>Model comparison table</h3>
+          <div class="table-scroll benchmark-table-scroll">
+            <table class="data-table benchmark-table">
               <thead>
                 <tr>
-                  <th>created_at</th>
                   <th>model</th>
-                  <th>status</th>
-                  <th>retrieval_status</th>
-                  <th>latency_ms</th>
-                  <th>tokens_total</th>
-                  <th>trace_id</th>
+                  <th>runs</th>
+                  <th>success_rate</th>
+                  <th>error_rate</th>
+                  <th>timeout_rate</th>
+                  <th>avg_latency_ms</th>
+                  <th>p50_latency_ms</th>
+                  <th>p95_latency_ms</th>
+                  <th>p99_latency_ms</th>
+                  <th>std_latency_ms</th>
+                  <th>avg_tokens_input</th>
+                  <th>avg_tokens_output</th>
+                  <th>avg_tokens_total</th>
+                  <th>avg_tokens_per_second</th>
                 </tr>
               </thead>
-              <tbody id="chatRunsTableBody">
-                <tr><td colspan="7">Pulsa Refresh.</td></tr>
+              <tbody id="benchmarkTableBody">
+                <tr><td colspan="14">Pulsa Refresh.</td></tr>
               </tbody>
             </table>
           </div>
+
+          <div class="benchmark-charts">
+            <article class="chart-panel">
+              <h3>Latency chart</h3>
+              <div id="latencyChart" class="grouped-chart empty">Pulsa Refresh.</div>
+            </article>
+            <article class="chart-panel">
+              <h3>Token chart</h3>
+              <div id="tokensChart" class="grouped-chart empty">Pulsa Refresh.</div>
+            </article>
+            <article class="chart-panel">
+              <h3>Throughput chart</h3>
+              <div id="throughputChart" class="grouped-chart empty">Pulsa Refresh.</div>
+            </article>
+            <article class="chart-panel">
+              <h3>Reliability chart</h3>
+              <div id="reliabilityChart" class="grouped-chart empty">Pulsa Refresh.</div>
+            </article>
+          </div>
+
+          <p class="muted-text benchmark-note">
+            avg_latency_ms shows average latency. p50 shows typical behavior. p95 and p99 expose operational spikes.
+            error_rate and timeout_rate show reliability problems. tokens_per_second is an approximate generation throughput metric.
+          </p>
           <pre id="chatRunsRaw" class="output small">-</pre>
+        </section>
+      </div>
+
+      <div id="tab-runs-temperature" class="tab-panel" data-tab-panel="runs-temperature" hidden>
+        <section class="panel benchmark-panel">
+          <div class="section-heading-row">
+            <div>
+              <h2>RUNS temperature</h2>
+              <p class="muted-text">
+                Comparativa operacional por modelo y temperatura usando <code>by_model_temperature</code> del backend.
+              </p>
+            </div>
+            <div class="button-row">
+              <button id="temperatureRunsLoadButton" type="button">Refresh</button>
+            </div>
+          </div>
+          <div id="temperatureRunsStatus" class="status muted">Sin ejecutar</div>
+          <dl class="metrics wide benchmark-summary">
+            <div><dt>Total runs</dt><dd id="temperatureTotalRuns">-</dd></div>
+            <div><dt>Fastest avg latency config</dt><dd id="temperatureFastestAvgLatency">-</dd></div>
+            <div><dt>Best p95 latency config</dt><dd id="temperatureBestP95Latency">-</dd></div>
+            <div><dt>Highest output tokens config</dt><dd id="temperatureHighestOutputTokens">-</dd></div>
+            <div><dt>Highest error rate config</dt><dd id="temperatureHighestErrorRate">-</dd></div>
+          </dl>
+          <h3>Temperature comparison table</h3>
+          <div class="table-scroll benchmark-table-scroll">
+            <table class="data-table benchmark-table">
+              <thead>
+                <tr>
+                  <th>model</th>
+                  <th>temperature</th>
+                  <th>runs</th>
+                  <th>success_rate</th>
+                  <th>error_rate</th>
+                  <th>timeout_rate</th>
+                  <th>avg_latency_ms</th>
+                  <th>p50_latency_ms</th>
+                  <th>p95_latency_ms</th>
+                  <th>p99_latency_ms</th>
+                  <th>avg_tokens_output</th>
+                  <th>avg_tokens_total</th>
+                  <th>avg_tokens_per_second</th>
+                </tr>
+              </thead>
+              <tbody id="temperatureBenchmarkTableBody">
+                <tr><td colspan="13">Pulsa Refresh.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="benchmark-charts">
+            <article class="chart-panel">
+              <h3>Latency by temperature</h3>
+              <div id="temperatureLatencyChart" class="grouped-chart empty">Pulsa Refresh.</div>
+            </article>
+            <article class="chart-panel">
+              <h3>Tokens by temperature</h3>
+              <div id="temperatureTokensChart" class="grouped-chart empty">Pulsa Refresh.</div>
+            </article>
+            <article class="chart-panel">
+              <h3>Throughput by temperature</h3>
+              <div id="temperatureThroughputChart" class="grouped-chart empty">Pulsa Refresh.</div>
+            </article>
+            <article class="chart-panel">
+              <h3>Reliability by temperature</h3>
+              <div id="temperatureReliabilityChart" class="grouped-chart empty">Pulsa Refresh.</div>
+            </article>
+          </div>
+
+          <p class="muted-text benchmark-note">
+            Esta vista no lanza evals. Solo compara runs reales ya guardados por <code>/chat</code> agrupados por modelo y temperatura.
+          </p>
+          <pre id="temperatureRunsRaw" class="output small">-</pre>
         </section>
       </div>
 
@@ -192,10 +318,12 @@
           <div class="endpoint-grid">
             <article><strong>GET /health</strong><p>Estado basico del backend.</p></article>
             <article><strong>GET /api/models/chat</strong><p>Catalogo de modelos seleccionables para el chat.</p></article>
+            <article><strong>GET /api/chat/options</strong><p>Opciones de generacion como presets de temperatura.</p></article>
             <article><strong>POST /chat</strong><p>Chat principal con RAG y runtime de modelos.</p></article>
             <article><strong>GET /api/runs</strong><p>Listado normalizado de runs guardados por /chat.</p></article>
-            <article><strong>GET /api/runs/summary</strong><p>Metricas agregadas calculadas en backend.</p></article>
-            <article><strong>GET /api/runs/timeseries</strong><p>Serie temporal lista para graficas.</p></article>
+            <article><strong>GET /api/runs/operational-stats</strong><p>Benchmark operacional agregado calculado en backend.</p></article>
+            <article><strong>GET /api/runs/summary</strong><p>Metrica agregada legacy calculada en backend.</p></article>
+            <article><strong>GET /api/runs/timeseries</strong><p>Serie temporal legacy lista para graficas.</p></article>
             <article><strong>GET /api/traces/chat</strong><p>Compatibilidad interna de trazas de chat.</p></article>
             <article><strong>GET /docs</strong><p>Swagger UI generado por FastAPI.</p></article>
             <article><strong>GET /openapi.json</strong><p>Contrato OpenAPI en JSON.</p></article>
@@ -229,8 +357,8 @@ uvicorn app.main:app --host &lt;backend-host&gt; --port &lt;backend-port&gt;</pr
               <pre>curl -X POST "&lt;backend-api-url&gt;/chat" -H "Content-Type: application/json" -d "{\"message\":\"Que es un transformer?\",\"provider\":\"ollama\",\"model\":\"granite4.1:8b\",\"use_rag\":true}"</pre>
             </article>
             <article>
-              <h3>Runs guardados</h3>
-              <pre>curl "&lt;backend-api-url&gt;/api/runs?limit=25"</pre>
+              <h3>Operational benchmark</h3>
+              <pre>curl "&lt;backend-api-url&gt;/api/runs/operational-stats"</pre>
             </article>
           </div>
         </section>
