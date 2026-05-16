@@ -59,7 +59,7 @@ class RunsLoaderTests(unittest.TestCase):
 
     def test_skips_incompatible_batch_eval_runs(self):
         with TemporaryDirectory() as tmpdir:
-            runs_dir = Path(tmpdir) / "evals" / "runs"
+            runs_dir = Path(tmpdir) / "CHAT_RUNS"
             runs_dir.mkdir(parents=True)
             (runs_dir / "eval.json").write_text(
                 json.dumps(
@@ -73,7 +73,7 @@ class RunsLoaderTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with patch.dict(os.environ, {"EVAL_RUNS_DIR": str(runs_dir)}, clear=False):
+            with patch.dict(os.environ, {"CHAT_RUNS_DIR": str(runs_dir)}, clear=False):
                 loaded = load_runs()
 
         self.assertEqual(len(loaded.items), 0)

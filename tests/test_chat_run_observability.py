@@ -68,23 +68,31 @@ class ChatRunObservabilityTests(unittest.TestCase):
             run_files = list(runs_dir.glob("*.json"))
             self.assertEqual(len(run_files), 1)
             payload = json.loads(run_files[0].read_text(encoding="utf-8"))
-            self.assertIn("_granite4_1_8b.json", run_files[0].name)
+            self.assertTrue(run_files[0].name.startswith("chat_run_"))
 
         self.assertEqual(payload["version"], "chat_run.v1")
         self.assertEqual(payload["status"], "ok")
         self.assertTrue(payload["trace_id"])
         self.assertIn("created_at", payload)
         self.assertEqual(payload["timestamp"], payload["created_at"])
+        self.assertEqual(payload["source"], "chat")
+        self.assertEqual(payload["requested_model"], "granite4.1:8b")
         self.assertEqual(payload["model"], "granite4.1:8b")
         self.assertEqual(payload["provider"], "ollama")
         self.assertEqual(payload["temperature"], 0.2)
+        self.assertEqual(payload["max_tokens"], 512)
+        self.assertIsNone(payload["top_p"])
         self.assertEqual(payload["generation_config"]["temperature"], 0.2)
+        self.assertEqual(payload["generation_config"]["max_tokens"], 512)
         self.assertEqual(payload["input"], self.CHAT_PAYLOAD["message"])
         self.assertEqual(payload["response"], "Transformer basado en attention.")
         self.assertEqual(payload["chunk_ids"], [1])
         self.assertEqual(payload["document_ids"], [2])
         self.assertEqual(payload["source_filenames"], ["doc.pdf"])
         self.assertEqual(payload["tokens_total"], 32)
+        self.assertIn("generation_latency_ms", payload)
+        self.assertIn("retrieval_latency_ms", payload)
+        self.assertIn("tool_latency_ms", payload)
 
     def test_post_chat_persists_explicit_temperature_value(self):
         with TemporaryDirectory() as tmpdir:
@@ -115,20 +123,22 @@ class ChatRunObservabilityTests(unittest.TestCase):
         self.assertEqual(payload["temperature"], 0.7)
         self.assertEqual(payload["generation_config"]["temperature"], 0.7)
 
-    def test_post_chat_preserves_model_sent_by_frontend(self):
+    def test_post_chat_persists_requested_model_and_effective_model(self):
         with TemporaryDirectory() as tmpdir:
             runs_dir = Path(tmpdir) / "CHAT_RUNS"
             with patch("app.auth.settings.chat_auth_mode", "local_open"):
-                with patch("app.main.settings.chat_runs_path", str(runs_dir)):
-                    with patch("app.observability.chat_runs.settings.chat_runs_path", str(runs_dir)):
+                with patch.dict("os.environ", {"CHAT_RUNS_DIR": str(runs_dir)}, clear=False):
+                    with patch("app.main.resolve_provider_model", return_value=("ollama", "granite4.1:8b")):
                         with patch("app.main.build_document_prompt", return_value=self._successful_rag_context()):
                             with patch(
                                 "app.main.ask_chat",
                                 return_value={
                                     "status": "ok",
-                                    "provider": "openai",
-                                    "model": "gpt-5.5",
+                                    "provider": "ollama",
+                                    "model": "granite4.1:8b",
                                     "temperature": 0.2,
+                                    "max_tokens": 256,
+                                    "top_p": 0.9,
                                     "use_rag": True,
                                     "answer": "Respuesta OpenAI.",
                                 },
@@ -137,8 +147,10 @@ class ChatRunObservabilityTests(unittest.TestCase):
                                     "/chat",
                                     json={
                                         "message": "Resume el documento",
-                                        "provider": "openai",
-                                        "model": "gpt-5.5",
+                                        "provider": "ollama",
+                                        "model": "granite",
+                                        "max_tokens": 256,
+                                        "top_p": 0.9,
                                         "use_rag": True,
                                     },
                                 )
@@ -146,8 +158,11 @@ class ChatRunObservabilityTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             payload = json.loads(next(runs_dir.glob("*.json")).read_text(encoding="utf-8"))
 
-        self.assertEqual(payload["provider"], "openai")
-        self.assertEqual(payload["model"], "gpt-5.5")
+        self.assertEqual(payload["provider"], "ollama")
+        self.assertEqual(payload["requested_model"], "granite")
+        self.assertEqual(payload["model"], "granite4.1:8b")
+        self.assertEqual(payload["max_tokens"], 256)
+        self.assertEqual(payload["top_p"], 0.9)
 
     def test_controlled_error_also_persists_chat_run(self):
         with TemporaryDirectory() as tmpdir:
@@ -167,6 +182,7 @@ class ChatRunObservabilityTests(unittest.TestCase):
         self.assertEqual(payload["error_code"], "model_required")
         self.assertEqual(payload["error_message"], "El contrato de /chat requiere un model explicito.")
         self.assertEqual(payload["input"], "hola")
+        self.assertEqual(payload["source"], "chat")
 
     def test_post_chat_creates_runs_directory_automatically(self):
         with TemporaryDirectory() as tmpdir:
@@ -241,14 +257,14 @@ class ChatRunObservabilityTests(unittest.TestCase):
         with TemporaryDirectory() as tmpdir:
             runs_dir = Path(tmpdir) / "CHAT_RUNS"
             runs_dir.mkdir()
-            (runs_dir / "20260515T100000000000Z_older_granite4_1_8b.json").write_text(
+            (runs_dir / "chat_run_20260515T100000000000Z_older.json").write_text(
                 json.dumps(
                     {
                         "version": "chat_run.v1",
                         "trace_id": "older",
                         "created_at": "2026-05-15T10:00:00+00:00",
                         "timestamp": "2026-05-15T10:00:00+00:00",
-                        "source": "frontend",
+                        "source": "chat",
                         "endpoint": "/chat",
                         "input": "old",
                         "response": "old response",
@@ -263,14 +279,14 @@ class ChatRunObservabilityTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            (runs_dir / "20260515T120000000000Z_newer_gpt_5_5.json").write_text(
+            (runs_dir / "chat_run_20260515T120000000000Z_newer.json").write_text(
                 json.dumps(
                     {
                         "version": "chat_run.v1",
                         "trace_id": "newer",
                         "created_at": "2026-05-15T12:00:00+00:00",
                         "timestamp": "2026-05-15T12:00:00+00:00",
-                        "source": "frontend",
+                        "source": "chat",
                         "endpoint": "/chat",
                         "input": "new",
                         "response": "new response",

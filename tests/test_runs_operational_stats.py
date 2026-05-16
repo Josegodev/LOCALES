@@ -175,7 +175,7 @@ class RunsOperationalStatsTests(unittest.TestCase):
         self.assertEqual(second.runs, 1)
         self.assertEqual(first.p50_latency_ms, 200.0)
 
-    def test_legacy_runs_without_temperature_are_grouped_as_null(self):
+    def test_legacy_runs_without_temperature_are_ignored(self):
         runs = [
             {"model": "legacy", "status": "ok", "latency_ms": 100},
             {"model": "legacy", "temperature": 0.2, "status": "ok", "latency_ms": 200},
@@ -183,11 +183,9 @@ class RunsOperationalStatsTests(unittest.TestCase):
 
         stats = build_model_temperature_operational_stats(runs)
 
-        self.assertEqual(len(stats), 2)
-        null_group = next(item for item in stats if item.temperature is None)
-        explicit_group = next(item for item in stats if item.temperature == 0.2)
-        self.assertEqual(null_group.runs, 1)
-        self.assertEqual(explicit_group.runs, 1)
+        self.assertEqual(len(stats), 1)
+        self.assertEqual(stats[0].temperature, 0.2)
+        self.assertEqual(stats[0].runs, 1)
 
 
 if __name__ == "__main__":

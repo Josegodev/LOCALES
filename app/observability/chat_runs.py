@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 import re
@@ -9,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.observability.logging import log_event
-from app.schemas import normalize_temperature
+from app.schemas import normalize_temperature, normalize_top_p
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -37,6 +38,18 @@ def _nullable_number(value: Any) -> int | float | None:
     return value if isinstance(value, (int, float)) else None
 
 
+def _nullable_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    return None
+
+
 def _nullable_temperature(value: Any) -> float | None:
     if value is None:
         return None
@@ -46,17 +59,42 @@ def _nullable_temperature(value: Any) -> float | None:
         return None
 
 
-def _normalized_generation_config(record: dict[str, Any], temperature: float | None) -> dict[str, float] | None:
+def _nullable_top_p(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return normalize_top_p(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalized_generation_config(
+    record: dict[str, Any],
+    temperature: float | None,
+    top_p: float | None,
+    max_tokens: int | None,
+) -> dict[str, int | float] | None:
     raw_generation_config = record.get("generation_config")
+    normalized_config: dict[str, int | float] = {}
     if isinstance(raw_generation_config, dict):
         configured_temperature = _nullable_temperature(raw_generation_config.get("temperature"))
         if configured_temperature is not None:
-            return {"temperature": configured_temperature}
+            normalized_config["temperature"] = configured_temperature
+        configured_top_p = _nullable_top_p(raw_generation_config.get("top_p"))
+        if configured_top_p is not None:
+            normalized_config["top_p"] = configured_top_p
+        configured_max_tokens = _nullable_int(raw_generation_config.get("max_tokens"))
+        if configured_max_tokens is not None:
+            normalized_config["max_tokens"] = configured_max_tokens
 
-    if temperature is not None:
-        return {"temperature": temperature}
+    if temperature is not None and "temperature" not in normalized_config:
+        normalized_config["temperature"] = temperature
+    if top_p is not None and "top_p" not in normalized_config:
+        normalized_config["top_p"] = top_p
+    if max_tokens is not None and "max_tokens" not in normalized_config:
+        normalized_config["max_tokens"] = max_tokens
 
-    return None
+    return normalized_config or None
 
 
 def _int_list(value: Any) -> list[int]:
@@ -132,7 +170,7 @@ def _normalize_output_tokens_per_second(
     return round(float(tokens_output) / (float(eval_duration) / 1_000_000_000), 4)
 
 
-def _runs_path(path: Path | None = None) -> Path:
+def resolve_chat_runs_path(path: Path | None = None) -> Path:
     def normalize_directory(candidate: Path) -> Path:
         if candidate.suffix.lower() in {".json", ".jsonl"}:
             return candidate.parent / candidate.stem
@@ -140,6 +178,14 @@ def _runs_path(path: Path | None = None) -> Path:
 
     if path is not None:
         return normalize_directory(path)
+
+    for env_name in ("CHAT_RUNS_DIR", "CHAT_RUNS_PATH", "CHAT_RUNS", "CHAT_TRACE_PATH"):
+        raw_value = os.getenv(env_name)
+        if isinstance(raw_value, str) and raw_value.strip():
+            candidate = Path(raw_value.strip())
+            if not candidate.is_absolute():
+                candidate = REPO_ROOT / candidate
+            return normalize_directory(candidate)
 
     configured = getattr(settings, "chat_runs_path", None)
     if isinstance(configured, str) and configured.strip():
@@ -156,14 +202,17 @@ class ChatRunRecord(BaseModel):
     trace_id: str
     created_at: str
     timestamp: str | None = None
-    source: str = "frontend"
+    source: str = "chat"
     endpoint: str = CHAT_RUN_ENDPOINT
     input: str
     response: str | None = None
     model: str | None = None
     provider: str | None = None
+    requested_model: str | None = None
     temperature: float | None = None
-    generation_config: dict[str, float] | None = None
+    max_tokens: int | None = None
+    top_p: float | None = None
+    generation_config: dict[str, int | float] | None = None
     status: str
     retrieval_status: str | None = None
     chunk_ids: list[int] = Field(default_factory=list)
@@ -180,12 +229,16 @@ class ChatRunRecord(BaseModel):
     load_duration: int | float | None = None
     output_tokens_per_second: int | float | None = None
     latency_ms: int | float | None = None
+    generation_latency_ms: int | float | None = None
+    retrieval_latency_ms: int | float | None = None
+    tool_latency_ms: int | float | None = None
     error_code: str | None = None
     error_message: str | None = None
     warnings: list[str] = Field(default_factory=list)
     use_rag: bool | None = None
     evidence_used: bool | None = None
     fallback_used: bool | None = None
+    fallback_reason: str | None = None
     answer_mode: str | None = None
 
 
@@ -203,6 +256,12 @@ def normalize_chat_run_record(record: dict[str, Any]) -> ChatRunRecord:
     temperature = _nullable_temperature(record.get("temperature"))
     if temperature is None and isinstance(record.get("generation_config"), dict):
         temperature = _nullable_temperature(record["generation_config"].get("temperature"))
+    top_p = _nullable_top_p(record.get("top_p"))
+    if top_p is None and isinstance(record.get("generation_config"), dict):
+        top_p = _nullable_top_p(record["generation_config"].get("top_p"))
+    max_tokens = _nullable_int(record.get("max_tokens"))
+    if max_tokens is None and isinstance(record.get("generation_config"), dict):
+        max_tokens = _nullable_int(record["generation_config"].get("max_tokens"))
 
     payload = {
         "version": _nullable_str(record.get("version")) or CHAT_RUN_VERSION,
@@ -215,8 +274,11 @@ def normalize_chat_run_record(record: dict[str, Any]) -> ChatRunRecord:
         "response": _nullable_str(record.get("response")),
         "model": _nullable_str(record.get("model")),
         "provider": _nullable_str(record.get("provider")),
+        "requested_model": _nullable_str(record.get("requested_model")),
         "temperature": temperature,
-        "generation_config": _normalized_generation_config(record, temperature),
+        "max_tokens": max_tokens,
+        "top_p": top_p,
+        "generation_config": _normalized_generation_config(record, temperature, top_p, max_tokens),
         "status": _nullable_str(record.get("status")) or "error",
         "retrieval_status": _normalize_retrieval_status(record.get("retrieval_status")),
         "chunk_ids": _int_list(record.get("chunk_ids")),
@@ -240,12 +302,16 @@ def normalize_chat_run_record(record: dict[str, Any]) -> ChatRunRecord:
             tokens_output=tokens_output,
         ),
         "latency_ms": _nullable_number(record.get("latency_ms")),
+        "generation_latency_ms": _nullable_number(record.get("generation_latency_ms")),
+        "retrieval_latency_ms": _nullable_number(record.get("retrieval_latency_ms")),
+        "tool_latency_ms": _nullable_number(record.get("tool_latency_ms")),
         "error_code": _nullable_str(record.get("error_code")),
         "error_message": _nullable_str(record.get("error_message")),
         "warnings": _warnings_list(record.get("warnings")),
         "use_rag": use_rag,
         "evidence_used": record.get("evidence_used") if isinstance(record.get("evidence_used"), bool) else None,
         "fallback_used": record.get("fallback_used") if isinstance(record.get("fallback_used"), bool) else None,
+        "fallback_reason": _nullable_str(record.get("fallback_reason")),
         "answer_mode": _nullable_str(record.get("answer_mode")),
     }
     return ChatRunRecord(**payload)
@@ -254,13 +320,6 @@ def normalize_chat_run_record(record: dict[str, Any]) -> ChatRunRecord:
 def _safe_trace_id(value: str) -> str:
     candidate = re.sub(r"[^A-Za-z0-9_-]+", "_", value.strip())
     return candidate or "trace"
-
-
-def _safe_model_name(value: str | None) -> str:
-    if not isinstance(value, str):
-        return "unknown_model"
-    candidate = re.sub(r"[^A-Za-z0-9_-]+", "_", value.strip())
-    return candidate or "unknown_model"
 
 
 def _timestamp_for_filename(value: str) -> str:
@@ -272,16 +331,11 @@ def _timestamp_for_filename(value: str) -> str:
 
 
 def _run_filename(run: ChatRunRecord) -> str:
-    return (
-        f"{_timestamp_for_filename(run.created_at)}"
-        f"_{_safe_trace_id(run.trace_id)}"
-        f"_{_safe_model_name(run.model)}"
-        f"{CHAT_RUN_FILE_SUFFIX}"
-    )
+    return f"chat_run_{_timestamp_for_filename(run.created_at)}_{_safe_trace_id(run.trace_id)}{CHAT_RUN_FILE_SUFFIX}"
 
 
 def record_chat_run(run: ChatRunRecord, *, path: Path | None = None) -> Path:
-    output_path = _runs_path(path)
+    output_path = resolve_chat_runs_path(path)
     output_path.mkdir(parents=True, exist_ok=True)
     payload = run.model_dump()
     run_path = output_path / _run_filename(run)
@@ -338,12 +392,12 @@ def _load_chat_runs(*, limit: int, path: Path) -> list[ChatRunRecord]:
 
 
 def list_chat_runs(limit: int = 50, *, path: Path | None = None) -> list[ChatRunRecord]:
-    resolved_path = _runs_path(path)
+    resolved_path = resolve_chat_runs_path(path)
     return _load_chat_runs(limit=limit, path=resolved_path)
 
 
 def clear_chat_runs(*, path: Path | None = None) -> int:
-    output_path = _runs_path(path)
+    output_path = resolve_chat_runs_path(path)
     if not output_path.exists() or not output_path.is_dir():
         return 0
 
@@ -379,8 +433,16 @@ def write_chat_run(**kwargs: Any) -> Path:
         response=kwargs.get("response_text"),
         provider=kwargs.get("provider"),
         model=kwargs.get("model"),
+        requested_model=kwargs.get("requested_model"),
         temperature=_nullable_temperature(kwargs.get("temperature")),
-        generation_config=_normalized_generation_config(kwargs, _nullable_temperature(kwargs.get("temperature"))),
+        max_tokens=_nullable_int(kwargs.get("max_tokens")),
+        top_p=_nullable_top_p(kwargs.get("top_p")),
+        generation_config=_normalized_generation_config(
+            kwargs,
+            _nullable_temperature(kwargs.get("temperature")),
+            _nullable_top_p(kwargs.get("top_p")),
+            _nullable_int(kwargs.get("max_tokens")),
+        ),
         status=kwargs.get("status") or "error",
         retrieval_status=_normalize_retrieval_status(kwargs.get("retrieval_status")),
         chunk_ids=_int_list(kwargs.get("chunk_ids")),
@@ -404,12 +466,16 @@ def write_chat_run(**kwargs: Any) -> Path:
             tokens_output=tokens_output,
         ),
         latency_ms=_nullable_number(kwargs.get("latency_ms")),
+        generation_latency_ms=_nullable_number(kwargs.get("generation_latency_ms")),
+        retrieval_latency_ms=_nullable_number(kwargs.get("retrieval_latency_ms")),
+        tool_latency_ms=_nullable_number(kwargs.get("tool_latency_ms")),
         error_code=_nullable_str(kwargs.get("error_code")),
         error_message=_nullable_str(kwargs.get("error_message")),
         warnings=_warnings_list(kwargs.get("warnings")),
         use_rag=kwargs.get("use_rag") if isinstance(kwargs.get("use_rag"), bool) else None,
         evidence_used=kwargs.get("evidence_used") if isinstance(kwargs.get("evidence_used"), bool) else None,
         fallback_used=kwargs.get("fallback_used") if isinstance(kwargs.get("fallback_used"), bool) else None,
+        fallback_reason=_nullable_str(kwargs.get("fallback_reason")),
         answer_mode=_nullable_str(kwargs.get("answer_mode")),
     )
     return record_chat_run(run, path=kwargs.get("path"))

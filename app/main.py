@@ -105,8 +105,6 @@ def _message_preview(text: str, limit: int = 200) -> str:
 
 
 def _chat_trace_source(user_id: int | None, chat_id: int | None) -> str:
-    if user_id is None and chat_id is None:
-        return "frontend"
     return "chat"
 
 
@@ -254,6 +252,27 @@ def _fallback_used_from_state(
     if retrieval_status in MARKER_ONLY_RETRIEVAL_STATUSES:
         return True
     return not evidence_used and answer_mode == ANSWER_MODE_SAFE_REFUSAL
+
+
+def _fallback_reason_from_state(
+    *,
+    retrieval_status: str | None,
+    answer_mode: str | None,
+    evidence_used: bool,
+) -> str | None:
+    if not _fallback_used_from_state(
+        retrieval_status=retrieval_status,
+        answer_mode=answer_mode,
+        evidence_used=evidence_used,
+    ):
+        return None
+    if answer_mode == ANSWER_MODE_MODEL_INTERNAL:
+        return "model_internal_no_evidence"
+    if answer_mode == ANSWER_MODE_SAFE_REFUSAL:
+        return "safe_refusal_no_evidence"
+    if retrieval_status in MARKER_ONLY_RETRIEVAL_STATUSES:
+        return "no_evidence"
+    return "fallback_used"
 
 
 def _no_evidence_warning_for_context(context: dict) -> str:
@@ -434,20 +453,27 @@ def _persist_chat_run(
     request: ChatRequest,
     final_answer: str,
     provider: str,
-    model: str,
+    requested_model: str | None,
+    model: str | None,
     temperature: float,
+    max_tokens: int | None,
+    top_p: float | None,
     status: str,
     retrieval_status: str,
     chunk_ids: list[int],
     document_ids: list[int],
     source_filenames: list[str],
     latency_ms: int,
+    generation_latency_ms: int | None,
+    retrieval_latency_ms: int | None,
+    tool_latency_ms: int | None,
     error_code: str | None,
     error_message: str | None,
     warnings: list[str],
     use_rag: bool,
     evidence_used: bool,
     fallback_used: bool,
+    fallback_reason: str | None,
     answer_mode: str | None,
     tokens_input: int | float | None,
     tokens_output: int | float | None,
@@ -470,15 +496,29 @@ def _persist_chat_run(
             "input": request.message,
             "response": final_answer or None,
             "provider": provider,
+            "requested_model": requested_model,
             "model": model,
             "temperature": temperature,
-            "generation_config": {"temperature": temperature},
+            "max_tokens": max_tokens,
+            "top_p": top_p,
+            "generation_config": {
+                key: value
+                for key, value in {
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "top_p": top_p,
+                }.items()
+                if value is not None
+            } or None,
             "status": status,
             "retrieval_status": retrieval_status,
             "chunk_ids": chunk_ids,
             "document_ids": document_ids,
             "source_filenames": source_filenames,
             "latency_ms": latency_ms,
+            "generation_latency_ms": generation_latency_ms,
+            "retrieval_latency_ms": retrieval_latency_ms,
+            "tool_latency_ms": tool_latency_ms,
             "error_code": error_code,
             "error_message": error_message,
             "warnings": warnings,
@@ -494,6 +534,7 @@ def _persist_chat_run(
             "use_rag": use_rag,
             "evidence_used": evidence_used,
             "fallback_used": fallback_used,
+            "fallback_reason": fallback_reason,
             "answer_mode": answer_mode,
         }
     )
@@ -683,6 +724,7 @@ def _run_chat_request(
     persist_trace: bool = True,
 ) -> ChatResponse:
     trace_id = request.trace_id or new_trace_id()
+    requested_model = request.model.strip() if isinstance(request.model, str) and request.model.strip() else None
     started_at = time.perf_counter()
     status = "error"
     error_code: str | None = None
@@ -690,8 +732,12 @@ def _run_chat_request(
     provider = (request.provider or "ollama").strip().lower()
     model = request.model or ""
     temperature = request.temperature if isinstance(request.temperature, (int, float)) else TEMPERATURE_DEFAULT
+    top_p = request.top_p if isinstance(request.top_p, (int, float)) else None
+    effective_max_tokens = request.max_tokens if isinstance(request.max_tokens, int) else settings.max_tokens
     temperature_ignored = False
-    use_rag = request.use_rag
+    use_rag = True if request.use_rag is None else bool(request.use_rag)
+    retrieval_latency_ms: int | None = None
+    generation_latency_ms = 0
     answer_mode = "unknown"
     final_answer = ""
     error_message: str | None = None
@@ -769,6 +815,7 @@ def _run_chat_request(
             active_document_title=active_document_title,
         )
         if use_rag:
+            retrieval_started_at = time.perf_counter()
             top_k = request.top_k or 3
             if settings.use_remote_rag:
                 context = query_remote_rag(
@@ -809,6 +856,7 @@ def _run_chat_request(
             ):
                 retrieval_status = NO_EVIDENCE_MARKER
                 context["retrieval_status"] = retrieval_status
+            retrieval_latency_ms = int((time.perf_counter() - retrieval_started_at) * 1000)
         else:
             retrieval_status = "DISABLED"
             context["retrieval_status"] = retrieval_status
@@ -824,9 +872,11 @@ def _run_chat_request(
             model=model,
             max_tokens=request.max_tokens,
             temperature=temperature,
+            top_p=top_p,
             use_rag=llm_use_rag,
         )
         result["latency_ms"] = int((time.perf_counter() - llm_started_at) * 1000)
+        generation_latency_ms += result["latency_ms"]
         llm_metrics["tokens_input"] = result.get("prompt_eval_count")
         llm_metrics["tokens_output"] = result.get("eval_count")
         llm_metrics["prompt_eval_count"] = result.get("prompt_eval_count")
@@ -851,10 +901,16 @@ def _run_chat_request(
         model = result["model"]
         if isinstance(result.get("temperature"), (int, float)):
             temperature = float(result["temperature"])
+        if isinstance(result.get("top_p"), (int, float)):
+            top_p = float(result["top_p"])
+        if isinstance(result.get("max_tokens"), int):
+            effective_max_tokens = result["max_tokens"]
         if isinstance(result.get("temperature_ignored"), bool):
             temperature_ignored = result["temperature_ignored"]
         if isinstance(result.get("use_rag"), bool):
             use_rag = result["use_rag"]
+        if temperature_ignored and "temperature_ignored_by_provider" not in warnings:
+            warnings.append("temperature_ignored_by_provider")
         status = "ok"
 
         if use_rag and retrieval_status in MARKER_ONLY_RETRIEVAL_STATUSES:
@@ -909,9 +965,11 @@ def _run_chat_request(
                 model=model,
                 max_tokens=request.max_tokens,
                 temperature=temperature,
+                top_p=top_p,
                 use_rag=True,
             )
             internal_result["latency_ms"] = int((time.perf_counter() - fallback_started_at) * 1000)
+            generation_latency_ms += internal_result["latency_ms"]
             internal_result["warnings"] = warnings
             llm_metrics["tokens_input"] = internal_result.get("prompt_eval_count")
             llm_metrics["tokens_output"] = internal_result.get("eval_count")
@@ -931,6 +989,10 @@ def _run_chat_request(
                 eval_count = llm_metrics["tokens_output"]
                 if isinstance(prompt_eval_count, (int, float)) and isinstance(eval_count, (int, float)):
                     llm_metrics["tokens_total"] = prompt_eval_count + eval_count
+            if isinstance(internal_result.get("top_p"), (int, float)):
+                top_p = float(internal_result["top_p"])
+            if isinstance(internal_result.get("max_tokens"), int):
+                effective_max_tokens = internal_result["max_tokens"]
             internal_response = _build_model_internal_chat_response(
                 trace_id=trace_id,
                 result=internal_result,
@@ -1070,7 +1132,14 @@ def _run_chat_request(
             answer_mode=answer_mode,
             evidence_used=evidence_used,
         )
+        fallback_reason = _fallback_reason_from_state(
+            retrieval_status=retrieval_status,
+            answer_mode=answer_mode,
+            evidence_used=evidence_used,
+        )
         trace_warnings = warnings or [item for item in context.get("warnings", []) if isinstance(item, str)]
+        if temperature_ignored and "temperature_ignored_by_provider" not in trace_warnings:
+            trace_warnings = [*trace_warnings, "temperature_ignored_by_provider"]
         trace_latency_ms = int((time.perf_counter() - started_at) * 1000)
         if persist_trace:
             try:
@@ -1079,20 +1148,27 @@ def _run_chat_request(
                     request=request,
                     final_answer=final_answer,
                     provider=provider,
-                    model=model,
+                    requested_model=requested_model,
+                    model=model.strip() if isinstance(model, str) and model.strip() else None,
                     temperature=temperature,
+                    max_tokens=effective_max_tokens,
+                    top_p=top_p,
                     status=status,
                     retrieval_status=retrieval_status,
                     chunk_ids=trace_chunk_ids,
                     document_ids=context.get("document_ids", []),
                     source_filenames=context.get("source_filenames", []),
                     latency_ms=trace_latency_ms,
+                    generation_latency_ms=generation_latency_ms or None,
+                    retrieval_latency_ms=retrieval_latency_ms,
+                    tool_latency_ms=None,
                     error_code=error_code,
                     error_message=error_message,
                     warnings=trace_warnings,
                     use_rag=use_rag,
                     evidence_used=evidence_used,
                     fallback_used=fallback_used,
+                    fallback_reason=fallback_reason,
                     answer_mode=answer_mode,
                     tokens_input=llm_metrics["tokens_input"],
                     tokens_output=llm_metrics["tokens_output"],
@@ -1120,8 +1196,11 @@ def _run_chat_request(
             chat_id=request.chat_id,
             user_id=request.user_id,
             provider=provider,
+            requested_model=requested_model,
             model=model,
             temperature=temperature,
+            top_p=top_p,
+            max_tokens=effective_max_tokens,
             temperature_ignored=temperature_ignored,
             use_rag=use_rag,
             status=status,
@@ -1144,6 +1223,7 @@ def _run_chat_request(
             active_context_reason=context.get("active_context_reason"),
             evidence_used=evidence_used,
             fallback_used=fallback_used,
+            fallback_reason=fallback_reason,
             query_expansion_used=bool(context.get("query_expansion_used")),
             query_expansion_reason=context.get("query_expansion_reason"),
             expanded_query_terms=context.get("expanded_query_terms", []),

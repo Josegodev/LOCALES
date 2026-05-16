@@ -112,3 +112,35 @@ class RunsRouterTests(unittest.TestCase):
         self.assertEqual(response.json()["models"][0]["model"], "granite4.1:8b")
         self.assertEqual(len(response.json()["by_model"]), 1)
         self.assertEqual(len(response.json()["by_model_temperature"]), 2)
+        self.assertEqual(response.json()["by_model_temperature_included_runs"], 2)
+        self.assertEqual(response.json()["by_model_temperature_skipped_runs"], 0)
+
+    def test_get_runs_operational_stats_ignores_legacy_runs_without_temperature(self):
+        with TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir) / "CHAT_RUNS"
+            runs_dir.mkdir()
+            self._write_run(
+                runs_dir,
+                trace_id="trace-1",
+                created_at="2026-05-16T10:00:00+00:00",
+                model="granite4.1:8b",
+                status="ok",
+                temperature=0.2,
+            )
+            self._write_run(
+                runs_dir,
+                trace_id="trace-2",
+                created_at="2026-05-16T10:01:00+00:00",
+                model="granite4.1:8b",
+                status="ok",
+                temperature=None,
+            )
+
+            with patch("app.auth.settings.chat_auth_mode", "local_open"):
+                with patch.dict(os.environ, {"CHAT_RUNS_DIR": str(runs_dir)}, clear=False):
+                    response = TestClient(app).get("/api/runs/operational-stats")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()["by_model_temperature"]), 1)
+        self.assertEqual(response.json()["by_model_temperature"][0]["temperature"], 0.2)
+        self.assertEqual(response.json()["by_model_temperature_skipped_runs"], 1)

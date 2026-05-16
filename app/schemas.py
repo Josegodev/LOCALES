@@ -9,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 TEMPERATURE_DEFAULT = 0.2
 TEMPERATURE_MIN = 0.0
 TEMPERATURE_MAX = 1.5
+TOP_P_MIN = 0.0
+TOP_P_MAX = 1.0
 
 
 def normalize_temperature(value: Any, default: float = TEMPERATURE_DEFAULT) -> float:
@@ -23,6 +25,20 @@ def normalize_temperature(value: Any, default: float = TEMPERATURE_DEFAULT) -> f
         raise ValueError("temperature_invalid")
     if normalized < TEMPERATURE_MIN or normalized > TEMPERATURE_MAX:
         raise ValueError("temperature_invalid")
+    return normalized
+
+
+def normalize_top_p(value: Any) -> float:
+    if value is None:
+        raise ValueError("top_p_invalid")
+    if isinstance(value, bool):
+        raise ValueError("top_p_invalid")
+
+    normalized = float(value)
+    if not math.isfinite(normalized):
+        raise ValueError("top_p_invalid")
+    if normalized < TOP_P_MIN or normalized > TOP_P_MAX:
+        raise ValueError("top_p_invalid")
     return normalized
 
 
@@ -76,7 +92,8 @@ class ChatRequest(BaseModel):
     model: str | None = None
     max_tokens: int | None = Field(default=None, ge=1, le=2048)
     temperature: float | None = Field(default=None, validate_default=True)
-    use_rag: bool = True
+    top_p: float | None = Field(default=None, validate_default=True)
+    use_rag: bool | None = True
     top_k: int | None = Field(default=3, ge=1, le=10)
     trace_id: str | None = Field(default=None, min_length=32, max_length=36)
     user_id: int | None = None
@@ -108,6 +125,13 @@ class ChatRequest(BaseModel):
     @classmethod
     def validate_temperature(cls, value: float | None) -> float:
         return normalize_temperature(value)
+
+    @field_validator("top_p")
+    @classmethod
+    def validate_top_p(cls, value: float | None) -> float | None:
+        if value is None:
+            return None
+        return normalize_top_p(value)
 
     @field_validator("allowed_source_filenames")
     @classmethod
@@ -210,8 +234,11 @@ class ChatRunResponse(BaseModel):
     input: str | None = None
     response: str | None = None
     provider: str | None = None
+    requested_model: str | None = None
     model: str | None = None
     temperature: float | None = None
+    max_tokens: int | None = None
+    top_p: float | None = None
     generation_config: dict[str, Any] | None = None
     status: str | None = None
     retrieval_status: str | None = None
@@ -229,12 +256,16 @@ class ChatRunResponse(BaseModel):
     load_duration: float | None = None
     output_tokens_per_second: float | None = None
     latency_ms: float | None = None
+    generation_latency_ms: float | None = None
+    retrieval_latency_ms: float | None = None
+    tool_latency_ms: float | None = None
     error_code: str | None = None
     error_message: str | None = None
     warnings: list[str] = Field(default_factory=list)
     use_rag: bool | None = None
     evidence_used: bool | None = None
     fallback_used: bool | None = None
+    fallback_reason: str | None = None
     answer_mode: str | None = None
 
 

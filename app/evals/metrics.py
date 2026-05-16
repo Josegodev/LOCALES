@@ -255,7 +255,11 @@ def build_model_temperature_operational_stats(
 ) -> list[OperationalModelTemperatureStats]:
     grouped: dict[tuple[str, float | None], list[RunRecord | dict[str, Any]]] = {}
     for run in runs:
-        group_key = (_operational_model_label(run), _operational_temperature_value(run))
+        model_name = _normalized_text(_run_value(run, "model"))
+        temperature = _operational_temperature_value(run)
+        if model_name is None or temperature is None:
+            continue
+        group_key = (model_name, temperature)
         grouped.setdefault(group_key, []).append(run)
 
     metrics: list[OperationalModelTemperatureStats] = []
@@ -274,10 +278,7 @@ def build_model_temperature_operational_stats(
 
     metrics.sort(
         key=lambda item: (
-            item.avg_latency_ms is None,
-            item.avg_latency_ms if item.avg_latency_ms is not None else 0.0,
             item.model.casefold(),
-            item.temperature is None,
             item.temperature if item.temperature is not None else 0.0,
         )
     )

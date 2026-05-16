@@ -106,6 +106,8 @@ class OperationalStatsResponse(BaseModel):
     models: list[OperationalModelStats] = Field(default_factory=list)
     by_model: list[OperationalModelStats] = Field(default_factory=list)
     by_model_temperature: list[OperationalModelTemperatureStats] = Field(default_factory=list)
+    by_model_temperature_included_runs: int = 0
+    by_model_temperature_skipped_runs: int = 0
     corrupt_files_count: int = 0
     skipped_files_count: int = 0
     runs_dir: str

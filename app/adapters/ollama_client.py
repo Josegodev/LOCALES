@@ -98,6 +98,7 @@ def ask_chat(
     *,
     model: str | None = None,
     temperature: float | None = None,
+    top_p: float | None = None,
     use_rag: bool | None = None,
     num_predict: int | None = None,
     system_prompt: str | None = None,
@@ -109,6 +110,7 @@ def ask_chat(
 
     selected_model = model or _selected_model(settings_obj)
     selected_temperature = temperature if temperature is not None else settings_obj.temperature
+    selected_num_predict = num_predict if num_predict is not None else settings_obj.max_tokens
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
@@ -120,9 +122,11 @@ def ask_chat(
         "stream": False,
         "options": {
             "temperature": selected_temperature,
-            "num_predict": num_predict if num_predict is not None else 300,
+            "num_predict": selected_num_predict,
         },
     }
+    if top_p is not None:
+        payload["options"]["top_p"] = top_p
 
     try:
         response = requests_module.post(
@@ -172,6 +176,8 @@ def ask_chat(
         "provider": "ollama",
         "model": response_model,
         "temperature": selected_temperature,
+        "max_tokens": selected_num_predict,
+        "top_p": top_p,
         "temperature_ignored": False,
         "use_rag": True if use_rag is None else bool(use_rag),
         "answer": content.strip(),

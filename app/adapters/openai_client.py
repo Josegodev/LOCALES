@@ -122,6 +122,7 @@ def ask_chat(
     model: str | None = None,
     max_tokens: int | None = None,
     temperature: float | None = None,
+    top_p: float | None = None,
     use_rag: bool | None = None,
     system_prompt: str | None = None,
     settings_obj=settings,
@@ -142,6 +143,8 @@ def ask_chat(
         payload["temperature"] = selected_temperature
     if system_prompt and system_prompt.strip():
         payload["instructions"] = system_prompt.strip()
+    if top_p is not None:
+        payload["top_p"] = top_p
 
     started_at = time.perf_counter()
     try:
@@ -173,6 +176,8 @@ def ask_chat(
         "provider": "openai",
         "model": selected_model,
         "temperature": selected_temperature,
+        "max_tokens": payload["max_output_tokens"],
+        "top_p": top_p,
         "temperature_ignored": temperature_ignored,
         "use_rag": True if use_rag is None else bool(use_rag),
         "answer": answer,

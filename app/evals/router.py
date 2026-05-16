@@ -99,14 +99,18 @@ def runs_operational_stats(
         loaded_runs.items,
         timeout_ms=settings.operation_timeout_ms,
     )
+    by_model_temperature = build_model_temperature_operational_stats(
+        loaded_runs.items,
+        timeout_ms=settings.operation_timeout_ms,
+    )
+    by_model_temperature_included_runs = sum(item.runs for item in by_model_temperature)
     return OperationalStatsResponse(
         timeout_ms=settings.operation_timeout_ms,
         models=by_model,
         by_model=by_model,
-        by_model_temperature=build_model_temperature_operational_stats(
-            loaded_runs.items,
-            timeout_ms=settings.operation_timeout_ms,
-        ),
+        by_model_temperature=by_model_temperature,
+        by_model_temperature_included_runs=by_model_temperature_included_runs,
+        by_model_temperature_skipped_runs=max(0, len(loaded_runs.items) - by_model_temperature_included_runs),
         corrupt_files_count=len(loaded_runs.corrupt_files),
         skipped_files_count=len(loaded_runs.skipped_files),
         runs_dir=str(loaded_runs.runs_dir),

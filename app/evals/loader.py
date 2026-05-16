@@ -2,19 +2,17 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from app.config import settings
 from app.evals.schemas import RunRecord
 from app.observability.logging import log_event
+from app.observability.chat_runs import resolve_chat_runs_path
 from app.schemas import normalize_temperature
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
 NO_EVIDENCE_STATUSES = {"NO_EVIDENCE", "NO_EVIDENCE_FOR_ANSWER"}
 
 
@@ -26,34 +24,8 @@ class LoadedRuns:
     skipped_files: list[str] = field(default_factory=list)
 
 
-def _resolve_path(value: str) -> Path:
-    candidate = Path(value.strip())
-    if candidate.is_absolute():
-        resolved = candidate
-    else:
-        resolved = REPO_ROOT / candidate
-    if resolved.suffix.lower() in {".json", ".jsonl"}:
-        return resolved.parent / resolved.stem
-    return resolved
-
-
 def resolve_runs_dir() -> Path:
-    for env_name in ("CHAT_RUNS_DIR", "EVAL_RUNS_DIR"):
-        raw_value = os.getenv(env_name)
-        if isinstance(raw_value, str) and raw_value.strip():
-            return _resolve_path(raw_value)
-
-    configured = getattr(settings, "chat_runs_path", None)
-    if isinstance(configured, str) and configured.strip():
-        configured_path = _resolve_path(configured)
-        if configured_path.exists():
-            return configured_path
-
-    chat_runs_dir = REPO_ROOT / "CHAT_RUNS"
-    if chat_runs_dir.exists():
-        return chat_runs_dir
-
-    return REPO_ROOT / "evals" / "runs"
+    return resolve_chat_runs_path()
 
 
 def _nullable_str(value: Any) -> str | None:
