@@ -184,6 +184,13 @@ class ChatRunResponse(BaseModel):
     tokens_input: float | None = None
     tokens_output: float | None = None
     tokens_total: float | None = None
+    prompt_eval_count: float | None = None
+    eval_count: float | None = None
+    prompt_eval_duration: float | None = None
+    eval_duration: float | None = None
+    total_duration: float | None = None
+    load_duration: float | None = None
+    output_tokens_per_second: float | None = None
     latency_ms: float | None = None
     error_code: str | None = None
     error_message: str | None = None

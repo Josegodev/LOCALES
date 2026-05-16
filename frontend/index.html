@@ -38,8 +38,8 @@
       <section class="panel">
         <h2>Autenticacion navegador</h2>
         <p class="muted-text">
-          El navegador no envia tokens operacionales. El acceso a <code>/chat</code> y
-          <code>/api/chat/runs</code> depende de <code>CHAT_AUTH_MODE</code> en el backend.
+          El navegador no envia tokens operacionales. El acceso a <code>/chat</code>,
+          <code>/api/runs</code> y <code>/api/runs/summary</code> depende de <code>CHAT_AUTH_MODE</code> en el backend.
         </p>
       </section>
 
@@ -193,7 +193,9 @@
             <article><strong>GET /health</strong><p>Estado basico del backend.</p></article>
             <article><strong>GET /api/models/chat</strong><p>Catalogo de modelos seleccionables para el chat.</p></article>
             <article><strong>POST /chat</strong><p>Chat principal con RAG y runtime de modelos.</p></article>
-            <article><strong>GET /api/chat/runs</strong><p>Listado y estadisticas de runs guardados por /chat.</p></article>
+            <article><strong>GET /api/runs</strong><p>Listado normalizado de runs guardados por /chat.</p></article>
+            <article><strong>GET /api/runs/summary</strong><p>Metricas agregadas calculadas en backend.</p></article>
+            <article><strong>GET /api/runs/timeseries</strong><p>Serie temporal lista para graficas.</p></article>
             <article><strong>GET /api/traces/chat</strong><p>Compatibilidad interna de trazas de chat.</p></article>
             <article><strong>GET /docs</strong><p>Swagger UI generado por FastAPI.</p></article>
             <article><strong>GET /openapi.json</strong><p>Contrato OpenAPI en JSON.</p></article>
@@ -228,7 +230,7 @@ uvicorn app.main:app --host &lt;backend-host&gt; --port &lt;backend-port&gt;</pr
             </article>
             <article>
               <h3>Runs guardados</h3>
-              <pre>curl "&lt;backend-api-url&gt;/api/chat/runs?limit=25"</pre>
+              <pre>curl "&lt;backend-api-url&gt;/api/runs?limit=25"</pre>
             </article>
           </div>
         </section>

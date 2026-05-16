@@ -336,78 +336,54 @@ async function loadChatModels() {
 }
 
 function formatModels(models) {
-  if (!models || typeof models !== "object" || !Object.keys(models).length) {
+  if (!Array.isArray(models) || !models.length) {
     return "-";
   }
-  return Object.entries(models)
-    .map(([model, count]) => `${model}: ${count}`)
+  return models
+    .map((item) => `${valueOrDash(item.model)}: ${valueOrDash(item.runs)}`)
     .join(", ");
 }
 
-function normalizeSavedRunsPayload(data) {
-  if (!data || typeof data !== "object") {
-    throw new Error("Respuesta JSON invalida del endpoint de runs.");
-  }
-
-  const runs = Array.isArray(data.runs) ? data.runs : (Array.isArray(data.items) ? data.items : []);
-  const models = {};
-  const latencyValues = [];
-  const tokenValues = [];
-  let okRuns = 0;
-  let errorRuns = 0;
-
-  for (const item of runs) {
-    const status = String(item.status || "").trim().toLowerCase();
-    if (status === "ok") {
-      okRuns += 1;
-    } else if (status === "error") {
-      errorRuns += 1;
-    }
-
-    if (typeof item.model === "string" && item.model.trim()) {
-      models[item.model] = (models[item.model] || 0) + 1;
-    }
-
-    const latencyMs = Number(item.latency_ms);
-    if (Number.isFinite(latencyMs)) {
-      latencyValues.push(latencyMs);
-    }
-
-    const tokensTotal = Number(item.tokens_total);
-    if (Number.isFinite(tokensTotal)) {
-      tokenValues.push(tokensTotal);
-    }
+function normalizeRunsListPayload(data) {
+  if (!data || typeof data !== "object" || !Array.isArray(data.items)) {
+    throw new Error("Respuesta JSON invalida del endpoint /api/runs.");
   }
 
   return {
-    total_runs: Number.isFinite(data.total_runs) ? data.total_runs : runs.length,
-    ok_runs: Number.isFinite(data.ok_runs) ? data.ok_runs : okRuns,
-    error_runs: Number.isFinite(data.error_runs) ? data.error_runs : errorRuns,
-    models: data.models && typeof data.models === "object" ? data.models : models,
-    avg_latency_ms: data.avg_latency_ms ?? (
-      latencyValues.length ? Math.round(latencyValues.reduce((total, value) => total + value, 0) / latencyValues.length) : null
-    ),
-    avg_tokens_total: data.avg_tokens_total ?? (
-      tokenValues.length ? Math.round(tokenValues.reduce((total, value) => total + value, 0) / tokenValues.length) : null
-    ),
-    runs,
+    runs: data.items,
+    count: Number.isFinite(data.count) ? data.count : data.items.length,
   };
 }
 
-function renderSavedRuns(payload) {
-  elements.runsTotal.textContent = valueOrDash(payload.total_runs);
-  elements.runsOkError.textContent = `${valueOrDash(payload.ok_runs)} / ${valueOrDash(payload.error_runs)}`;
-  elements.runsModels.textContent = formatModels(payload.models);
-  elements.runsAvgLatency.textContent = valueOrDash(payload.avg_latency_ms);
-  elements.runsAvgTokens.textContent = valueOrDash(payload.avg_tokens_total);
+function normalizeRunsSummaryPayload(data) {
+  if (!data || typeof data !== "object" || !Array.isArray(data.models)) {
+    throw new Error("Respuesta JSON invalida del endpoint /api/runs/summary.");
+  }
+
+  return {
+    total_runs: valueOrDash(data.total_runs),
+    ok_runs: valueOrDash(data.ok_runs),
+    failed_runs: valueOrDash(data.failed_runs),
+    models: data.models,
+    avg_latency_ms: data.avg_latency_ms ?? null,
+    avg_tokens_total: data.avg_tokens_total ?? null,
+  };
+}
+
+function renderSavedRuns(summaryPayload, runsPayload) {
+  elements.runsTotal.textContent = valueOrDash(summaryPayload.total_runs);
+  elements.runsOkError.textContent = `${valueOrDash(summaryPayload.ok_runs)} / ${valueOrDash(summaryPayload.failed_runs)}`;
+  elements.runsModels.textContent = formatModels(summaryPayload.models);
+  elements.runsAvgLatency.textContent = valueOrDash(summaryPayload.avg_latency_ms);
+  elements.runsAvgTokens.textContent = valueOrDash(summaryPayload.avg_tokens_total);
 
   elements.chatRunsTableBody.innerHTML = "";
-  if (!payload.runs.length) {
+  if (!runsPayload.runs.length) {
     elements.chatRunsTableBody.innerHTML = '<tr><td colspan="7">No hay runs guardados todavia. Ejecuta una pregunta desde Chat.</td></tr>';
     return;
   }
 
-  for (const item of payload.runs) {
+  for (const item of runsPayload.runs) {
     const row = document.createElement("tr");
     if (String(item.status || "").trim().toLowerCase() === "error") {
       row.classList.add("error-row");
@@ -439,11 +415,22 @@ async function loadSavedRuns() {
   elements.chatRunsRaw.textContent = "-";
 
   try {
-    const { data, latencyMs } = await backendFetch("/api/chat/runs?limit=100");
-    const payload = normalizeSavedRunsPayload(data);
-    renderSavedRuns(payload);
-    elements.chatRunsRaw.textContent = prettyJson(data);
-    setStatus(elements.chatRunsStatus, `Runs cargados: ${payload.runs.length} (${latencyMs} ms)`, "ok");
+    const [runsResponse, summaryResponse] = await Promise.all([
+      backendFetch("/api/runs?limit=100"),
+      backendFetch("/api/runs/summary"),
+    ]);
+    const runsPayload = normalizeRunsListPayload(runsResponse.data);
+    const summaryPayload = normalizeRunsSummaryPayload(summaryResponse.data);
+    renderSavedRuns(summaryPayload, runsPayload);
+    elements.chatRunsRaw.textContent = prettyJson({
+      summary: summaryResponse.data,
+      runs: runsResponse.data,
+    });
+    setStatus(
+      elements.chatRunsStatus,
+      `Runs cargados: ${runsPayload.count} (${Math.max(runsResponse.latencyMs, summaryResponse.latencyMs)} ms)`,
+      "ok",
+    );
   } catch (error) {
     setStatus(elements.chatRunsStatus, "Error cargando runs guardados", "error");
     elements.chatRunsTableBody.innerHTML = '<tr><td colspan="7">No se pudo cargar el endpoint de runs.</td></tr>';

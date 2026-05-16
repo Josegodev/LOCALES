@@ -81,12 +81,15 @@ Comprobaciones HTTP mínimas:
 ```bash
 curl http://127.0.0.1:8000/health
 curl -X POST http://127.0.0.1:8000/chat -H "Content-Type: application/json" -d '{"message":"hola","provider":"ollama","model":"granite4.1:8b","use_rag":true}'
-curl http://127.0.0.1:8000/api/chat/runs?limit=10
+curl http://127.0.0.1:8000/api/runs?limit=10
+curl http://127.0.0.1:8000/api/runs/summary
+curl http://127.0.0.1:8000/api/runs/timeseries
 bash scripts/run_chat_eval_e2e.sh
 ```
 
 Cada llamada real a `POST /chat` escribe un JSON independiente en `CHAT_RUNS/`.
 Si la escritura del archivo falla, la respuesta del chat sigue devolviendose.
+Las metricas agregadas se calculan en backend y el frontend solo consume `/api/runs` y `/api/runs/summary`.
 
 El comando E2E levanta una instancia temporal del backend actual en `127.0.0.1:8011`, ejecuta el endpoint de evals y la apaga al terminar.
 

@@ -11,6 +11,7 @@ from DB.chunks.document_context import build_document_prompt, detect_source_inte
 import app.chat_eval_runner as chat_eval_runner
 from app.auth import bearer_scheme, require_chat_access
 from app.config import settings
+from app.evals.router import router as runs_router
 from app.rag_client import query_remote_rag
 from app.observability.chat_runs import clear_chat_runs, list_chat_runs, save_chat_run
 from app.observability.logging import get_logger, log_event
@@ -85,6 +86,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
+app.include_router(runs_router, prefix="/api")
 
 
 def _no_evidence_answer() -> str:
@@ -445,6 +447,12 @@ def _persist_chat_run(
     tokens_input: int | float | None,
     tokens_output: int | float | None,
     tokens_total: int | float | None,
+    prompt_eval_count: int | float | None,
+    eval_count: int | float | None,
+    prompt_eval_duration: int | float | None,
+    eval_duration: int | float | None,
+    total_duration: int | float | None,
+    load_duration: int | float | None,
 ) -> None:
     created_at = datetime.now(timezone.utc).isoformat()
     save_chat_run(
@@ -470,6 +478,12 @@ def _persist_chat_run(
             "tokens_input": tokens_input,
             "tokens_output": tokens_output,
             "tokens_total": tokens_total,
+            "prompt_eval_count": prompt_eval_count,
+            "eval_count": eval_count,
+            "prompt_eval_duration": prompt_eval_duration,
+            "eval_duration": eval_duration,
+            "total_duration": total_duration,
+            "load_duration": load_duration,
             "use_rag": use_rag,
             "evidence_used": evidence_used,
             "fallback_used": fallback_used,
@@ -661,6 +675,12 @@ def _run_chat_request(
         "tokens_input": None,
         "tokens_output": None,
         "tokens_total": None,
+        "prompt_eval_count": None,
+        "eval_count": None,
+        "prompt_eval_duration": None,
+        "eval_duration": None,
+        "total_duration": None,
+        "load_duration": None,
     }
     warnings: list[str] = []
     context = {
@@ -784,6 +804,12 @@ def _run_chat_request(
         result["latency_ms"] = int((time.perf_counter() - llm_started_at) * 1000)
         llm_metrics["tokens_input"] = result.get("prompt_eval_count")
         llm_metrics["tokens_output"] = result.get("eval_count")
+        llm_metrics["prompt_eval_count"] = result.get("prompt_eval_count")
+        llm_metrics["eval_count"] = result.get("eval_count")
+        llm_metrics["prompt_eval_duration"] = result.get("prompt_eval_duration")
+        llm_metrics["eval_duration"] = result.get("eval_duration")
+        llm_metrics["total_duration"] = result.get("total_duration")
+        llm_metrics["load_duration"] = result.get("load_duration")
         llm_metrics["tokens_total"] = (
             result.get("tokens_total")
             if isinstance(result.get("tokens_total"), (int, float))
@@ -864,6 +890,12 @@ def _run_chat_request(
             internal_result["warnings"] = warnings
             llm_metrics["tokens_input"] = internal_result.get("prompt_eval_count")
             llm_metrics["tokens_output"] = internal_result.get("eval_count")
+            llm_metrics["prompt_eval_count"] = internal_result.get("prompt_eval_count")
+            llm_metrics["eval_count"] = internal_result.get("eval_count")
+            llm_metrics["prompt_eval_duration"] = internal_result.get("prompt_eval_duration")
+            llm_metrics["eval_duration"] = internal_result.get("eval_duration")
+            llm_metrics["total_duration"] = internal_result.get("total_duration")
+            llm_metrics["load_duration"] = internal_result.get("load_duration")
             llm_metrics["tokens_total"] = (
                 internal_result.get("tokens_total")
                 if isinstance(internal_result.get("tokens_total"), (int, float))
@@ -1039,6 +1071,12 @@ def _run_chat_request(
                     tokens_input=llm_metrics["tokens_input"],
                     tokens_output=llm_metrics["tokens_output"],
                     tokens_total=llm_metrics["tokens_total"],
+                    prompt_eval_count=llm_metrics["prompt_eval_count"],
+                    eval_count=llm_metrics["eval_count"],
+                    prompt_eval_duration=llm_metrics["prompt_eval_duration"],
+                    eval_duration=llm_metrics["eval_duration"],
+                    total_duration=llm_metrics["total_duration"],
+                    load_duration=llm_metrics["load_duration"],
                 )
             except Exception as exc:
                 log_event(

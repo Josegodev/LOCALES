@@ -61,13 +61,14 @@ class ChatRunObservabilityTests(unittest.TestCase):
                                     "prompt_eval_count": 12,
                                     "eval_count": 20,
                                 },
-                                ):
-                                    response = TestClient(app).post("/chat", json=self.CHAT_PAYLOAD)
+                            ):
+                                response = TestClient(app).post("/chat", json=self.CHAT_PAYLOAD)
 
             self.assertEqual(response.status_code, 200)
-            run_files = list(runs_dir.glob("*_chat_run.json"))
+            run_files = list(runs_dir.glob("*.json"))
             self.assertEqual(len(run_files), 1)
             payload = json.loads(run_files[0].read_text(encoding="utf-8"))
+            self.assertIn("_granite4_1_8b.json", run_files[0].name)
 
         self.assertEqual(payload["version"], "chat_run.v1")
         self.assertEqual(payload["status"], "ok")
@@ -112,7 +113,7 @@ class ChatRunObservabilityTests(unittest.TestCase):
                                 )
 
             self.assertEqual(response.status_code, 200)
-            payload = json.loads(next(runs_dir.glob("*_chat_run.json")).read_text(encoding="utf-8"))
+            payload = json.loads(next(runs_dir.glob("*.json")).read_text(encoding="utf-8"))
 
         self.assertEqual(payload["provider"], "openai")
         self.assertEqual(payload["model"], "gpt-5.5")
@@ -129,7 +130,7 @@ class ChatRunObservabilityTests(unittest.TestCase):
                         )
 
             self.assertEqual(response.status_code, 400)
-            payload = json.loads(next(runs_dir.glob("*_chat_run.json")).read_text(encoding="utf-8"))
+            payload = json.loads(next(runs_dir.glob("*.json")).read_text(encoding="utf-8"))
 
         self.assertEqual(payload["status"], "error")
         self.assertEqual(payload["error_code"], "model_required")
@@ -158,7 +159,7 @@ class ChatRunObservabilityTests(unittest.TestCase):
 
             self.assertEqual(response.status_code, 200)
             self.assertTrue(runs_dir.is_dir())
-            self.assertEqual(len(list(runs_dir.glob("*_chat_run.json"))), 1)
+            self.assertEqual(len(list(runs_dir.glob("*.json"))), 1)
 
     def test_legacy_jsonl_runs_path_is_normalized_to_directory(self):
         with TemporaryDirectory() as tmpdir:
@@ -183,7 +184,7 @@ class ChatRunObservabilityTests(unittest.TestCase):
 
             self.assertEqual(response.status_code, 200)
             self.assertTrue(normalized_runs_dir.is_dir())
-            self.assertEqual(len(list(normalized_runs_dir.glob("*_chat_run.json"))), 1)
+            self.assertEqual(len(list(normalized_runs_dir.glob("*.json"))), 1)
 
     def test_post_chat_returns_success_when_run_save_fails(self):
         with patch("app.auth.settings.chat_auth_mode", "local_open"):
@@ -209,7 +210,7 @@ class ChatRunObservabilityTests(unittest.TestCase):
         with TemporaryDirectory() as tmpdir:
             runs_dir = Path(tmpdir) / "CHAT_RUNS"
             runs_dir.mkdir()
-            (runs_dir / "20260515T100000000000Z_older_chat_run.json").write_text(
+            (runs_dir / "20260515T100000000000Z_older_granite4_1_8b.json").write_text(
                 json.dumps(
                     {
                         "version": "chat_run.v1",
@@ -231,7 +232,7 @@ class ChatRunObservabilityTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            (runs_dir / "20260515T120000000000Z_newer_chat_run.json").write_text(
+            (runs_dir / "20260515T120000000000Z_newer_gpt_5_5.json").write_text(
                 json.dumps(
                     {
                         "version": "chat_run.v1",

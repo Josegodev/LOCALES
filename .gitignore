@@ -94,3 +94,6 @@ DB/chunks/markdown/
 
 # Telegram/runtime traces
 DB/conversations/telegram/runs/
+
+# Runtime chat runs
+CHAT_RUNS/

@@ -16,7 +16,7 @@ DEFAULT_CHAT_RUNS_PATH = REPO_ROOT / "CHAT_RUNS"
 CHAT_RUN_SOURCES = {"frontend", "chat"}
 CHAT_RUN_ENDPOINT = "/chat"
 CHAT_RUN_VERSION = "chat_run.v1"
-CHAT_RUN_FILE_SUFFIX = "_chat_run.json"
+CHAT_RUN_FILE_SUFFIX = ".json"
 
 
 def _utc_timestamp(created_at: datetime | None = None) -> datetime:
@@ -93,6 +93,22 @@ def _normalize_tokens_total(
     return tokens_input + tokens_output
 
 
+def _normalize_output_tokens_per_second(
+    *,
+    record: dict[str, Any],
+    tokens_output: int | float | None,
+) -> int | float | None:
+    output_tokens_per_second = _nullable_number(record.get("output_tokens_per_second"))
+    if output_tokens_per_second is not None:
+        return output_tokens_per_second
+
+    eval_duration = _nullable_number(record.get("eval_duration"))
+    if tokens_output is None or eval_duration is None or eval_duration <= 0:
+        return None
+
+    return round(float(tokens_output) / (float(eval_duration) / 1_000_000_000), 4)
+
+
 def _runs_path(path: Path | None = None) -> Path:
     def normalize_directory(candidate: Path) -> Path:
         if candidate.suffix.lower() in {".json", ".jsonl"}:
@@ -131,6 +147,13 @@ class ChatRunRecord(BaseModel):
     tokens_input: int | float | None = None
     tokens_output: int | float | None = None
     tokens_total: int | float | None = None
+    prompt_eval_count: int | float | None = None
+    eval_count: int | float | None = None
+    prompt_eval_duration: int | float | None = None
+    eval_duration: int | float | None = None
+    total_duration: int | float | None = None
+    load_duration: int | float | None = None
+    output_tokens_per_second: int | float | None = None
     latency_ms: int | float | None = None
     error_code: str | None = None
     error_message: str | None = None
@@ -143,8 +166,14 @@ class ChatRunRecord(BaseModel):
 
 def normalize_chat_run_record(record: dict[str, Any]) -> ChatRunRecord:
     created_at = _nullable_str(record.get("created_at")) or _utc_timestamp().isoformat()
+    prompt_eval_count = _nullable_number(record.get("prompt_eval_count"))
+    eval_count = _nullable_number(record.get("eval_count"))
     tokens_input = _nullable_number(record.get("tokens_input"))
+    if tokens_input is None:
+        tokens_input = prompt_eval_count
     tokens_output = _nullable_number(record.get("tokens_output"))
+    if tokens_output is None:
+        tokens_output = eval_count
     use_rag = record.get("use_rag") if isinstance(record.get("use_rag"), bool) else None
 
     payload = {
@@ -170,6 +199,16 @@ def normalize_chat_run_record(record: dict[str, Any]) -> ChatRunRecord:
             tokens_input=tokens_input,
             tokens_output=tokens_output,
         ),
+        "prompt_eval_count": prompt_eval_count if prompt_eval_count is not None else tokens_input,
+        "eval_count": eval_count if eval_count is not None else tokens_output,
+        "prompt_eval_duration": _nullable_number(record.get("prompt_eval_duration")),
+        "eval_duration": _nullable_number(record.get("eval_duration")),
+        "total_duration": _nullable_number(record.get("total_duration")),
+        "load_duration": _nullable_number(record.get("load_duration")),
+        "output_tokens_per_second": _normalize_output_tokens_per_second(
+            record=record,
+            tokens_output=tokens_output,
+        ),
         "latency_ms": _nullable_number(record.get("latency_ms")),
         "error_code": _nullable_str(record.get("error_code")),
         "error_message": _nullable_str(record.get("error_message")),
@@ -187,6 +226,13 @@ def _safe_trace_id(value: str) -> str:
     return candidate or "trace"
 
 
+def _safe_model_name(value: str | None) -> str:
+    if not isinstance(value, str):
+        return "unknown_model"
+    candidate = re.sub(r"[^A-Za-z0-9_-]+", "_", value.strip())
+    return candidate or "unknown_model"
+
+
 def _timestamp_for_filename(value: str) -> str:
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -196,7 +242,12 @@ def _timestamp_for_filename(value: str) -> str:
 
 
 def _run_filename(run: ChatRunRecord) -> str:
-    return f"{_timestamp_for_filename(run.created_at)}_{_safe_trace_id(run.trace_id)}{CHAT_RUN_FILE_SUFFIX}"
+    return (
+        f"{_timestamp_for_filename(run.created_at)}"
+        f"_{_safe_trace_id(run.trace_id)}"
+        f"_{_safe_model_name(run.model)}"
+        f"{CHAT_RUN_FILE_SUFFIX}"
+    )
 
 
 def record_chat_run(run: ChatRunRecord, *, path: Path | None = None) -> Path:
@@ -279,6 +330,14 @@ def save_chat_run(run_payload: dict[str, Any], *, path: Path | None = None) -> P
 
 def write_chat_run(**kwargs: Any) -> Path:
     created_at = _utc_timestamp(kwargs.get("created_at")).isoformat()
+    prompt_eval_count = _nullable_number(kwargs.get("prompt_eval_count"))
+    eval_count = _nullable_number(kwargs.get("eval_count"))
+    tokens_input = _nullable_number(kwargs.get("tokens_input"))
+    if tokens_input is None:
+        tokens_input = prompt_eval_count
+    tokens_output = _nullable_number(kwargs.get("tokens_output"))
+    if tokens_output is None:
+        tokens_output = eval_count
     run = ChatRunRecord(
         version=CHAT_RUN_VERSION,
         trace_id=kwargs["trace_id"],
@@ -295,12 +354,22 @@ def write_chat_run(**kwargs: Any) -> Path:
         chunk_ids=_int_list(kwargs.get("chunk_ids")),
         document_ids=_int_list(kwargs.get("document_ids")),
         source_filenames=_str_list(kwargs.get("source_filenames")),
-        tokens_input=_nullable_number(kwargs.get("tokens_input")),
-        tokens_output=_nullable_number(kwargs.get("tokens_output")),
+        tokens_input=tokens_input,
+        tokens_output=tokens_output,
         tokens_total=_normalize_tokens_total(
             record=kwargs,
-            tokens_input=_nullable_number(kwargs.get("tokens_input")),
-            tokens_output=_nullable_number(kwargs.get("tokens_output")),
+            tokens_input=tokens_input,
+            tokens_output=tokens_output,
+        ),
+        prompt_eval_count=prompt_eval_count if prompt_eval_count is not None else tokens_input,
+        eval_count=eval_count if eval_count is not None else tokens_output,
+        prompt_eval_duration=_nullable_number(kwargs.get("prompt_eval_duration")),
+        eval_duration=_nullable_number(kwargs.get("eval_duration")),
+        total_duration=_nullable_number(kwargs.get("total_duration")),
+        load_duration=_nullable_number(kwargs.get("load_duration")),
+        output_tokens_per_second=_normalize_output_tokens_per_second(
+            record=kwargs,
+            tokens_output=tokens_output,
         ),
         latency_ms=_nullable_number(kwargs.get("latency_ms")),
         error_code=_nullable_str(kwargs.get("error_code")),

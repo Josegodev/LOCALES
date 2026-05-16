@@ -179,7 +179,7 @@ class DevTokenAuthTests(unittest.TestCase):
         self.assertNotIn("/telegram/", frontend_js)
         self.assertNotIn("/api/evals/telegram", frontend_js)
         self.assertNotIn("/api/evals/chat/run", frontend_js)
-        self.assertIn("/api/chat/runs", frontend_js)
+        self.assertIn("/api/runs", frontend_js)
         self.assertIn("/api/models/chat", frontend_js)
         self.assertIn("/api/models/chat", frontend_html)
         self.assertIn("Runs guardados", frontend_html)
