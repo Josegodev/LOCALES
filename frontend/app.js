@@ -39,6 +39,35 @@ const chatState = {
   abortController: null,
 };
 
+function modelOptionKey(provider, model) {
+  return `${provider || "ollama"}::${model || ""}`;
+}
+
+function isOpenAIModel(model) {
+  return String(model || "").trim().startsWith("gpt-");
+}
+
+function inferProviderFromModel(model) {
+  return isOpenAIModel(model) ? "openai" : "ollama";
+}
+
+function normalizeProviderModel(provider, model) {
+  const normalizedModel = String(model || "").trim();
+  const normalizedProvider = String(provider || "").trim().toLowerCase();
+  const inferredProvider = inferProviderFromModel(normalizedModel);
+
+  if (normalizedProvider === "openai" && !isOpenAIModel(normalizedModel)) {
+    return { provider: inferredProvider, model: normalizedModel };
+  }
+  if (normalizedProvider === "ollama" && isOpenAIModel(normalizedModel)) {
+    return { provider: inferredProvider, model: normalizedModel };
+  }
+  if (normalizedProvider === "openai" || normalizedProvider === "ollama") {
+    return { provider: normalizedProvider, model: normalizedModel };
+  }
+  return { provider: inferredProvider, model: normalizedModel };
+}
+
 function backendBaseUrl() {
   return (elements.backendUrl.value || DEFAULT_BACKEND_URL).trim().replace(/\/+$/, "");
 }
@@ -128,7 +157,12 @@ function visibleChatErrorMessage(error) {
 
 function selectedModelProvider() {
   const option = elements.modelSelect.selectedOptions[0];
-  return option?.dataset.provider || "ollama";
+  return normalizeProviderModel(option?.dataset.provider, elements.modelSelect.value).provider;
+}
+
+function selectedProviderModel() {
+  const option = elements.modelSelect.selectedOptions[0];
+  return normalizeProviderModel(option?.dataset.provider, elements.modelSelect.value);
 }
 
 function replaceModelOptions(items) {
@@ -138,13 +172,25 @@ function replaceModelOptions(items) {
     const option = document.createElement("option");
     option.value = item.model;
     option.dataset.provider = item.provider;
+    option.dataset.modelKey = modelOptionKey(item.provider, item.model);
     option.textContent = item.label || `${item.provider} / ${item.model}`;
     if (item.is_default) option.selected = true;
     elements.modelSelect.appendChild(option);
   }
+
+  const options = Array.from(elements.modelSelect.options);
+  const savedModelKey = localStorage.getItem("locales.chatModelKey");
   const savedModel = localStorage.getItem("locales.chatModel");
-  if (savedModel && Array.from(elements.modelSelect.options).some((option) => option.value === savedModel)) {
-    elements.modelSelect.value = savedModel;
+  const keyMatch = options.find((option) => option.dataset.modelKey === savedModelKey);
+  if (keyMatch) {
+    elements.modelSelect.selectedIndex = options.indexOf(keyMatch);
+    return;
+  }
+
+  const modelMatches = savedModel ? options.filter((option) => option.value === savedModel) : [];
+  if (modelMatches.length === 1) {
+    elements.modelSelect.selectedIndex = options.indexOf(modelMatches[0]);
+    localStorage.setItem("locales.chatModelKey", modelMatches[0].dataset.modelKey);
   }
 }
 
@@ -308,10 +354,11 @@ function renderChatResponse(data, latencyMs, useRag) {
 }
 
 function buildChatPayload(message) {
+  const selected = selectedProviderModel();
   return {
     message,
-    provider: selectedModelProvider(),
-    model: elements.modelSelect.value,
+    provider: selected.provider,
+    model: selected.model,
     temperature: numberOrNull(elements.temperatureSelect.value),
     use_rag: elements.useRagInput.checked,
   };
@@ -402,7 +449,11 @@ function init() {
     loadChatOptions();
   });
   elements.backendUrl.addEventListener("input", updateBackendLinks);
-  elements.modelSelect.addEventListener("change", () => localStorage.setItem("locales.chatModel", elements.modelSelect.value));
+  elements.modelSelect.addEventListener("change", () => {
+    const selected = selectedProviderModel();
+    localStorage.setItem("locales.chatModel", selected.model);
+    localStorage.setItem("locales.chatModelKey", modelOptionKey(selected.provider, selected.model));
+  });
   elements.temperatureSelect.addEventListener("change", () => localStorage.setItem("locales.chatTemperature", elements.temperatureSelect.value));
   elements.healthButton.addEventListener("click", checkHealth);
   elements.chatForm.addEventListener("submit", sendChat);

@@ -158,6 +158,19 @@ class DevTokenAuthTests(unittest.TestCase):
         self.assertEqual(response.json()["items"][0]["model"], "granite4.1:8b")
         self.assertEqual(response.json()["items"][1]["provider"], "openai")
 
+    def test_chat_cors_allows_lan_dev_frontend_port(self):
+        response = TestClient(app).options(
+            "/chat",
+            headers={
+                "Origin": "http://192.168.1.20:4177",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["access-control-allow-origin"], "http://192.168.1.20:4177")
+
     def test_saved_eval_runs_endpoint_is_open_in_local_open_mode(self):
         with patch("app.auth.settings.chat_auth_mode", "local_open"):
             response = TestClient(app).get("/api/evals/runs")
@@ -179,11 +192,10 @@ class DevTokenAuthTests(unittest.TestCase):
         self.assertNotIn("/telegram/", frontend_js)
         self.assertNotIn("/api/evals/telegram", frontend_js)
         self.assertNotIn("/api/evals/chat/run", frontend_js)
-        self.assertIn("/api/runs", frontend_js)
         self.assertIn("/api/models/chat", frontend_js)
         self.assertIn("/api/models/chat", frontend_html)
-        self.assertIn("Runs guardados", frontend_html)
-        self.assertIn("Vista de solo lectura", frontend_html)
+        self.assertIn("NucleoChat", frontend_html)
+        self.assertIn("POST /chat", frontend_html)
         self.assertNotIn("Telegram legacy", frontend_html)
         self.assertNotIn("Telegram Evals", frontend_html)
 
@@ -191,7 +203,15 @@ class DevTokenAuthTests(unittest.TestCase):
         frontend_html = Path("/home/jose-gonzalez-oliva/LOCALES/frontend/index.html").read_text(encoding="utf-8")
 
         self.assertNotIn('<option value="granite"', frontend_html)
-        self.assertIn("Carga modelos del backend", frontend_html)
+        self.assertIn("Cargando modelos", frontend_html)
+
+    def test_frontend_persists_provider_model_pair(self):
+        frontend_js = Path("/home/jose-gonzalez-oliva/LOCALES/frontend/app.js").read_text(encoding="utf-8")
+
+        self.assertIn("normalizeProviderModel", frontend_js)
+        self.assertIn("locales.chatModelKey", frontend_js)
+        self.assertIn("provider: selected.provider", frontend_js)
+        self.assertIn("model: selected.model", frontend_js)
 
 
 if __name__ == "__main__":
