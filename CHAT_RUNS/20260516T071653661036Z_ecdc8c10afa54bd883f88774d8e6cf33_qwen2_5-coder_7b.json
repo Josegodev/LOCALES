@@ -1,0 +1,43 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "ecdc8c10afa54bd883f88774d8e6cf33",
+  "created_at": "2026-05-16T07:16:53.661036+00:00",
+  "timestamp": "2026-05-16T07:16:53.661036+00:00",
+  "source": "frontend",
+  "endpoint": "/chat",
+  "input": "Que es un transformer?",
+  "response": "El Transformer es una arquitectura de red neuronal basada \u00fanicamente en m\u00e9canismos de atenci\u00f3n, que se propone como alternativa a los modelos tradicionales de secuencia basados en redes recurrentes o convolucionales. Este modelo dispone completamente de mecanismos de atenci\u00f3n y no requiere recurrencia ni convoluciones.",
+  "model": "qwen2.5-coder:7b",
+  "provider": "ollama",
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    375,
+    376,
+    377
+  ],
+  "document_ids": [
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf"
+  ],
+  "tokens_input": 1067,
+  "tokens_output": 76,
+  "tokens_total": 1143,
+  "prompt_eval_count": 1067,
+  "eval_count": 76,
+  "prompt_eval_duration": 276269974,
+  "eval_duration": 889315456,
+  "total_duration": 2992477969,
+  "load_duration": 1786468564,
+  "output_tokens_per_second": 85.459,
+  "latency_ms": 3008,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "answer_mode": "documentary_answer"
+}

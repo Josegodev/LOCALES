@@ -1,0 +1,55 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "cd42e16f317841999b474fa1331aea89",
+  "created_at": "2026-05-16T10:15:33.192167+00:00",
+  "timestamp": "2026-05-16T10:15:33.192167+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "Que es un transformer?",
+  "response": "No hay una definici\u00f3n expl\u00edcita de lo que es un \"transformer\" en la evidencia proporcionada. Sin embargo, se menciona que el modelo propuesto por los autores se basa \u00fanicamente en mecanismos de atenci\u00f3n, y que abandonan completamente la recursividad y las convoluciones.\nLa respuesta m\u00e1s precisa ser\u00eda: No_Evidencia_For_Answer",
+  "model": "llama3.1:8b",
+  "provider": "ollama",
+  "requested_model": "llama3.1:8b",
+  "temperature": 1.0,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 1.0,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    375,
+    376,
+    377
+  ],
+  "document_ids": [
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf"
+  ],
+  "tokens_input": 1055,
+  "tokens_output": 82,
+  "tokens_total": 1137,
+  "prompt_eval_count": 1055,
+  "eval_count": 82,
+  "prompt_eval_duration": 13635253,
+  "eval_duration": 1039183004,
+  "total_duration": 1166276795,
+  "load_duration": 73395206,
+  "output_tokens_per_second": 78.9081,
+  "latency_ms": 1171,
+  "generation_latency_ms": 1168,
+  "retrieval_latency_ms": 2,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

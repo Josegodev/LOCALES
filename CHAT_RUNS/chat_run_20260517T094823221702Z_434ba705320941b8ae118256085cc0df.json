@@ -1,0 +1,59 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "434ba705320941b8ae118256085cc0df",
+  "created_at": "2026-05-17T09:48:23.221702+00:00",
+  "timestamp": "2026-05-17T09:48:23.221702+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "que dice el readme.md de nucleo sobre el sistema?",
+  "response": "El README.md de NUCLEO describe que es un runtime de agentes modulares construido sobre FastAPI. Su objetivo principal es ejecutar peticiones de usuario mediante un pipeline controlado y auditable, evitando comportamientos opacos y separando claramente la decisi\u00f3n, validaci\u00f3n y ejecuci\u00f3n.\nEl documento proporciona una visi\u00f3n general en 30 segundos: NUCLEO permite automatizar tareas sobre datos reales de forma controlada, incluyendo ejemplos pr\u00e1cticos como la limpieza y agregaci\u00f3n de datos estructurados con errores. Tambi\u00e9n menciona que est\u00e1 dise\u00f1ado para integrar modelos de lenguaje (LLMs) sin perder el control del sistema, permitiendo interpretaci\u00f3n de valores ambiguos, limpieza de datos no estructurados y asistencia en validaci\u00f3n.\nAdem\u00e1s, describe la documentaci\u00f3n organizada en diferentes archivos y carpetas, como `docs/architecture.md` para la arquitectura verificada en c\u00f3digo, `docs/vision/architecture_vision.md` para la visi\u00f3n objetivo, `docs/operations/` para el estado operativo y session logs, y `docs/audits/` para evaluaciones cr\u00edticas y consistencia documental. El documento concluye indicando que si un documento describe una capacidad futura o experimental, debe indicarlo expl\u00edcitamente.",
+  "model": "granite4.1:8b",
+  "provider": "ollama",
+  "requested_model": "granite4.1:8b",
+  "temperature": 0.2,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.2,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    206,
+    262,
+    217
+  ],
+  "document_ids": [
+    5,
+    26,
+    8
+  ],
+  "source_filenames": [
+    "README.md",
+    "llm_tool_expansion.md",
+    "operational_state.md"
+  ],
+  "tokens_input": 1544,
+  "tokens_output": 288,
+  "tokens_total": 1832,
+  "prompt_eval_count": 1544,
+  "eval_count": 288,
+  "prompt_eval_duration": 8087316808,
+  "eval_duration": 4115078576,
+  "total_duration": 14887996866,
+  "load_duration": 2600892092,
+  "output_tokens_per_second": 69.9865,
+  "latency_ms": 14905,
+  "generation_latency_ms": 14890,
+  "retrieval_latency_ms": 13,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

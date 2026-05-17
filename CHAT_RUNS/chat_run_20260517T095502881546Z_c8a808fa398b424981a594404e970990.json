@@ -1,0 +1,59 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "c8a808fa398b424981a594404e970990",
+  "created_at": "2026-05-17T09:55:02.881546+00:00",
+  "timestamp": "2026-05-17T09:55:02.881546+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "como te llamas?",
+  "response": "El documento EVOLUTION_MAP.md indica que el sistema se llama FastAPI.",
+  "model": "mistral:latest",
+  "provider": "ollama",
+  "requested_model": "mistral:latest",
+  "temperature": 0.6,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.6,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    202,
+    215,
+    217
+  ],
+  "document_ids": [
+    4,
+    7,
+    8
+  ],
+  "source_filenames": [
+    "EVOLUTION_MAP.md",
+    "llm_tool_expansion.md",
+    "repo.audit.md"
+  ],
+  "tokens_input": 1926,
+  "tokens_output": 23,
+  "tokens_total": 1949,
+  "prompt_eval_count": 1926,
+  "eval_count": 23,
+  "prompt_eval_duration": 549471863,
+  "eval_duration": 262083326,
+  "total_duration": 2949279801,
+  "load_duration": 2128499310,
+  "output_tokens_per_second": 87.7583,
+  "latency_ms": 2954,
+  "generation_latency_ms": 2950,
+  "retrieval_latency_ms": 2,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

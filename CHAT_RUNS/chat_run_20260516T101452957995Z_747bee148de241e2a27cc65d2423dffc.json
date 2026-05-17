@@ -1,0 +1,55 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "747bee148de241e2a27cc65d2423dffc",
+  "created_at": "2026-05-16T10:14:52.957995+00:00",
+  "timestamp": "2026-05-16T10:14:52.957995+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "Que es un transformer?",
+  "response": "Un Transformer es una arquitectura de red neuronal dise\u00f1ada por Google Brain y presentada en el art\u00edculo \"Attention Is All You Need\". Este modelo se basa exclusivamente en mecanismos de atenci\u00f3n, eliminando completamente las capas recurrentes y convolucionales. El Transformer ha demostrado ser superior en calidad para tareas de traducci\u00f3n autom\u00e1tica y otras aplicaciones de procesamiento de lenguaje natural, siendo m\u00e1s paralelizable y requiriendo menos tiempo de entrenamiento en comparaci\u00f3n con modelos anteriores que utilizaban redes recurrentes o convolucionales.",
+  "model": "granite4.1:8b",
+  "provider": "ollama",
+  "requested_model": "granite4.1:8b",
+  "temperature": 1.0,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 1.0,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    375,
+    376,
+    377
+  ],
+  "document_ids": [
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf"
+  ],
+  "tokens_input": 1055,
+  "tokens_output": 123,
+  "tokens_total": 1178,
+  "prompt_eval_count": 1055,
+  "eval_count": 123,
+  "prompt_eval_duration": 15775185,
+  "eval_duration": 1717629708,
+  "total_duration": 1815868135,
+  "load_duration": 43097381,
+  "output_tokens_per_second": 71.6103,
+  "latency_ms": 1821,
+  "generation_latency_ms": 1817,
+  "retrieval_latency_ms": 2,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

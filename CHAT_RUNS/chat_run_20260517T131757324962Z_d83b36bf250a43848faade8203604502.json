@@ -1,0 +1,59 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "d83b36bf250a43848faade8203604502",
+  "created_at": "2026-05-17T13:17:57.324962+00:00",
+  "timestamp": "2026-05-17T13:17:57.324962+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "que es nucleo y que relacion tiene con los llm?",
+  "response": "La evidencia proporcionada no contiene informaci\u00f3n sobre qu\u00e9 es NUCLEO ni su relaci\u00f3n espec\u00edfica con los LLM (modelos de lenguaje grandes). Los documentos mencionados se centran en detalles arquitect\u00f3nicos y permisos relacionados con la expansi\u00f3n experimental de herramientas mediante LLM dentro del contexto de un sistema llamado \"NUCLEO\", pero no ofrecen una definici\u00f3n clara ni explican la relaci\u00f3n general entre NUCLEO y los LLM.",
+  "model": "granite4.1:8b",
+  "provider": "ollama",
+  "requested_model": "granite4.1:8b",
+  "temperature": 0.2,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.2,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    263,
+    217,
+    219
+  ],
+  "document_ids": [
+    26,
+    8,
+    9
+  ],
+  "source_filenames": [
+    "llm_tool_expansion.md",
+    "operational_state.md",
+    "planner_llm_augmentation.md"
+  ],
+  "tokens_input": 1503,
+  "tokens_output": 111,
+  "tokens_total": 1614,
+  "prompt_eval_count": 1503,
+  "eval_count": 111,
+  "prompt_eval_duration": 479063046,
+  "eval_duration": 1588565702,
+  "total_duration": 3365548609,
+  "load_duration": 1262953218,
+  "output_tokens_per_second": 69.8744,
+  "latency_ms": 3372,
+  "generation_latency_ms": 3367,
+  "retrieval_latency_ms": 3,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

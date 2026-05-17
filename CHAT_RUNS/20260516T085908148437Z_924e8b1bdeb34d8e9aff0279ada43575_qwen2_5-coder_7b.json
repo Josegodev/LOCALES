@@ -1,0 +1,47 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "924e8b1bdeb34d8e9aff0279ada43575",
+  "created_at": "2026-05-16T08:59:08.148437+00:00",
+  "timestamp": "2026-05-16T08:59:08.148437+00:00",
+  "source": "frontend",
+  "endpoint": "/chat",
+  "input": "\u00bfQuien es Jos\u00e9 Gonz\u00e1lez Oliva?",
+  "response": "Jos\u00e9 Gonz\u00e1lez Oliva es el desarrollador y responsable t\u00e9cnico del proyecto NUCLEO.",
+  "model": "qwen2.5-coder:7b",
+  "provider": "ollama",
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    374,
+    256,
+    287
+  ],
+  "document_ids": [
+    67,
+    23,
+    35
+  ],
+  "source_filenames": [
+    "CONTRACT_POLICY_TOOLREGISTRY.md",
+    "identity_nucleo_jose.md",
+    "tool_proposal_service.md"
+  ],
+  "tokens_input": 1063,
+  "tokens_output": 21,
+  "tokens_total": 1084,
+  "prompt_eval_count": 1063,
+  "eval_count": 21,
+  "prompt_eval_duration": 274528419,
+  "eval_duration": 234337279,
+  "total_duration": 2242716110,
+  "load_duration": 1718299100,
+  "output_tokens_per_second": 89.6144,
+  "latency_ms": 2257,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "answer_mode": "documentary_answer"
+}

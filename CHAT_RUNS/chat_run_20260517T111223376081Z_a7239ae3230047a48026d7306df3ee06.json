@@ -1,0 +1,57 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "a7239ae3230047a48026d7306df3ee06",
+  "created_at": "2026-05-17T11:12:23.376081+00:00",
+  "timestamp": "2026-05-17T11:12:23.376081+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "cuales son los papers de la date base?",
+  "response": "Seg\u00fan la evidencia proporcionada, los papers mencionados en la base de datos son:\n* SearchQA: A New Q&A Dataset Augmented with Context from a Search Engine (arXiv:1704.05179)\n* Hierarchical neural story generation (P18-1082)\n* ELI5: Long form question answering (P19-1346)\n* Augmenting transformers with KNN-based composite memory (H1gx1CNKPH)\nEs importante destacar que estos papers son mencionados en el documento \"rag_knowledge_intensive_nlp_2021.pdf\" con el chunk_id 537.",
+  "model": "llama3.1:8b",
+  "provider": "ollama",
+  "requested_model": "llama3.1:8b",
+  "temperature": 0.4,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.4,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    599,
+    600,
+    537
+  ],
+  "document_ids": [
+    71,
+    70
+  ],
+  "source_filenames": [
+    "rag_knowledge_intensive_nlp_2021.pdf",
+    "selg-rag. learning to retrievee, generate and critique through self reflection.pdf"
+  ],
+  "tokens_input": 1523,
+  "tokens_output": 132,
+  "tokens_total": 1655,
+  "prompt_eval_count": 1523,
+  "eval_count": 132,
+  "prompt_eval_duration": 407524937,
+  "eval_duration": 1662255238,
+  "total_duration": 3599647829,
+  "load_duration": 1484027098,
+  "output_tokens_per_second": 79.4102,
+  "latency_ms": 3628,
+  "generation_latency_ms": 3601,
+  "retrieval_latency_ms": 25,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

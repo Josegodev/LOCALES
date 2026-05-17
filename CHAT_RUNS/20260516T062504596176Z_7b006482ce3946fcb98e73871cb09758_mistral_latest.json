@@ -1,0 +1,43 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "7b006482ce3946fcb98e73871cb09758",
+  "created_at": "2026-05-16T06:25:04.596176+00:00",
+  "timestamp": "2026-05-16T06:25:04.596176+00:00",
+  "source": "frontend",
+  "endpoint": "/chat",
+  "input": "Que es un transformer?",
+  "response": "El Transformer es una red neuronal basada en mecanismos de atenci\u00f3n, que dispensa con la recurrencia y las convoluciones completamente. Esta red fue propuesta por primera vez en el documento \"Attention is all you need\" (Atenci\u00f3n es todo lo que necesitas).",
+  "model": "mistral:latest",
+  "provider": "ollama",
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    375,
+    376,
+    377
+  ],
+  "document_ids": [
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf"
+  ],
+  "tokens_input": 1247,
+  "tokens_output": 71,
+  "tokens_total": 1318,
+  "prompt_eval_count": 1247,
+  "eval_count": 71,
+  "prompt_eval_duration": 12853378,
+  "eval_duration": 874102781,
+  "total_duration": 917374313,
+  "load_duration": 11522681,
+  "output_tokens_per_second": 81.2261,
+  "latency_ms": 923,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "answer_mode": "documentary_answer"
+}

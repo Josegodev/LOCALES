@@ -1,0 +1,36 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "0028591b04c04262827360afffc434a8",
+  "created_at": "2026-05-15T21:59:21.501437+00:00",
+  "timestamp": "2026-05-15T21:59:21.501437+00:00",
+  "source": "frontend",
+  "endpoint": "/chat",
+  "input": "Que es un transformer?",
+  "response": "Seg\u00fan la evidencia documental proporcionada en el chunk_id=376, se menciona que \"Transformer, basado \u00fanicamente en mecanismos de atenci\u00f3n, sin recurrencia ni convoluciones en absoluto\".",
+  "model": "llama3.1:8b",
+  "provider": "ollama",
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    375,
+    376,
+    377
+  ],
+  "document_ids": [
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf"
+  ],
+  "tokens_input": 1055,
+  "tokens_output": 49,
+  "tokens_total": 1104,
+  "latency_ms": 2797,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "answer_mode": "documentary_answer"
+}

@@ -1,0 +1,59 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "c1df62acfcbf4362966d7bae593a2756",
+  "created_at": "2026-05-17T10:31:52.619491+00:00",
+  "timestamp": "2026-05-17T10:31:52.619491+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "como te llamas?",
+  "response": "No estoy seguro de c\u00f3mo me llamo. La evidencia proporcionada no menciona mi nombre.",
+  "model": "qwen2.5-coder:7b",
+  "provider": "ollama",
+  "requested_model": "qwen2.5-coder:7b",
+  "temperature": 0.6,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.6,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    202,
+    215,
+    217
+  ],
+  "document_ids": [
+    4,
+    7,
+    8
+  ],
+  "source_filenames": [
+    "EVOLUTION_MAP.md",
+    "llm_tool_expansion.md",
+    "repo.audit.md"
+  ],
+  "tokens_input": 1555,
+  "tokens_output": 21,
+  "tokens_total": 1576,
+  "prompt_eval_count": 1555,
+  "eval_count": 21,
+  "prompt_eval_duration": 410803762,
+  "eval_duration": 235713525,
+  "total_duration": 2092889455,
+  "load_duration": 1423531769,
+  "output_tokens_per_second": 89.0912,
+  "latency_ms": 2110,
+  "generation_latency_ms": 2094,
+  "retrieval_latency_ms": 8,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

@@ -1,0 +1,57 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "47879b2c0f294f97ab8a9b6b897f6f5a",
+  "created_at": "2026-05-17T12:50:23.977232+00:00",
+  "timestamp": "2026-05-17T12:50:23.977232+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "que papers hay en el sistema?",
+  "response": "La evidencia proporcionada incluye dos documentos PDF:\n1. **selg-rag. learning to retrievee, generate and critique through self reflection.pdf**: Este documento contiene resultados experimentales sobre seis tareas diferentes (PopQA, TQA, Pub, ARC, Bio, ASQA) utilizando varios modelos como Llama2-c13B, Ret-Llama2-c13B, ChatGPT, Ret-ChatGPT, Perplexity.ai y algunos baselines sin recuperaci\u00f3n como Llama27B, Alpaca7B y Llama213B. Incluye m\u00e9tricas como FactScore (factuality), str-em, rouge (correctness), MAUVE (fluency), precision y recall de citas.\n2. **Attention is all yout need.pdf**: Este documento parece ser un art\u00edculo sobre la arquitectura de atenci\u00f3n en redes neuronales, citando trabajos relacionados con modelos recurrentes para traducci\u00f3n autom\u00e1tica neural y an\u00e1lisis sint\u00e1ctico r\u00e1pido-reducir para el procesamiento del lenguaje natural. Incluye una referencia a una visualizaci\u00f3n de atenci\u00f3n que no est\u00e1 incluida en la evidencia textual.\nNo hay una lista expl\u00edcita de \"papers\" dentro de estos documentos, pero se mencionan varios trabajos acad\u00e9micos y modelos espec\u00edficos utilizados en los experimentos descritos.",
+  "model": "granite4.1:8b",
+  "provider": "ollama",
+  "requested_model": "granite4.1:8b",
+  "temperature": 0.2,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.2,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    599,
+    600,
+    414
+  ],
+  "document_ids": [
+    71,
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf",
+    "selg-rag. learning to retrievee, generate and critique through self reflection.pdf"
+  ],
+  "tokens_input": 1469,
+  "tokens_output": 288,
+  "tokens_total": 1757,
+  "prompt_eval_count": 1469,
+  "eval_count": 288,
+  "prompt_eval_duration": 464922830,
+  "eval_duration": 4159317245,
+  "total_duration": 4744327435,
+  "load_duration": 40128261,
+  "output_tokens_per_second": 69.2421,
+  "latency_ms": 4752,
+  "generation_latency_ms": 4746,
+  "retrieval_latency_ms": 4,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

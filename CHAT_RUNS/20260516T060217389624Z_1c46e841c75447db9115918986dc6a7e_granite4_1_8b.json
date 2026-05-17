@@ -1,0 +1,43 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "1c46e841c75447db9115918986dc6a7e",
+  "created_at": "2026-05-16T06:02:17.389624+00:00",
+  "timestamp": "2026-05-16T06:02:17.389624+00:00",
+  "source": "frontend",
+  "endpoint": "/chat",
+  "input": "Que significa attention para un LLM?",
+  "response": "Para un modelo de lenguaje grande (LLM), la atenci\u00f3n se refiere a un mecanismo que permite al modelo enfocarse selectivamente en diferentes partes de la entrada (por ejemplo, una oraci\u00f3n o un texto) al generar cada parte de la salida. En lugar de procesar los elementos secuencialmente como en las redes neuronales recurrentes tradicionales, la atenci\u00f3n le permite al modelo considerar todo el contexto de la entrada simult\u00e1neamente.\nEn el contexto del art\u00edculo \"Attention is All You Need\", la atenci\u00f3n se utiliza para capturar dependencias a cualquier distancia entre las palabras de la entrada y la salida, sin depender de una arquitectura secuencial. Esto hace que el modelo sea m\u00e1s eficiente en t\u00e9rminos de paralelizaci\u00f3n y mejora su capacidad para entender y generar texto coherente.\nEn resumen, para un LLM, la atenci\u00f3n es fundamental porque le permite procesar y comprender el contexto completo de una entrada en cada paso de generaci\u00f3n de salida, mejorando as\u00ed la calidad y relevancia del texto generado.",
+  "model": "granite4.1:8b",
+  "provider": "ollama",
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    376,
+    378,
+    379
+  ],
+  "document_ids": [
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf"
+  ],
+  "tokens_input": 962,
+  "tokens_output": 226,
+  "tokens_total": 1188,
+  "prompt_eval_count": 962,
+  "eval_count": 226,
+  "prompt_eval_duration": 16828812,
+  "eval_duration": 3197534249,
+  "total_duration": 3318098961,
+  "load_duration": 39577936,
+  "output_tokens_per_second": 70.6795,
+  "latency_ms": 3323,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "answer_mode": "documentary_answer"
+}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sqlite3
 import subprocess
 import sys
@@ -8,6 +9,7 @@ from pathlib import Path
 
 
 BASE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BASE_DIR.parent.parent
 PDF_DIR = BASE_DIR / "pdf"
 DB_PATH = BASE_DIR / "documents.sqlite"
 INGEST_SCRIPT = BASE_DIR / "ingest_pdf_markdown.py"
@@ -29,13 +31,23 @@ def ingest_pdf(pdf_path: Path) -> None:
     print("=" * 80)
     print(f"INGEST: {pdf_path.name}")
 
+    env = os.environ.copy()
+    current_pythonpath = env.get("PYTHONPATH")
+    # The child process imports app.config, so project root must be importable.
+    env["PYTHONPATH"] = (
+        str(PROJECT_ROOT)
+        if not current_pythonpath
+        else os.pathsep.join([str(PROJECT_ROOT), current_pythonpath])
+    )
+
     result = subprocess.run(
         [
             sys.executable,
             str(INGEST_SCRIPT),
             str(pdf_path),
         ],
-        cwd=str(BASE_DIR),
+        cwd=str(PROJECT_ROOT),
+        env=env,
         text=True,
         capture_output=True,
     )
@@ -113,6 +125,12 @@ def main() -> None:
         help="Carpeta donde buscar PDFs",
     )
     args = parser.parse_args()
+
+    runtime_pythonpath = os.pathsep.join(
+        part for part in [str(PROJECT_ROOT), os.environ.get("PYTHONPATH", "")] if part
+    )
+    print(f"PROJECT_ROOT: {PROJECT_ROOT}")
+    print(f"PYTHONPATH: {runtime_pythonpath}")
 
     pdf_dir = Path(args.pdf_dir).resolve()
     pdfs = find_pdfs(pdf_dir)

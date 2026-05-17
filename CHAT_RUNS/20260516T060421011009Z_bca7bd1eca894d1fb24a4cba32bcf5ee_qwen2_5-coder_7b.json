@@ -1,0 +1,43 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "bca7bd1eca894d1fb24a4cba32bcf5ee",
+  "created_at": "2026-05-16T06:04:21.011009+00:00",
+  "timestamp": "2026-05-16T06:04:21.011009+00:00",
+  "source": "frontend",
+  "endpoint": "/chat",
+  "input": "Que significa attention para un LLM?",
+  "response": "Seg\u00fan la evidencia proporcionada, el attention en un LLM (Lenguaje de M\u00e1quina) se refiere a una t\u00e9cnica que permite al modelo modelar dependencias entre elementos de entrada y salida sin tener en cuenta su distancia en las secuencias de entrada o salida. Esto significa que el modelo puede considerar informaci\u00f3n global de toda la entrada y salida, lo que lo hace m\u00e1s eficiente en t\u00e9rminos de paralelizaci\u00f3n y capaz de alcanzar un nuevo estado del arte en tareas como la traducci\u00f3n.",
+  "model": "qwen2.5-coder:7b",
+  "provider": "ollama",
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    376,
+    378,
+    379
+  ],
+  "document_ids": [
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf"
+  ],
+  "tokens_input": 995,
+  "tokens_output": 111,
+  "tokens_total": 1106,
+  "prompt_eval_count": 995,
+  "eval_count": 111,
+  "prompt_eval_duration": 12826085,
+  "eval_duration": 1299272337,
+  "total_duration": 1427828433,
+  "load_duration": 57886889,
+  "output_tokens_per_second": 85.4324,
+  "latency_ms": 1433,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "answer_mode": "documentary_answer"
+}

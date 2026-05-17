@@ -1,0 +1,59 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "566ecf00ae8a4e99ae82dc7b89e3cd53",
+  "created_at": "2026-05-17T09:54:13.907769+00:00",
+  "timestamp": "2026-05-17T09:54:13.907769+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "como te llamas?",
+  "response": "Como he sido creado como un bot del laboratorio LLM de Jose Gonzalez Oliva, me llamo **5060Ti**.",
+  "model": "granite4.1:8b",
+  "provider": "ollama",
+  "requested_model": "granite4.1:8b",
+  "temperature": 0.6,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.6,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    202,
+    215,
+    217
+  ],
+  "document_ids": [
+    4,
+    7,
+    8
+  ],
+  "source_filenames": [
+    "EVOLUTION_MAP.md",
+    "llm_tool_expansion.md",
+    "repo.audit.md"
+  ],
+  "tokens_input": 1532,
+  "tokens_output": 28,
+  "tokens_total": 1560,
+  "prompt_eval_count": 1532,
+  "eval_count": 28,
+  "prompt_eval_duration": 473601597,
+  "eval_duration": 387115225,
+  "total_duration": 2191769020,
+  "load_duration": 1317247361,
+  "output_tokens_per_second": 72.3299,
+  "latency_ms": 2197,
+  "generation_latency_ms": 2193,
+  "retrieval_latency_ms": 2,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

@@ -57,20 +57,6 @@ __pycache__/
 
 # Local env
 .env
-.env.*
-*.env
-!.env.example
-secrets/
-tokens/
-credentials/
-credentials*.json
-*.secret
-*.secrets
-*.pem
-*.key
-*.crt
-*.p12
-*.pfx
 
 logs/
 logs/telegram_runs/
@@ -95,5 +81,10 @@ DB/chunks/markdown/
 # Telegram/runtime traces
 DB/conversations/telegram/runs/
 
-# Runtime chat runs
-CHAT_RUNS/
+archivo.txt
+.env
+*.env
+.env.*
+secrets/
+tokens/
+

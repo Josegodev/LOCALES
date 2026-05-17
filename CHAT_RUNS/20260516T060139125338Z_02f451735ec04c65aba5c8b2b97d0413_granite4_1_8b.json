@@ -1,0 +1,43 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "02f451735ec04c65aba5c8b2b97d0413",
+  "created_at": "2026-05-16T06:01:39.125338+00:00",
+  "timestamp": "2026-05-16T06:01:39.125338+00:00",
+  "source": "frontend",
+  "endpoint": "/chat",
+  "input": "Que significa attention para un LLM?",
+  "response": "Para un modelo de lenguaje grande (LLM), \"attention\" se refiere a un mecanismo que permite al modelo ponderar la importancia relativa de diferentes partes de la entrada al generar cada parte de la salida. En el contexto del art\u00edculo \"Attention is All You Need\", el attention se utiliza para capturar dependencias globales entre las palabras en una oraci\u00f3n, independientemente de su distancia en la secuencia de entrada o salida. Esto permite que el modelo procese y comprenda mejor el contexto completo de un texto sin depender de estructuras recurrentes como las redes neuronales recurrentes (RNN) o las redes LSTM.\nEn resumen, para un LLM, el attention es una t\u00e9cnica crucial que facilita la comprensi\u00f3n del contexto global de la entrada, mejorando la capacidad del modelo para generar respuestas precisas y coherentes.",
+  "model": "granite4.1:8b",
+  "provider": "ollama",
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    376,
+    378,
+    379
+  ],
+  "document_ids": [
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf"
+  ],
+  "tokens_input": 962,
+  "tokens_output": 183,
+  "tokens_total": 1145,
+  "prompt_eval_count": 962,
+  "eval_count": 183,
+  "prompt_eval_duration": 285584491,
+  "eval_duration": 2564713524,
+  "total_duration": 2944210979,
+  "load_duration": 41185754,
+  "output_tokens_per_second": 71.353,
+  "latency_ms": 2949,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "answer_mode": "documentary_answer"
+}

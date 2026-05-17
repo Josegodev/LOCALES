@@ -1,0 +1,36 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "0fa5907e0d9843a583a89f601e747e60",
+  "created_at": "2026-05-15T21:59:00.596481+00:00",
+  "timestamp": "2026-05-15T21:59:00.596481+00:00",
+  "source": "frontend",
+  "endpoint": "/chat",
+  "input": "Que es un transformer?",
+  "response": "Un Transformer es una arquitectura de red neuronal dise\u00f1ada para procesar secuencias de datos, como texto, utilizando exclusivamente mecanismos de atenci\u00f3n. Dispensa con la recursividad y las convoluciones, lo que permite una mayor paralelizaci\u00f3n y un entrenamiento m\u00e1s r\u00e1pido. La idea principal del Transformer es utilizar \"self-attention\" para ponderar la importancia relativa de cada elemento en una secuencia respecto a otros elementos, facilitando el aprendizaje de dependencias a largo plazo sin necesidad de procesar los datos secuencialmente.\nLa evidencia proporcionada describe al Transformer como un modelo que ha demostrado superior calidad en tareas de traducci\u00f3n autom\u00e1tica y otras aplicaciones de procesamiento de lenguaje natural, estableciendo nuevos est\u00e1ndares de rendimiento en comparaci\u00f3n con modelos anteriores basados en redes recurrentes o convolucionales.",
+  "model": "granite4.1:8b",
+  "provider": "ollama",
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    375,
+    376,
+    377
+  ],
+  "document_ids": [
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf"
+  ],
+  "tokens_input": 1055,
+  "tokens_output": 190,
+  "tokens_total": 1245,
+  "latency_ms": 2827,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "answer_mode": "documentary_answer"
+}

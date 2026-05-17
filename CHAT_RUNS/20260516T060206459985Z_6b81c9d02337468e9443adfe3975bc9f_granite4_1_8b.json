@@ -1,0 +1,43 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "6b81c9d02337468e9443adfe3975bc9f",
+  "created_at": "2026-05-16T06:02:06.459985+00:00",
+  "timestamp": "2026-05-16T06:02:06.459985+00:00",
+  "source": "frontend",
+  "endpoint": "/chat",
+  "input": "Que significa attention para un LLM?",
+  "response": "Para un modelo de lenguaje grande (LLM), la atenci\u00f3n se refiere a un mecanismo que permite al modelo enfocarse selectivamente en diferentes partes de la entrada (por ejemplo, una oraci\u00f3n o un texto) al generar cada parte de la salida. En lugar de procesar la informaci\u00f3n secuencialmente, como lo har\u00edan los modelos recurrentes (RNNs), la atenci\u00f3n le permite al modelo considerar todo el contexto de una sola vez y determinar qu\u00e9 partes de la entrada son m\u00e1s relevantes para predecir cada palabra o token en la salida.\nEn t\u00e9rminos t\u00e9cnicos, la atenci\u00f3n calcula un conjunto de pesos de importancia (o \"puntuaciones de atenci\u00f3n\") que indican cu\u00e1nto debe centrarse el modelo en cada parte de la entrada al generar una parte espec\u00edfica de la salida. Estos pesos se derivan t\u00edpicamente mediante operaciones como el producto punto entre vectores, seguido de una funci\u00f3n softmax para normalizar los pesos.\nLa introducci\u00f3n del mecanismo de atenci\u00f3n, especialmente en la arquitectura Transformer (como se describe en el documento \"Attention is All You Need\"), ha permitido a los modelos de lenguaje procesar y generar texto de manera m\u00e1s eficiente y efectiva, mejorando significativamente el rendimiento en tareas como la traducci\u00f3n autom\u00e1tica y otras aplicaciones de procesamiento de lenguaje natural.",
+  "model": "granite4.1:8b",
+  "provider": "ollama",
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    376,
+    378,
+    379
+  ],
+  "document_ids": [
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf"
+  ],
+  "tokens_input": 962,
+  "tokens_output": 293,
+  "tokens_total": 1255,
+  "prompt_eval_count": 962,
+  "eval_count": 293,
+  "prompt_eval_duration": 38400240,
+  "eval_duration": 4077029318,
+  "total_duration": 4238007392,
+  "load_duration": 39135807,
+  "output_tokens_per_second": 71.8661,
+  "latency_ms": 4244,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "answer_mode": "documentary_answer"
+}

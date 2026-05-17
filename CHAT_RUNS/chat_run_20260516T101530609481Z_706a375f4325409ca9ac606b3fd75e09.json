@@ -1,0 +1,55 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "706a375f4325409ca9ac606b3fd75e09",
+  "created_at": "2026-05-16T10:15:30.609481+00:00",
+  "timestamp": "2026-05-16T10:15:30.609481+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "Que es un transformer?",
+  "response": "Seg\u00fan la evidencia documental proporcionada en el documento \"Attention is all you need.pdf\", se describe al Transformer como una nueva arquitectura de red neuronal que se basa \u00fanicamente en mecanismos de atenci\u00f3n, eliminando la recurrencia y las convoluciones. (chunk_id=376)",
+  "model": "llama3.1:8b",
+  "provider": "ollama",
+  "requested_model": "llama3.1:8b",
+  "temperature": 1.0,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 1.0,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    375,
+    376,
+    377
+  ],
+  "document_ids": [
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf"
+  ],
+  "tokens_input": 1055,
+  "tokens_output": 68,
+  "tokens_total": 1123,
+  "prompt_eval_count": 1055,
+  "eval_count": 68,
+  "prompt_eval_duration": 13104334,
+  "eval_duration": 849884865,
+  "total_duration": 965472650,
+  "load_duration": 75091331,
+  "output_tokens_per_second": 80.0108,
+  "latency_ms": 971,
+  "generation_latency_ms": 967,
+  "retrieval_latency_ms": 2,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

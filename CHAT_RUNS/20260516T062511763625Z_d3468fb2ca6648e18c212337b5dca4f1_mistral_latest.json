@@ -1,0 +1,43 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "d3468fb2ca6648e18c212337b5dca4f1",
+  "created_at": "2026-05-16T06:25:11.763625+00:00",
+  "timestamp": "2026-05-16T06:25:11.763625+00:00",
+  "source": "frontend",
+  "endpoint": "/chat",
+  "input": "Que es un transformer?",
+  "response": "Un Transformer es una red neuronal basada en mecanismos de atenci\u00f3n, que se propuso como arquitectura simple en lugar de redes recurrentes o convolutionales. La evidencia proporcionada indica que el Transformer fue desarrollado por Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, \u0141ukasz Kaiser y Illia Polosukhin en el documento \"Attention is all you need\".",
+  "model": "mistral:latest",
+  "provider": "ollama",
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    375,
+    376,
+    377
+  ],
+  "document_ids": [
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf"
+  ],
+  "tokens_input": 1247,
+  "tokens_output": 124,
+  "tokens_total": 1371,
+  "prompt_eval_count": 1247,
+  "eval_count": 124,
+  "prompt_eval_duration": 13649036,
+  "eval_duration": 1479624970,
+  "total_duration": 1523199225,
+  "load_duration": 10927811,
+  "output_tokens_per_second": 83.805,
+  "latency_ms": 1528,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "answer_mode": "documentary_answer"
+}

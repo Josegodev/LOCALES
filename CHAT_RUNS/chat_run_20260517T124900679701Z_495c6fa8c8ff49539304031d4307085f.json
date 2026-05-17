@@ -1,0 +1,59 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "495c6fa8c8ff49539304031d4307085f",
+  "created_at": "2026-05-17T12:49:00.679701+00:00",
+  "timestamp": "2026-05-17T12:49:00.679701+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "Enumerame los papaers de mi sistema.",
+  "response": ".",
+  "model": "llama3.1:8b",
+  "provider": "ollama",
+  "requested_model": "llama3.1:8b",
+  "temperature": 0.7,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.7,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    202,
+    206,
+    214
+  ],
+  "document_ids": [
+    4,
+    5,
+    6
+  ],
+  "source_filenames": [
+    "EVOLUTION_MAP.md",
+    "README.md",
+    "files.audit.md"
+  ],
+  "tokens_input": 1540,
+  "tokens_output": 9,
+  "tokens_total": 1549,
+  "prompt_eval_count": 1540,
+  "eval_count": 9,
+  "prompt_eval_duration": 441953446,
+  "eval_duration": 101469740,
+  "total_duration": 628508133,
+  "load_duration": 76515594,
+  "output_tokens_per_second": 88.6964,
+  "latency_ms": 637,
+  "generation_latency_ms": 630,
+  "retrieval_latency_ms": 5,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

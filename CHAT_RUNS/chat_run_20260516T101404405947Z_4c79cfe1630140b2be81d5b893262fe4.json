@@ -1,0 +1,55 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "4c79cfe1630140b2be81d5b893262fe4",
+  "created_at": "2026-05-16T10:14:04.405947+00:00",
+  "timestamp": "2026-05-16T10:14:04.405947+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "Que es un transformer?",
+  "response": "Un Transformer es una arquitectura de red neuronal dise\u00f1ada para procesar secuencias de datos, como texto, utilizando exclusivamente mecanismos de atenci\u00f3n. Dispensa con la necesidad de recurrencia (como en las redes neuronales recurrentes) y convoluciones, lo que permite un mayor grado de paralelizaci\u00f3n durante el entrenamiento y una mejora en la eficiencia computacional. La idea principal detr\u00e1s del Transformer es utilizar \"mecanismos de atenci\u00f3n\" para ponderar la importancia relativa de cada elemento en una secuencia respecto a otros elementos, facilitando as\u00ed la captura de dependencias a largo plazo sin necesidad de procesamiento secuencial paso a paso.\nLa arquitectura se basa en dos componentes principales: el codificador (encoder) y el decodificador (decoder), ambos estructurados mediante m\u00faltiples capas de atenci\u00f3n multi\u2011encabezado (multi-head attention) seguidos por redes neuronales posicionales simples. El mecanismo de atenci\u00f3n \"self-attention\" permite que cada posici\u00f3n en la secuencia de entrada pese las dem\u00e1s posiciones, capturando as\u00ed relaciones contextuales complejas sin limitaciones de longitud de secuencia impuestas por los modelos recurrentes.\nEn resumen, el Transformer es una innovaci\u00f3n significativa en el campo del procesamiento de lenguaje natural y otras tareas secuenciales, ofreciendo mejoras tanto en la calidad de las predicciones como en la eficiencia computacional durante el entrenamiento.",
+  "model": "granite4.1:8b",
+  "provider": "ollama",
+  "requested_model": "granite4.1:8b",
+  "temperature": 0.0,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.0,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    375,
+    376,
+    377
+  ],
+  "document_ids": [
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf"
+  ],
+  "tokens_input": 1055,
+  "tokens_output": 323,
+  "tokens_total": 1378,
+  "prompt_eval_count": 1055,
+  "eval_count": 323,
+  "prompt_eval_duration": 15814924,
+  "eval_duration": 4609843432,
+  "total_duration": 4751612904,
+  "load_duration": 37246700,
+  "output_tokens_per_second": 70.0675,
+  "latency_ms": 4757,
+  "generation_latency_ms": 4753,
+  "retrieval_latency_ms": 2,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

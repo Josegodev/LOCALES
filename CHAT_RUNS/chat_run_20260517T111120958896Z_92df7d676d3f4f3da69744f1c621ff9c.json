@@ -1,0 +1,59 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "92df7d676d3f4f3da69744f1c621ff9c",
+  "created_at": "2026-05-17T11:11:20.958896+00:00",
+  "timestamp": "2026-05-17T11:11:20.958896+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "de que trata el paper de la Data Base?",
+  "response": "La evidencia proporcionada no contiene informaci\u00f3n espec\u00edfica sobre un \"paper de la Data Base\". Las secciones incluidas en la evidencia est\u00e1n relacionadas con el entrenamiento de modelos de lenguaje, optimizadores y resultados de evaluaci\u00f3n para diferentes modelos como Llama2-c13B, ChatGPT, Ret-Llama2-c13B, entre otros. No hay menci\u00f3n directa ni descripci\u00f3n de un documento titulado \"Data Base\" o similar dentro del texto proporcionado.",
+  "model": "granite4.1:8b",
+  "provider": "ollama",
+  "requested_model": "granite4.1:8b",
+  "temperature": 0.4,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.4,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    396,
+    600,
+    537
+  ],
+  "document_ids": [
+    68,
+    71,
+    70
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf",
+    "rag_knowledge_intensive_nlp_2021.pdf",
+    "selg-rag. learning to retrievee, generate and critique through self reflection.pdf"
+  ],
+  "tokens_input": 1527,
+  "tokens_output": 112,
+  "tokens_total": 1639,
+  "prompt_eval_count": 1527,
+  "eval_count": 112,
+  "prompt_eval_duration": 450232563,
+  "eval_duration": 1596830157,
+  "total_duration": 2125894856,
+  "load_duration": 37931343,
+  "output_tokens_per_second": 70.139,
+  "latency_ms": 2134,
+  "generation_latency_ms": 2127,
+  "retrieval_latency_ms": 5,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

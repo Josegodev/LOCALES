@@ -1,0 +1,55 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "903a015940ff48198902676abe8671dd",
+  "created_at": "2026-05-17T10:34:17.717810+00:00",
+  "timestamp": "2026-05-17T10:34:17.717810+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "que es un transformer?",
+  "response": "Un Transformer es una arquitectura de red neuronal dise\u00f1ada para procesar secuencias de datos, como texto o audio. A diferencia de los modelos anteriores basados en redes recurrentes (RNN) o convolucionales, el Transformer se basa exclusivamente en mecanismos de atenci\u00f3n y elimina por completo las conexiones recurrrentes y convolucionales. Esto permite una mayor paralelizaci\u00f3n durante el entrenamiento y la inferencia, lo que resulta en un tiempo de entrenamiento significativamente reducido mientras mantiene o mejora la calidad del modelo.\nLa arquitectura principal del Transformer incluye dos componentes principales: el codificador (Encoder) y el decodificador (Decoder), ambos estructurados mediante m\u00faltiples capas de atenci\u00f3n. La atenci\u00f3n permite que el modelo se enfoque en diferentes partes de la secuencia de entrada al procesar cada parte de la salida, lo cual es especialmente \u00fatil para tareas como la traducci\u00f3n autom\u00e1tica donde las relaciones entre palabras pueden estar a distancias variables dentro de la oraci\u00f3n.\nEl Transformer ha demostrado ser superior en varias tareas de inteligencia artificial, destac\u00e1ndose particularmente en el \u00e1mbito del procesamiento del lenguaje natural (NLP), logrando mejores resultados que los modelos anteriores en tareas como la traducci\u00f3n autom\u00e1tica y el an\u00e1lisis sint\u00e1ctico. Adem\u00e1s, su flexibilidad permite aplicarlo a otras \u00e1reas, mostrando un buen rendimiento incluso con datos limitados.\nEn resumen, el Transformer es una innovadora arquitectura de red neuronal que utiliza exclusivamente mecanismos de atenci\u00f3n para procesar secuencias de datos, ofreciendo mejoras significativas en eficiencia y calidad en comparaci\u00f3n con los modelos tradicionales basados en RNN o convolucionales.",
+  "model": "granite4.1:8b",
+  "provider": "ollama",
+  "requested_model": "granite4.1:8b",
+  "temperature": 0.4,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.4,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    375,
+    376,
+    377
+  ],
+  "document_ids": [
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf"
+  ],
+  "tokens_input": 1055,
+  "tokens_output": 387,
+  "tokens_total": 1442,
+  "prompt_eval_count": 1055,
+  "eval_count": 387,
+  "prompt_eval_duration": 14113636,
+  "eval_duration": 5418872598,
+  "total_duration": 5577437421,
+  "load_duration": 40212965,
+  "output_tokens_per_second": 71.4171,
+  "latency_ms": 5587,
+  "generation_latency_ms": 5583,
+  "retrieval_latency_ms": 2,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

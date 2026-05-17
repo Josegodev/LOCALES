@@ -1,0 +1,43 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "ca128786ba844c50853c95c93fbbfab3",
+  "created_at": "2026-05-16T06:03:11.840654+00:00",
+  "timestamp": "2026-05-16T06:03:11.840654+00:00",
+  "source": "frontend",
+  "endpoint": "/chat",
+  "input": "Que significa attention para un LLM?",
+  "response": "Para un modelo de lenguaje grande (LLM), la atenci\u00f3n se refiere a un mecanismo que permite al modelo ponderar y considerar diferentes partes de la entrada (por ejemplo, una secuencia de tokens) cuando genera cada parte de la salida. En lugar de procesar los datos secuencialmente como en las redes neuronales recurrentes tradicionales (como LSTMs o GRUs), la atenci\u00f3n le permite al modelo \"mirar\" todas las partes de la entrada simult\u00e1neamente y determinar qu\u00e9 partes son m\u00e1s relevantes para predecir cada token en la salida.\nEste mecanismo es crucial porque:\n1. **Modelado de dependencias a largo plazo**: La atenci\u00f3n captura relaciones entre elementos distantes en la secuencia de entrada, lo cual es dif\u00edcil para los modelos recurrentes debido a su naturaleza secuencial.\n2. **Paralelizaci\u00f3n**: Al no depender del procesamiento secuencial, la atenci\u00f3n permite un mayor nivel de paralelizaci\u00f3n durante el entrenamiento y la inferencia, lo que acelera significativamente el proceso en hardware especializado como GPUs.\n3. **Eficiencia computacional**: La atenci\u00f3n puede ser m\u00e1s eficiente desde una perspectiva computacional, ya que reduce la necesidad de procesar datos paso a paso, permitiendo un uso m\u00e1s efectivo de los recursos computacionales.\nEn resumen, para un LLM, la atenci\u00f3n es fundamental porque",
+  "model": "granite4.1:8b",
+  "provider": "ollama",
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    376,
+    378,
+    379
+  ],
+  "document_ids": [
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf"
+  ],
+  "tokens_input": 962,
+  "tokens_output": 300,
+  "tokens_total": 1262,
+  "prompt_eval_count": 962,
+  "eval_count": 300,
+  "prompt_eval_duration": 28324092,
+  "eval_duration": 4225302461,
+  "total_duration": 4382650889,
+  "load_duration": 46013463,
+  "output_tokens_per_second": 71.0008,
+  "latency_ms": 4388,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "answer_mode": "documentary_answer"
+}

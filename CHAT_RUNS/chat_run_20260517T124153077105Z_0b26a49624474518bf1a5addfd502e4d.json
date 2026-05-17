@@ -1,0 +1,57 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "0b26a49624474518bf1a5addfd502e4d",
+  "created_at": "2026-05-17T12:41:53.077105+00:00",
+  "timestamp": "2026-05-17T12:41:53.077105+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "QUe papers hay disponibles?",
+  "response": "La evidencia proporcionada incluye dos documentos PDF:\n1. **selg-rag. learning to retrieve, generate and critique through self reflection.pdf**: Este documento contiene resultados experimentales sobre seis tareas y comparaciones entre diferentes modelos de lenguaje, incluyendo Llama2-c13B, Ret-Llama2-c13B, ChatGPT, Ret-ChatGPT, Perplexity.ai, Llama27B, Alpaca7B y Llama213B. Tambi\u00e9n menciona el uso de herramientas como Contriever-MS MARCO, un motor de b\u00fasqueda web y GTR-XXL para la recuperaci\u00f3n de documentos.\n2. **Attention is all you need.pdf**: Este documento es sobre el art\u00edculo original que introdujo la arquitectura Transformer, titulado \"Attention Is All You Need\" por Vaswani et al., publicado en 2017. Incluye referencias a otros trabajos relacionados con modelos de lenguaje y procesamiento del lenguaje natural.\nNo se proporciona una lista exhaustiva de todos los papers disponibles en la evidencia, pero estos dos son los \u00fanicos mencionados expl\u00edcitamente.",
+  "model": "granite4.1:8b",
+  "provider": "ollama",
+  "requested_model": "granite4.1:8b",
+  "temperature": 0.2,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.2,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    599,
+    600,
+    414
+  ],
+  "document_ids": [
+    71,
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf",
+    "selg-rag. learning to retrievee, generate and critique through self reflection.pdf"
+  ],
+  "tokens_input": 1468,
+  "tokens_output": 254,
+  "tokens_total": 1722,
+  "prompt_eval_count": 1468,
+  "eval_count": 254,
+  "prompt_eval_duration": 469143632,
+  "eval_duration": 3602238288,
+  "total_duration": 4182963067,
+  "load_duration": 41037472,
+  "output_tokens_per_second": 70.5117,
+  "latency_ms": 4190,
+  "generation_latency_ms": 4184,
+  "retrieval_latency_ms": 4,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

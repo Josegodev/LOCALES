@@ -1,0 +1,55 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "42067172eaf04ebdaca67e7235cdf333",
+  "created_at": "2026-05-16T10:11:26.220461+00:00",
+  "timestamp": "2026-05-16T10:11:26.220461+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "Que es un transformer?",
+  "response": "El Transformer es una red neuronal basada exclusivamente en mecanismos de atenci\u00f3n, lo que significa que no utiliza recurrencia o convoluciones. De acuerdo con la evidencia proporcionada, se menciona que el Transformer fue propuesto por primera vez en el documento \"Attention is all you need\" y fue dise\u00f1ado y implementado por Ashish Vaswani, junto con Illia Polosukhin. El documento tambi\u00e9n indica que el Transformer ha demostrado ser superior en calidad en dos tareas de traducci\u00f3n de m\u00e1quina, siendo m\u00e1s paralizable y requiriendo significativamente menos tiempo para entrenar.",
+  "model": "mistral:latest",
+  "provider": "ollama",
+  "requested_model": "mistral:latest",
+  "temperature": 0.5,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.5,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    375,
+    376,
+    377
+  ],
+  "document_ids": [
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf"
+  ],
+  "tokens_input": 1247,
+  "tokens_output": 160,
+  "tokens_total": 1407,
+  "prompt_eval_count": 1247,
+  "eval_count": 160,
+  "prompt_eval_duration": 12936264,
+  "eval_duration": 1916314423,
+  "total_duration": 1961503666,
+  "load_duration": 10481652,
+  "output_tokens_per_second": 83.4936,
+  "latency_ms": 1967,
+  "generation_latency_ms": 1963,
+  "retrieval_latency_ms": 2,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

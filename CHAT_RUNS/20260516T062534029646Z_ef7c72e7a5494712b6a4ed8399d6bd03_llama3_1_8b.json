@@ -1,0 +1,43 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "ef7c72e7a5494712b6a4ed8399d6bd03",
+  "created_at": "2026-05-16T06:25:34.029646+00:00",
+  "timestamp": "2026-05-16T06:25:34.029646+00:00",
+  "source": "frontend",
+  "endpoint": "/chat",
+  "input": "Que es un transformer?",
+  "response": "Seg\u00fan la evidencia documental proporcionada en el chunk_id=376 y chunk_id=377, un Transformer se describe como una nueva arquitectura de red neuronal basada \u00fanicamente en mecanismos de atenci\u00f3n, que dispensa con la recurrencia y las convoluciones.",
+  "model": "llama3.1:8b",
+  "provider": "ollama",
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    375,
+    376,
+    377
+  ],
+  "document_ids": [
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf"
+  ],
+  "tokens_input": 1055,
+  "tokens_output": 63,
+  "tokens_total": 1118,
+  "prompt_eval_count": 1055,
+  "eval_count": 63,
+  "prompt_eval_duration": 13257016,
+  "eval_duration": 806733639,
+  "total_duration": 919906163,
+  "load_duration": 74357507,
+  "output_tokens_per_second": 78.0927,
+  "latency_ms": 925,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "answer_mode": "documentary_answer"
+}

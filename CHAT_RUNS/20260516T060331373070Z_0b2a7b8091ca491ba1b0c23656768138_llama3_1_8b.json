@@ -1,0 +1,43 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "0b2a7b8091ca491ba1b0c23656768138",
+  "created_at": "2026-05-16T06:03:31.373070+00:00",
+  "timestamp": "2026-05-16T06:03:31.373070+00:00",
+  "source": "frontend",
+  "endpoint": "/chat",
+  "input": "Que significa attention para un LLM?",
+  "response": "Seg\u00fan la evidencia documental proporcionada, en el documento \"Attention is all you need.pdf\" se menciona que las \"attention mechanisms\" (mecanismos de atenci\u00f3n) permiten modelar dependencias sin tener en cuenta la distancia entre ellas en las secuencias de entrada o salida. En otras palabras, la atenci\u00f3n permite al modelo considerar informaci\u00f3n relevante desde cualquier parte de la secuencia, no solo a partir del contexto inmediato.",
+  "model": "llama3.1:8b",
+  "provider": "ollama",
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    376,
+    378,
+    379
+  ],
+  "document_ids": [
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf"
+  ],
+  "tokens_input": 964,
+  "tokens_output": 95,
+  "tokens_total": 1059,
+  "prompt_eval_count": 964,
+  "eval_count": 95,
+  "prompt_eval_duration": 13627139,
+  "eval_duration": 1186013064,
+  "total_duration": 1308348622,
+  "load_duration": 72779556,
+  "output_tokens_per_second": 80.1003,
+  "latency_ms": 1336,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "answer_mode": "documentary_answer"
+}

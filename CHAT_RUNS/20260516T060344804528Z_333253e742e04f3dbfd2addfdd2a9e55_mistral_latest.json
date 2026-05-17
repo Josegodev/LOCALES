@@ -1,0 +1,43 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "333253e742e04f3dbfd2addfdd2a9e55",
+  "created_at": "2026-05-16T06:03:44.804528+00:00",
+  "timestamp": "2026-05-16T06:03:44.804528+00:00",
+  "source": "frontend",
+  "endpoint": "/chat",
+  "input": "Que significa attention para un LLM?",
+  "response": "Para un LLM (Language Model), la atenci\u00f3n se refiere a una mecanismo de computaci\u00f3n que permite modelar dependencias sin tener en cuenta su distancia en las secuencias de entrada o salida. En la mayor\u00eda de los casos, estas atenciones son utilizadas en conjunci\u00f3n con una red neuronal recurrente. En este trabajo se propone el Transformer, un modelo de arquitectura que se deshace de la recurrencia y se basa exclusivamente en una mecanismo de atenci\u00f3n para extraer dependencias globales entre la entrada y la salida. (Evidencia: [chunk_id=379])",
+  "model": "mistral:latest",
+  "provider": "ollama",
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    376,
+    378,
+    379
+  ],
+  "document_ids": [
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf"
+  ],
+  "tokens_input": 1139,
+  "tokens_output": 153,
+  "tokens_total": 1292,
+  "prompt_eval_count": 1139,
+  "eval_count": 153,
+  "prompt_eval_duration": 11775798,
+  "eval_duration": 1780645715,
+  "total_duration": 1833779142,
+  "load_duration": 18661067,
+  "output_tokens_per_second": 85.9239,
+  "latency_ms": 1851,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "answer_mode": "documentary_answer"
+}
