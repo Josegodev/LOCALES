@@ -81,6 +81,9 @@ const fallbackModels = [
 const hiddenModelNames = new Set([
   "qwen2.5-coder:1.5b-base",
 ]);
+const DEFAULT_CHAT_PROVIDER = "ollama";
+const DEFAULT_CHAT_MODEL = "granite4.1:8b";
+const DEFAULT_CHAT_TEMPERATURE = 0.2;
 
 const chatState = {
   messages: [],
@@ -217,9 +220,15 @@ async function fetchJsonWithLatency(url, options = {}) {
 function visibleChatErrorMessage(error) {
   const detail = error?.data?.detail;
   if (detail && typeof detail === "object") {
+    if (detail.code === "model_required") {
+      return "El backend requiere un modelo explícito.";
+    }
     return String(detail.message || detail.code || error.message);
   }
   if (error?.data?.message) return String(error.data.message);
+  if (error?.status === 422) {
+    return "Payload incompatible con ChatRequest.";
+  }
   if (error?.code === "backend_base_url_missing") {
     return "Backend base URL no configurada. Define runtime-config.js o rellena el campo Backend base URL.";
   }
@@ -244,12 +253,23 @@ function visibleChatErrorMessage(error) {
 
 function selectedModelProvider() {
   const option = elements.modelSelect.selectedOptions[0];
-  return normalizeProviderModel(option?.dataset.provider, option?.dataset.model || elements.modelSelect.value).provider;
+  return normalizeProviderModel(option?.dataset.provider, option?.dataset.model || DEFAULT_CHAT_MODEL).provider;
 }
 
 function selectedProviderModel() {
   const option = elements.modelSelect.selectedOptions[0];
-  return normalizeProviderModel(option?.dataset.provider, option?.dataset.model || elements.modelSelect.value);
+  const rawValue = typeof option?.value === "string" ? option.value : "";
+  const explicitModel = option?.dataset.model
+    || (rawValue.includes("|") ? rawValue.split("|").slice(1).join("|") : rawValue)
+    || DEFAULT_CHAT_MODEL;
+  const explicitProvider = option?.dataset.provider
+    || (rawValue.includes("|") ? rawValue.split("|")[0] : "")
+    || DEFAULT_CHAT_PROVIDER;
+  const normalized = normalizeProviderModel(explicitProvider, explicitModel);
+  return {
+    provider: normalized.provider || DEFAULT_CHAT_PROVIDER,
+    model: normalized.model || DEFAULT_CHAT_MODEL,
+  };
 }
 
 function modelOptionValue(item) {
@@ -451,11 +471,12 @@ function renderChatResponse(data, latencyMs, useRag) {
 
 function buildChatPayload(message) {
   const selected = selectedProviderModel();
+  const selectedTemperature = numberOrNull(elements.temperatureSelect.value);
   return {
     message,
-    provider: selected.provider,
-    model: selected.model,
-    temperature: numberOrNull(elements.temperatureSelect.value),
+    provider: selected.provider || DEFAULT_CHAT_PROVIDER,
+    model: selected.model || DEFAULT_CHAT_MODEL,
+    temperature: selectedTemperature === null ? DEFAULT_CHAT_TEMPERATURE : selectedTemperature,
     use_rag: elements.useRagInput.checked,
   };
 }
@@ -491,6 +512,8 @@ async function sendChat(event) {
   elements.messageInput.style.height = "";
 
   try {
+    console.info("[api] POST /chat url", endpoint("/chat"));
+    console.info("[api] POST /chat payload", payload);
     const { data, latencyMs } = await fetchJsonWithLatency(endpoint("/chat"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
