@@ -76,6 +76,7 @@ DB/chunks/*.db
 DB/chunks/*.db.*
 DB/chunks/*.bak*
 DB/chunks/pdf/
+DB/chunks/pdf metidos/
 DB/chunks/markdown/
 
 # Telegram/runtime traces
@@ -87,4 +88,3 @@ archivo.txt
 .env.*
 secrets/
 tokens/
-
