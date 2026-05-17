@@ -1,4 +1,5 @@
-const DEFAULT_BACKEND_URL = "http://127.0.0.1:8001";
+const apiClient = window.LOCALES_API_CLIENT;
+const DEFAULT_BACKEND_URL = apiClient?.resolveConfiguredBaseUrl?.() || "";
 
 const elements = {
   backendUrl: document.querySelector("#backendUrl"),
@@ -122,17 +123,23 @@ function normalizeProviderModel(provider, model) {
 }
 
 function backendBaseUrl() {
-  return (elements.backendUrl.value || DEFAULT_BACKEND_URL).trim().replace(/\/+$/, "");
+  return apiClient.normalizeBaseUrl(elements.backendUrl.value || DEFAULT_BACKEND_URL);
 }
 
 function endpoint(path) {
-  return `${backendBaseUrl()}${path}`;
+  return apiClient.buildUrl(path, backendBaseUrl());
 }
 
 function updateBackendLinks() {
   const baseUrl = backendBaseUrl();
   localStorage.setItem("locales.backendUrl", baseUrl);
-  elements.docsLink.href = `${baseUrl}/docs`;
+  if (baseUrl) {
+    elements.docsLink.href = `${baseUrl}/docs`;
+    elements.docsLink.removeAttribute("aria-disabled");
+  } else {
+    elements.docsLink.href = "#";
+    elements.docsLink.setAttribute("aria-disabled", "true");
+  }
 }
 
 function setStatus(node, text, kind) {
@@ -201,23 +208,10 @@ function summarizeChatPayload(data) {
 }
 
 async function fetchJsonWithLatency(url, options = {}) {
-  const startedAt = performance.now();
-  const response = await fetch(url, options);
-  const latencyMs = Math.round(performance.now() - startedAt);
-  const text = await response.text();
-  let data;
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    data = { raw_text: text };
-  }
-  if (!response.ok) {
-    const error = new Error(`HTTP ${response.status}`);
-    error.data = data;
-    error.latencyMs = latencyMs;
-    throw error;
-  }
-  return { data, latencyMs };
+  return apiClient.fetchJson(url, {
+    baseUrl: backendBaseUrl(),
+    ...options,
+  });
 }
 
 function visibleChatErrorMessage(error) {
@@ -226,9 +220,24 @@ function visibleChatErrorMessage(error) {
     return String(detail.message || detail.code || error.message);
   }
   if (error?.data?.message) return String(error.data.message);
+  if (error?.code === "backend_base_url_missing") {
+    return "Backend base URL no configurada. Define runtime-config.js o rellena el campo Backend base URL.";
+  }
+  if (error?.code === "request_timeout") {
+    return "El backend ha tardado demasiado en responder.";
+  }
+  if (error?.status === 401) {
+    return "401 Unauthorized. Revisa el Bearer token o la politica de acceso.";
+  }
+  if (error?.status === 403) {
+    return "403 Forbidden. El backend ha rechazado el acceso.";
+  }
+  if (error?.status >= 500) {
+    return "El backend ha devuelto un error interno.";
+  }
   if (error?.name === "AbortError") return "Solicitud cancelada.";
-  if (error?.message === "Failed to fetch") {
-    return "Failed to fetch. Revisa Backend base URL, CORS y que FastAPI este accesible.";
+  if (error?.code === "network_error" || error?.message === "Failed to fetch") {
+    return "No se pudo conectar con el backend. Revisa Backend base URL, CORS y que FastAPI este accesible.";
   }
   return error?.message || "Error inesperado llamando al backend.";
 }
@@ -926,11 +935,16 @@ async function openRunDetail(traceId) {
 function init() {
   const savedBackendUrl = localStorage.getItem("locales.backendUrl");
   if (savedBackendUrl) elements.backendUrl.value = savedBackendUrl;
-  if (!elements.backendUrl.value) elements.backendUrl.value = DEFAULT_BACKEND_URL;
+  if (!elements.backendUrl.value && DEFAULT_BACKEND_URL) elements.backendUrl.value = DEFAULT_BACKEND_URL;
 
   updateBackendLinks();
   replaceModelOptions(fallbackModels);
   renderChatMessages();
+  if (!backendBaseUrl()) {
+    setStatus(elements.healthStatus, "Configura Backend base URL o runtime-config.js", "error");
+    setStatus(elements.chatStatus, "Backend base URL no configurada", "error");
+    setStatus(elements.runsStatus, "Backend base URL no configurada", "error");
+  }
   loadChatModels();
   loadChatOptions();
   loadRunsDashboard();

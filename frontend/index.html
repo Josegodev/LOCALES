@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>NucleoChat | LOCALES</title>
   <link rel="stylesheet" href="./styles.css">
+  <script src="./runtime-config.js"></script>
+  <script src="./api-client.js"></script>
   <script src="./app.js" defer></script>
 </head>
 <body>
@@ -32,10 +34,10 @@
       </div>
       <aside class="connection">
         <label for="backendUrl">Backend base URL</label>
-        <input id="backendUrl" type="url" value="http://127.0.0.1:8001" autocomplete="off">
+        <input id="backendUrl" type="url" value="" placeholder="https://api.example.com" autocomplete="off">
         <div class="connection-actions">
           <button id="healthButton" type="button">Health</button>
-          <a id="docsLink" href="http://127.0.0.1:8001/docs" target="_blank" rel="noreferrer">/docs</a>
+          <a id="docsLink" href="#" target="_blank" rel="noreferrer">/docs</a>
         </div>
         <p id="healthStatus" class="status muted">Sin comprobar</p>
       </aside>
