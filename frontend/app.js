@@ -5,6 +5,8 @@ const elements = {
   docsLink: document.querySelector("#docsLink"),
   healthButton: document.querySelector("#healthButton"),
   healthStatus: document.querySelector("#healthStatus"),
+  mainTabs: document.querySelectorAll("[data-main-tab]"),
+  mainPanels: document.querySelectorAll("[data-main-panel]"),
   chatForm: document.querySelector("#chatForm"),
   messageInput: document.querySelector("#messageInput"),
   modelSelect: document.querySelector("#modelSelect"),
@@ -24,6 +26,42 @@ const elements = {
   warningsText: document.querySelector("#warningsText"),
   chatRaw: document.querySelector("#chatRaw"),
   evidenceList: document.querySelector("#evidenceList"),
+  sideTabs: document.querySelectorAll("[data-side-tab]"),
+  sidePanels: document.querySelectorAll("[data-side-panel]"),
+  runsStatus: document.querySelector("#runsStatus"),
+  runsFilterModel: document.querySelector("#runsFilterModel"),
+  runsFilterProvider: document.querySelector("#runsFilterProvider"),
+  runsFilterUseRag: document.querySelector("#runsFilterUseRag"),
+  runsFilterStatus: document.querySelector("#runsFilterStatus"),
+  runsTotalRuns: document.querySelector("#runsTotalRuns"),
+  runsOkRuns: document.querySelector("#runsOkRuns"),
+  runsErrorRate: document.querySelector("#runsErrorRate"),
+  runsAvgLatency: document.querySelector("#runsAvgLatency"),
+  runsP95Latency: document.querySelector("#runsP95Latency"),
+  runsAvgTokensPerSecond: document.querySelector("#runsAvgTokensPerSecond"),
+  runsRagHitRate: document.querySelector("#runsRagHitRate"),
+  runsFallbackRate: document.querySelector("#runsFallbackRate"),
+  runsLatencyByModel: document.querySelector("#runsLatencyByModel"),
+  runsTokensByModel: document.querySelector("#runsTokensByModel"),
+  runsErrorRateByModel: document.querySelector("#runsErrorRateByModel"),
+  runsQuickSummary: document.querySelector("#runsQuickSummary"),
+  runsTableBody: document.querySelector("#runsTableBody"),
+  runDetailModal: document.querySelector("#runDetailModal"),
+  runDetailStatus: document.querySelector("#runDetailStatus"),
+  runDetailTraceId: document.querySelector("#runDetailTraceId"),
+  runDetailProviderModel: document.querySelector("#runDetailProviderModel"),
+  runDetailTemperature: document.querySelector("#runDetailTemperature"),
+  runDetailUseRag: document.querySelector("#runDetailUseRag"),
+  runDetailLatency: document.querySelector("#runDetailLatency"),
+  runDetailTokensTotal: document.querySelector("#runDetailTokensTotal"),
+  runDetailTokensPerSecond: document.querySelector("#runDetailTokensPerSecond"),
+  runDetailRetrievalStatus: document.querySelector("#runDetailRetrievalStatus"),
+  runDetailFallbackUsed: document.querySelector("#runDetailFallbackUsed"),
+  runDetailErrorCode: document.querySelector("#runDetailErrorCode"),
+  runDetailConfig: document.querySelector("#runDetailConfig"),
+  runDetailEvidence: document.querySelector("#runDetailEvidence"),
+  runDetailError: document.querySelector("#runDetailError"),
+  closeRunDetailButtons: document.querySelectorAll("[data-close-run-detail]"),
 };
 
 const fallbackModels = [
@@ -39,6 +77,12 @@ const chatState = {
   abortController: null,
 };
 
+const runsState = {
+  stats: null,
+  runs: [],
+  filteredRuns: [],
+  loaded: false,
+};
 function modelOptionKey(provider, model) {
   return `${provider || "ollama"}::${model || ""}`;
 }
@@ -91,14 +135,39 @@ function valueOrDash(value) {
   return value === undefined || value === null || value === "" ? "-" : String(value);
 }
 
+function metricOrNA(value, formatter = null) {
+  if (value === undefined || value === null || Number.isNaN(value)) {
+    return "n/a";
+  }
+  return formatter ? formatter(value) : String(value);
+}
+
 function numberOrNull(value) {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
   const numberValue = Number(value);
   return Number.isFinite(numberValue) ? numberValue : null;
 }
 
 function formatTemperature(value) {
   const numberValue = numberOrNull(value);
-  return numberValue === null ? "-" : numberValue.toFixed(1).replace(".", ",");
+  return numberValue === null ? "n/a" : numberValue.toFixed(1).replace(".", ",");
+}
+
+function formatPercent(value) {
+  const numberValue = numberOrNull(value);
+  return numberValue === null ? "n/a" : `${(numberValue * 100).toFixed(1)}%`;
+}
+
+function formatMs(value) {
+  const numberValue = numberOrNull(value);
+  return numberValue === null ? "n/a" : `${Math.round(numberValue)} ms`;
+}
+
+function formatFloat(value, digits = 1) {
+  const numberValue = numberOrNull(value);
+  return numberValue === null ? "n/a" : numberValue.toFixed(digits);
 }
 
 function truncateText(value, limit = 1200) {
@@ -157,27 +226,36 @@ function visibleChatErrorMessage(error) {
 
 function selectedModelProvider() {
   const option = elements.modelSelect.selectedOptions[0];
-  return normalizeProviderModel(option?.dataset.provider, elements.modelSelect.value).provider;
+  return normalizeProviderModel(option?.dataset.provider, option?.dataset.model || elements.modelSelect.value).provider;
 }
 
 function selectedProviderModel() {
   const option = elements.modelSelect.selectedOptions[0];
-  return normalizeProviderModel(option?.dataset.provider, elements.modelSelect.value);
+  return normalizeProviderModel(option?.dataset.provider, option?.dataset.model || elements.modelSelect.value);
+}
+
+function modelOptionValue(item) {
+  return `${item.provider}|${item.model}`;
 }
 
 function replaceModelOptions(items) {
   elements.modelSelect.innerHTML = "";
   const models = Array.isArray(items) && items.length ? items : fallbackModels;
+  const seen = new Set();
   for (const item of models) {
+    if (!item?.provider || !item?.model) continue;
+    const optionValue = modelOptionValue(item);
+    if (seen.has(optionValue)) continue;
+    seen.add(optionValue);
     const option = document.createElement("option");
-    option.value = item.model;
+    option.value = optionValue;
     option.dataset.provider = item.provider;
+    option.dataset.model = item.model;
     option.dataset.modelKey = modelOptionKey(item.provider, item.model);
     option.textContent = item.label || `${item.provider} / ${item.model}`;
     if (item.is_default) option.selected = true;
     elements.modelSelect.appendChild(option);
   }
-
   const options = Array.from(elements.modelSelect.options);
   const savedModelKey = localStorage.getItem("locales.chatModelKey");
   const savedModel = localStorage.getItem("locales.chatModel");
@@ -186,7 +264,6 @@ function replaceModelOptions(items) {
     elements.modelSelect.selectedIndex = options.indexOf(keyMatch);
     return;
   }
-
   const modelMatches = savedModel ? options.filter((option) => option.value === savedModel) : [];
   if (modelMatches.length === 1) {
     elements.modelSelect.selectedIndex = options.indexOf(modelMatches[0]);
@@ -432,6 +509,361 @@ async function checkHealth() {
   }
 }
 
+function setActiveSidePanel(panelName) {
+  elements.sideTabs.forEach((button) => {
+    const isActive = button.dataset.sideTab === panelName;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+  });
+
+  elements.sidePanels.forEach((panel) => {
+    const isActive = panel.dataset.sidePanel === panelName;
+    panel.classList.toggle("active", isActive);
+    panel.hidden = !isActive;
+  });
+}
+
+function setActiveMainPanel(panelName) {
+  elements.mainTabs.forEach((button) => {
+    const isActive = button.dataset.mainTab === panelName;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+  });
+
+  elements.mainPanels.forEach((panel) => {
+    const isActive = panel.dataset.mainPanel === panelName;
+    panel.classList.toggle("active", isActive);
+    panel.hidden = !isActive;
+  });
+}
+
+function percentile(values, percentileValue) {
+  const filtered = values.filter((value) => typeof value === "number" && Number.isFinite(value)).sort((a, b) => a - b);
+  if (!filtered.length) {
+    return null;
+  }
+  if (filtered.length === 1) {
+    return filtered[0];
+  }
+  const position = (percentileValue / 100) * (filtered.length - 1);
+  const lowerIndex = Math.floor(position);
+  const upperIndex = Math.ceil(position);
+  if (lowerIndex === upperIndex) {
+    return filtered[lowerIndex];
+  }
+  const weight = position - lowerIndex;
+  return filtered[lowerIndex] + (filtered[upperIndex] - filtered[lowerIndex]) * weight;
+}
+
+function mean(values) {
+  const filtered = values.filter((value) => typeof value === "number" && Number.isFinite(value));
+  if (!filtered.length) {
+    return null;
+  }
+  return filtered.reduce((sum, value) => sum + value, 0) / filtered.length;
+}
+
+function rate(count, total) {
+  if (!total) {
+    return null;
+  }
+  return count / total;
+}
+
+function matchesRunFilters(run) {
+  if (elements.runsFilterModel.value !== "all" && (run.model || "") !== elements.runsFilterModel.value) {
+    return false;
+  }
+  if (elements.runsFilterProvider.value !== "all" && (run.provider || "") !== elements.runsFilterProvider.value) {
+    return false;
+  }
+  if (elements.runsFilterStatus.value !== "all" && (run.status || "") !== elements.runsFilterStatus.value) {
+    return false;
+  }
+  if (elements.runsFilterUseRag.value !== "all") {
+    const wanted = elements.runsFilterUseRag.value === "true";
+    if (run.use_rag !== wanted) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function filteredRuns() {
+  return runsState.runs.filter(matchesRunFilters);
+}
+
+function setSelectOptions(select, values, placeholder = "All") {
+  const current = select.value || "all";
+  select.innerHTML = "";
+  const allOption = document.createElement("option");
+  allOption.value = "all";
+  allOption.textContent = placeholder;
+  select.appendChild(allOption);
+  values.forEach((value) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    select.appendChild(option);
+  });
+  if (Array.from(select.options).some((option) => option.value === current)) {
+    select.value = current;
+  } else {
+    select.value = "all";
+  }
+}
+
+function renderRunsFilters() {
+  const modelValues = [...new Set(runsState.runs.map((run) => run.model).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const providerValues = [...new Set(runsState.runs.map((run) => run.provider).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  setSelectOptions(elements.runsFilterModel, modelValues, "All");
+  setSelectOptions(elements.runsFilterProvider, providerValues, "All");
+}
+
+function renderRunsMetricCards(runs) {
+  const totalRuns = runs.length;
+  const okRuns = runs.filter((run) => String(run.status || "").toLowerCase() === "ok").length;
+  const errorRuns = runs.filter((run) => String(run.status || "").toLowerCase() === "error").length;
+  const avgLatency = mean(runs.map((run) => numberOrNull(run.latency_ms)));
+  const p95Latency = percentile(runs.map((run) => numberOrNull(run.latency_ms)), 95);
+  const avgTokensPerSecond = mean(runs.map((run) => numberOrNull(run.output_tokens_per_second)));
+  const ragRuns = runs.filter((run) => run.use_rag === true);
+  const ragHitRate = rate(ragRuns.filter((run) => run.retrieval_status === "EVIDENCE_FOUND").length, ragRuns.length);
+  const fallbackRate = rate(runs.filter((run) => run.fallback_used === true).length, totalRuns);
+
+  elements.runsTotalRuns.textContent = metricOrNA(totalRuns, String);
+  elements.runsOkRuns.textContent = metricOrNA(okRuns, String);
+  elements.runsErrorRate.textContent = metricOrNA(rate(errorRuns, totalRuns), formatPercent);
+  elements.runsAvgLatency.textContent = metricOrNA(avgLatency, formatMs);
+  elements.runsP95Latency.textContent = metricOrNA(p95Latency, formatMs);
+  elements.runsAvgTokensPerSecond.textContent = metricOrNA(avgTokensPerSecond, (value) => `${value.toFixed(1)} tok/s`);
+  elements.runsRagHitRate.textContent = metricOrNA(ragHitRate, formatPercent);
+  elements.runsFallbackRate.textContent = metricOrNA(fallbackRate, formatPercent);
+}
+
+function renderBarChart(container, rows, formatter) {
+  container.innerHTML = "";
+  if (!rows.length) {
+    container.className = "chart-list empty-state";
+    container.textContent = "Sin datos";
+    return;
+  }
+
+  container.className = "chart-list";
+  const maxValue = Math.max(...rows.map((row) => row.value), 0);
+  rows.forEach((row) => {
+    const item = document.createElement("div");
+    item.className = "chart-row";
+    const width = maxValue > 0 ? Math.max(4, Math.round((row.value / maxValue) * 100)) : 4;
+    item.innerHTML = `
+      <span class="chart-label"></span>
+      <span class="chart-track"><span class="chart-fill" style="width:${width}%"></span></span>
+      <span class="chart-value"></span>
+    `;
+    item.querySelector(".chart-label").textContent = row.label;
+    item.querySelector(".chart-value").textContent = formatter(row.value);
+    container.appendChild(item);
+  });
+}
+
+function buildModelRows(runs, valueSelector) {
+  const grouped = new Map();
+  runs.forEach((run) => {
+    const key = `${run.provider || "n/a"} / ${run.model || "n/a"}`;
+    if (!grouped.has(key)) {
+      grouped.set(key, []);
+    }
+    grouped.get(key).push(run);
+  });
+  return [...grouped.entries()]
+    .map(([label, modelRuns]) => ({ label, value: valueSelector(modelRuns) }))
+    .filter((row) => row.value !== null && row.value !== undefined && !Number.isNaN(row.value))
+    .sort((a, b) => b.value - a.value);
+}
+
+function renderRunsCharts(runs) {
+  renderBarChart(
+    elements.runsLatencyByModel,
+    buildModelRows(runs, (modelRuns) => mean(modelRuns.map((run) => numberOrNull(run.latency_ms)))),
+    formatMs
+  );
+  renderBarChart(
+    elements.runsTokensByModel,
+    buildModelRows(runs, (modelRuns) => mean(modelRuns.map((run) => numberOrNull(run.output_tokens_per_second)))),
+    (value) => `${value.toFixed(1)} tok/s`
+  );
+  renderBarChart(
+    elements.runsErrorRateByModel,
+    buildModelRows(
+      runs,
+      (modelRuns) => rate(modelRuns.filter((run) => String(run.status || "").toLowerCase() === "error").length, modelRuns.length)
+    ),
+    formatPercent
+  );
+}
+
+function renderRunsQuickSummary(runs) {
+  if (!runs.length) {
+    elements.runsQuickSummary.className = "empty-state";
+    elements.runsQuickSummary.textContent = "Sin runs para resumir.";
+    return;
+  }
+  elements.runsQuickSummary.className = "summary-list";
+  elements.runsQuickSummary.innerHTML = "";
+  runs.slice(0, 5).forEach((run) => {
+    const row = document.createElement("div");
+    row.className = "summary-row";
+    row.innerHTML = `
+      <span>${valueOrDash(run.created_at || run.timestamp)}</span>
+      <span>${valueOrDash(run.provider)} / ${valueOrDash(run.model)}</span>
+      <span>${valueOrDash(run.status)}</span>
+    `;
+    elements.runsQuickSummary.appendChild(row);
+  });
+}
+
+function statusClassName(run) {
+  const classes = [];
+  if (String(run.status || "").toLowerCase() === "error") {
+    classes.push("is-error");
+  }
+  if (run.fallback_used === true) {
+    classes.push("is-fallback");
+  }
+  if (String(run.retrieval_status || "").toUpperCase() === "NO_EVIDENCE") {
+    classes.push("is-no-evidence");
+  }
+  if (String(run.retrieval_status || "").toUpperCase() === "NO_EVIDENCE_FOR_ANSWER") {
+    classes.push("is-no-evidence");
+  }
+  return classes.join(" ");
+}
+
+function runCellText(value, formatter = null) {
+  if (value === null || value === undefined || value === "") {
+    return "n/a";
+  }
+  return formatter ? formatter(value) : String(value);
+}
+
+function renderRunsTable(runs) {
+  elements.runsTableBody.innerHTML = "";
+  if (!runs.length) {
+    elements.runsTableBody.innerHTML = '<tr><td colspan="11">No hay runs para los filtros actuales.</td></tr>';
+    return;
+  }
+
+  runs.forEach((run) => {
+    const row = document.createElement("tr");
+    row.className = statusClassName(run);
+    row.dataset.traceId = run.trace_id || "";
+    row.innerHTML = `
+      <td>${runCellText(run.created_at || run.timestamp)}</td>
+      <td>${runCellText(run.model)}</td>
+      <td>${runCellText(run.provider)}</td>
+      <td>${runCellText(run.use_rag)}</td>
+      <td>${runCellText(run.retrieval_status)}</td>
+      <td>${runCellText(run.latency_ms, (value) => Math.round(value))}</td>
+      <td>${runCellText(run.tokens_total, (value) => Number(value).toFixed(0))}</td>
+      <td>${runCellText(run.output_tokens_per_second, (value) => Number(value).toFixed(1))}</td>
+      <td>${runCellText(run.status)}</td>
+      <td>${runCellText(run.fallback_used)}</td>
+      <td>${runCellText(run.trace_id)}</td>
+    `;
+    row.addEventListener("click", () => openRunDetail(run.trace_id));
+    elements.runsTableBody.appendChild(row);
+  });
+}
+
+function applyRunsFilters() {
+  runsState.filteredRuns = filteredRuns();
+  renderRunsMetricCards(runsState.filteredRuns);
+  renderRunsCharts(runsState.filteredRuns);
+  renderRunsQuickSummary(runsState.filteredRuns);
+  renderRunsTable(runsState.filteredRuns);
+}
+
+async function loadRunsDashboard() {
+  setStatus(elements.runsStatus, "Cargando runs guardados...", "muted");
+  try {
+    const [{ data: statsData }, { data: runsData }] = await Promise.all([
+      fetchJsonWithLatency(endpoint("/api/chat-runs/stats")),
+      fetchJsonWithLatency(endpoint("/api/chat-runs?limit=100")),
+    ]);
+    runsState.stats = statsData;
+    runsState.runs = Array.isArray(runsData?.items) ? runsData.items : [];
+    runsState.loaded = true;
+    renderRunsFilters();
+    applyRunsFilters();
+    setStatus(elements.runsStatus, runsState.runs.length ? "Runs cargados" : "No hay runs guardados", "ok");
+  } catch (error) {
+    runsState.stats = null;
+    runsState.runs = [];
+    runsState.filteredRuns = [];
+    renderRunsFilters();
+    applyRunsFilters();
+    setStatus(elements.runsStatus, visibleChatErrorMessage(error), "error");
+  }
+}
+
+function closeRunDetail() {
+  elements.runDetailModal.hidden = true;
+}
+
+function renderRunDetail(detail) {
+  elements.runDetailTraceId.textContent = valueOrDash(detail.trace_id);
+  elements.runDetailProviderModel.textContent = `${valueOrDash(detail.provider)} / ${valueOrDash(detail.model)}`;
+  elements.runDetailTemperature.textContent = formatTemperature(detail.temperature);
+  elements.runDetailUseRag.textContent = valueOrDash(detail.use_rag);
+  elements.runDetailLatency.textContent = metricOrNA(detail.latency_ms, formatMs);
+  elements.runDetailTokensTotal.textContent = metricOrNA(detail.tokens_total, (value) => Number(value).toFixed(0));
+  elements.runDetailTokensPerSecond.textContent = metricOrNA(detail.output_tokens_per_second, (value) => `${Number(value).toFixed(1)} tok/s`);
+  elements.runDetailRetrievalStatus.textContent = valueOrDash(detail.retrieval_status);
+  elements.runDetailFallbackUsed.textContent = valueOrDash(detail.fallback_used);
+  elements.runDetailErrorCode.textContent = valueOrDash(detail.error_code);
+  elements.runDetailConfig.textContent = prettyJson({
+    requested_model: detail.requested_model,
+    temperature: detail.temperature,
+    max_tokens: detail.max_tokens,
+    top_p: detail.top_p,
+    generation_config: detail.generation_config,
+    answer_mode: detail.answer_mode,
+    warnings: detail.warnings || [],
+  });
+  elements.runDetailEvidence.textContent = prettyJson({
+    retrieval_status: detail.retrieval_status,
+    chunk_ids: detail.chunk_ids || [],
+    document_ids: detail.document_ids || [],
+    source_filenames: detail.source_filenames || [],
+    evidence_used: detail.evidence_used,
+    fallback_used: detail.fallback_used,
+    fallback_reason: detail.fallback_reason,
+  });
+  elements.runDetailError.textContent = prettyJson({
+    status: detail.status,
+    error_code: detail.error_code,
+    error_message: detail.error_message,
+  });
+}
+
+async function openRunDetail(traceId) {
+  if (!traceId) {
+    return;
+  }
+  elements.runDetailModal.hidden = false;
+  setStatus(elements.runDetailStatus, "Cargando detalle...", "muted");
+  try {
+    const { data } = await fetchJsonWithLatency(endpoint(`/api/chat-runs/${encodeURIComponent(traceId)}`));
+    renderRunDetail(data);
+    setStatus(elements.runDetailStatus, "Detalle cargado", "ok");
+  } catch (error) {
+    setStatus(elements.runDetailStatus, visibleChatErrorMessage(error), "error");
+    elements.runDetailConfig.textContent = "n/a";
+    elements.runDetailEvidence.textContent = "n/a";
+    elements.runDetailError.textContent = error.data ? prettyJson(error.data) : visibleChatErrorMessage(error);
+  }
+}
+
 function init() {
   const savedBackendUrl = localStorage.getItem("locales.backendUrl");
   if (savedBackendUrl) elements.backendUrl.value = savedBackendUrl;
@@ -442,21 +874,40 @@ function init() {
   renderChatMessages();
   loadChatModels();
   loadChatOptions();
+  loadRunsDashboard();
 
   elements.backendUrl.addEventListener("change", () => {
     updateBackendLinks();
     loadChatModels();
     loadChatOptions();
+    loadRunsDashboard();
   });
   elements.backendUrl.addEventListener("input", updateBackendLinks);
   elements.modelSelect.addEventListener("change", () => {
     const selected = selectedProviderModel();
-    localStorage.setItem("locales.chatModel", selected.model);
+    localStorage.setItem("locales.chatModel", modelOptionValue(selected));
     localStorage.setItem("locales.chatModelKey", modelOptionKey(selected.provider, selected.model));
   });
   elements.temperatureSelect.addEventListener("change", () => localStorage.setItem("locales.chatTemperature", elements.temperatureSelect.value));
   elements.healthButton.addEventListener("click", checkHealth);
   elements.chatForm.addEventListener("submit", sendChat);
+  elements.sideTabs.forEach((button) => {
+    button.addEventListener("click", () => setActiveSidePanel(button.dataset.sideTab));
+  });
+  elements.mainTabs.forEach((button) => {
+    button.addEventListener("click", () => setActiveMainPanel(button.dataset.mainTab));
+  });
+  [
+    elements.runsFilterModel,
+    elements.runsFilterProvider,
+    elements.runsFilterUseRag,
+    elements.runsFilterStatus,
+  ].forEach((select) => {
+    select.addEventListener("change", applyRunsFilters);
+  });
+  elements.closeRunDetailButtons.forEach((button) => {
+    button.addEventListener("click", closeRunDetail);
+  });
   elements.messageInput.addEventListener("input", () => {
     elements.messageInput.style.height = "";
     elements.messageInput.style.height = `${Math.min(elements.messageInput.scrollHeight, 180)}px`;

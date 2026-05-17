@@ -6,6 +6,10 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+FRONTEND_APP_JS = REPO_ROOT / "frontend" / "app.js"
+FRONTEND_INDEX_HTML = REPO_ROOT / "frontend" / "index.html"
+
 
 class DevTokenAuthTests(unittest.TestCase):
     CHAT_PAYLOAD = {"message": "hola", "provider": "ollama", "model": "granite4.1:8b"}
@@ -179,34 +183,33 @@ class DevTokenAuthTests(unittest.TestCase):
         self.assertEqual(response.json()["status"], "ok")
 
     def test_frontend_files_do_not_reference_operational_token_name(self):
-        frontend_js = Path("/home/jose-gonzalez-oliva/LOCALES/frontend/app.js").read_text(encoding="utf-8")
-        frontend_html = Path("/home/jose-gonzalez-oliva/LOCALES/frontend/index.html").read_text(encoding="utf-8")
+        frontend_js = FRONTEND_APP_JS.read_text(encoding="utf-8")
+        frontend_html = FRONTEND_INDEX_HTML.read_text(encoding="utf-8")
 
         self.assertNotIn("JOSE_DEV_TOKEN", frontend_js)
         self.assertNotIn("JOSE_DEV_TOKEN", frontend_html)
 
     def test_frontend_files_do_not_reference_telegram_endpoints(self):
-        frontend_js = Path("/home/jose-gonzalez-oliva/LOCALES/frontend/app.js").read_text(encoding="utf-8")
-        frontend_html = Path("/home/jose-gonzalez-oliva/LOCALES/frontend/index.html").read_text(encoding="utf-8")
+        frontend_js = FRONTEND_APP_JS.read_text(encoding="utf-8")
+        frontend_html = FRONTEND_INDEX_HTML.read_text(encoding="utf-8")
 
         self.assertNotIn("/telegram/", frontend_js)
         self.assertNotIn("/api/evals/telegram", frontend_js)
         self.assertNotIn("/api/evals/chat/run", frontend_js)
         self.assertIn("/api/models/chat", frontend_js)
-        self.assertIn("/api/models/chat", frontend_html)
         self.assertIn("NucleoChat", frontend_html)
         self.assertIn("POST /chat", frontend_html)
         self.assertNotIn("Telegram legacy", frontend_html)
         self.assertNotIn("Telegram Evals", frontend_html)
 
     def test_frontend_model_selector_does_not_hardcode_granite_option(self):
-        frontend_html = Path("/home/jose-gonzalez-oliva/LOCALES/frontend/index.html").read_text(encoding="utf-8")
+        frontend_html = FRONTEND_INDEX_HTML.read_text(encoding="utf-8")
 
         self.assertNotIn('<option value="granite"', frontend_html)
         self.assertIn("Cargando modelos", frontend_html)
 
     def test_frontend_persists_provider_model_pair(self):
-        frontend_js = Path("/home/jose-gonzalez-oliva/LOCALES/frontend/app.js").read_text(encoding="utf-8")
+        frontend_js = FRONTEND_APP_JS.read_text(encoding="utf-8")
 
         self.assertIn("normalizeProviderModel", frontend_js)
         self.assertIn("locales.chatModelKey", frontend_js)

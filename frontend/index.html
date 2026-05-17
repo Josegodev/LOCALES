@@ -18,8 +18,8 @@
     </div>
     <div class="runtime-pills">
       <span>POST /chat</span>
-      <span>GET /api/models/chat</span>
-      <span>GET /api/chat/options</span>
+      <span>GET /api/chat-runs</span>
+      <span>GET /api/chat-runs/stats</span>
     </div>
   </header>
 
@@ -27,8 +27,8 @@
     <section class="intro">
       <div>
         <p class="eyebrow">NUCLEOCHAT // CHAT_RUNTIME</p>
-        <h1>Chat continuo contra LOCALES.</h1>
-        <p class="lead">Interfaz nueva tipo ChatGPT. Cada mensaje respeta el contrato JSON interno: provider, model, temperature, use_rag, trazas, evidencia y raw payload.</p>
+        <h1>Chat y observabilidad operacional.</h1>
+        <p class="lead">El chat sigue siendo el unico sitio donde hablamos con el modelo. La pestaña de runs solo inspecciona ejecuciones ya guardadas.</p>
       </div>
       <aside class="connection">
         <label for="backendUrl">Backend base URL</label>
@@ -41,54 +41,204 @@
       </aside>
     </section>
 
-    <section class="chat-layout">
-      <section class="chat-panel" aria-label="Conversacion">
-        <div id="chatMessages" class="chat-messages" aria-live="polite"></div>
-        <form id="chatForm" class="composer">
-          <div class="composer-controls">
-            <label class="sr-only" for="modelSelect">Modelo</label>
-            <select id="modelSelect" aria-label="Modelo">
-              <option value="" data-provider="ollama">Cargando modelos...</option>
-            </select>
-            <label class="sr-only" for="temperatureSelect">Temperatura</label>
-            <select id="temperatureSelect" aria-label="Temperatura">
-              <option value="0.2">0,2</option>
-            </select>
-            <label class="rag-toggle">
-              <input id="useRagInput" type="checkbox" checked>
-              RAG
-            </label>
-          </div>
-          <div class="composer-input">
-            <label class="sr-only" for="messageInput">Mensaje</label>
-            <textarea id="messageInput" rows="1" maxlength="4000" placeholder="Message NucleoChat"></textarea>
-            <button id="chatButton" type="submit">Enviar</button>
-          </div>
-        </form>
+    <nav class="main-tabs" aria-label="Secciones principales">
+      <button class="main-tab active" type="button" data-main-tab="chat" aria-controls="main-chat">Chat</button>
+      <button class="main-tab" type="button" data-main-tab="runs" aria-controls="main-runs">Runs / Observability</button>
+    </nav>
+
+    <section id="main-chat" class="main-panel active" data-main-panel="chat">
+      <section class="chat-layout">
+        <section class="chat-panel" aria-label="Conversacion">
+          <div id="chatMessages" class="chat-messages" aria-live="polite"></div>
+          <form id="chatForm" class="composer">
+            <div class="composer-controls">
+              <label class="sr-only" for="modelSelect">Modelo</label>
+              <select id="modelSelect" aria-label="Modelo">
+                <option value="" data-provider="ollama">Cargando modelos...</option>
+              </select>
+              <label class="sr-only" for="temperatureSelect">Temperatura</label>
+              <select id="temperatureSelect" aria-label="Temperatura">
+                <option value="0.2">0,2</option>
+              </select>
+              <label class="rag-toggle">
+                <input id="useRagInput" type="checkbox" checked>
+                RAG
+              </label>
+            </div>
+            <div class="composer-input">
+              <label class="sr-only" for="messageInput">Mensaje</label>
+              <textarea id="messageInput" rows="1" maxlength="4000" placeholder="Message NucleoChat"></textarea>
+              <button id="chatButton" type="submit">Enviar</button>
+            </div>
+          </form>
+        </section>
+
+        <aside class="inspect-panel">
+          <nav class="side-tabs" aria-label="Panel lateral">
+            <button class="side-tab active" type="button" data-side-tab="status" aria-controls="tab-status">Estado</button>
+            <button class="side-tab" type="button" data-side-tab="raw" aria-controls="tab-raw">Raw</button>
+            <button class="side-tab" type="button" data-side-tab="evidence" aria-controls="tab-evidence">Evidencia</button>
+          </nav>
+
+          <section id="tab-status" class="side-panel active" data-side-panel="status">
+            <div id="chatStatus" class="status muted">Sin ejecutar</div>
+            <dl class="metrics">
+              <div><dt>retrieval_status</dt><dd id="retrievalStatus">-</dd></div>
+              <div><dt>evidence_used</dt><dd id="evidenceUsed">-</dd></div>
+              <div><dt>fallback_used</dt><dd id="fallbackUsed">-</dd></div>
+              <div><dt>chunks_found</dt><dd id="chunksFound">-</dd></div>
+              <div><dt>provider/model</dt><dd id="providerModel">-</dd></div>
+              <div><dt>temperature</dt><dd id="responseTemperature">-</dd></div>
+              <div><dt>trace_id</dt><dd id="traceId">-</dd></div>
+              <div><dt>latency_ms</dt><dd id="chatLatency">-</dd></div>
+            </dl>
+            <h2>Warnings</h2>
+            <pre id="warningsText" class="output small">-</pre>
+          </section>
+
+          <section id="tab-raw" class="side-panel" data-side-panel="raw" hidden>
+            <h2>Raw JSON</h2>
+            <pre id="chatRaw" class="output small">-</pre>
+          </section>
+
+          <section id="tab-evidence" class="side-panel" data-side-panel="evidence" hidden>
+            <h2>Evidencia</h2>
+            <div id="evidenceList" class="evidence-list">
+              <p class="muted-text">La evidencia recuperada aparecera aqui.</p>
+            </div>
+          </section>
+        </aside>
+      </section>
+    </section>
+
+    <section id="main-runs" class="main-panel" data-main-panel="runs" hidden>
+      <section class="runs-header">
+        <div>
+          <p class="eyebrow">RUNS // OBSERVABILITY</p>
+          <h2 class="section-title">Runs guardados del chat</h2>
+        </div>
+        <div id="runsStatus" class="status muted">Cargando dashboard...</div>
       </section>
 
-      <aside class="inspect-panel">
-        <div id="chatStatus" class="status muted">Sin ejecutar</div>
-        <dl class="metrics">
-          <div><dt>retrieval_status</dt><dd id="retrievalStatus">-</dd></div>
-          <div><dt>evidence_used</dt><dd id="evidenceUsed">-</dd></div>
-          <div><dt>fallback_used</dt><dd id="fallbackUsed">-</dd></div>
-          <div><dt>chunks_found</dt><dd id="chunksFound">-</dd></div>
-          <div><dt>provider/model</dt><dd id="providerModel">-</dd></div>
-          <div><dt>temperature</dt><dd id="responseTemperature">-</dd></div>
-          <div><dt>trace_id</dt><dd id="traceId">-</dd></div>
-          <div><dt>latency_ms</dt><dd id="chatLatency">-</dd></div>
-        </dl>
-        <h2>Raw JSON</h2>
-        <pre id="chatRaw" class="output small">-</pre>
-        <h2>Warnings</h2>
-        <pre id="warningsText" class="output small">-</pre>
-        <h2>Evidencia</h2>
-        <div id="evidenceList" class="evidence-list">
-          <p class="muted-text">La evidencia recuperada aparecera aqui.</p>
+      <section class="filter-grid">
+        <label>
+          Model
+          <select id="runsFilterModel">
+            <option value="all">All</option>
+          </select>
+        </label>
+        <label>
+          Provider
+          <select id="runsFilterProvider">
+            <option value="all">All</option>
+          </select>
+        </label>
+        <label>
+          use_rag
+          <select id="runsFilterUseRag">
+            <option value="all">All</option>
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </select>
+        </label>
+        <label>
+          Status
+          <select id="runsFilterStatus">
+            <option value="all">All</option>
+            <option value="ok">ok</option>
+            <option value="error">error</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="metric-card-grid">
+        <article class="metric-card"><span>Total runs</span><strong id="runsTotalRuns">n/a</strong></article>
+        <article class="metric-card"><span>OK runs</span><strong id="runsOkRuns">n/a</strong></article>
+        <article class="metric-card"><span>Error rate</span><strong id="runsErrorRate">n/a</strong></article>
+        <article class="metric-card"><span>Avg latency</span><strong id="runsAvgLatency">n/a</strong></article>
+        <article class="metric-card"><span>P95 latency</span><strong id="runsP95Latency">n/a</strong></article>
+        <article class="metric-card"><span>Avg tokens/s</span><strong id="runsAvgTokensPerSecond">n/a</strong></article>
+        <article class="metric-card"><span>RAG hit rate</span><strong id="runsRagHitRate">n/a</strong></article>
+        <article class="metric-card"><span>Fallback rate</span><strong id="runsFallbackRate">n/a</strong></article>
+      </section>
+
+      <section class="runs-two-column">
+        <article class="panel-card">
+          <h2>Latency by model</h2>
+          <div id="runsLatencyByModel" class="chart-list empty-state">Sin datos</div>
+        </article>
+        <article class="panel-card">
+          <h2>Tokens/s by model</h2>
+          <div id="runsTokensByModel" class="chart-list empty-state">Sin datos</div>
+        </article>
+        <article class="panel-card">
+          <h2>Error rate by model</h2>
+          <div id="runsErrorRateByModel" class="chart-list empty-state">Sin datos</div>
+        </article>
+        <article class="panel-card">
+          <h2>Recent runs</h2>
+          <div id="runsQuickSummary" class="empty-state">Sin datos</div>
+        </article>
+      </section>
+
+      <section class="panel-card">
+        <h2>Runs table</h2>
+        <div class="table-wrap">
+          <table class="runs-table">
+            <thead>
+              <tr>
+                <th>created_at</th>
+                <th>model</th>
+                <th>provider</th>
+                <th>use_rag</th>
+                <th>retrieval_status</th>
+                <th>latency_ms</th>
+                <th>tokens_total</th>
+                <th>output_tokens_per_second</th>
+                <th>status</th>
+                <th>fallback_used</th>
+                <th>trace_id</th>
+              </tr>
+            </thead>
+            <tbody id="runsTableBody">
+              <tr><td colspan="11">Cargando runs...</td></tr>
+            </tbody>
+          </table>
         </div>
-      </aside>
+      </section>
     </section>
   </main>
+
+  <div id="runDetailModal" class="detail-modal" hidden>
+    <div class="detail-backdrop" data-close-run-detail></div>
+    <section class="detail-dialog" aria-label="Run detail">
+      <div class="detail-header">
+        <div>
+          <p class="eyebrow">RUN DETAIL</p>
+          <h2 class="section-title">Trace detail</h2>
+        </div>
+        <button class="ghost-button" type="button" data-close-run-detail>Cerrar</button>
+      </div>
+      <div id="runDetailStatus" class="status muted">Sin seleccionar</div>
+      <dl class="metrics detail-metrics">
+        <div><dt>trace_id</dt><dd id="runDetailTraceId">n/a</dd></div>
+        <div><dt>provider/model</dt><dd id="runDetailProviderModel">n/a</dd></div>
+        <div><dt>temperature</dt><dd id="runDetailTemperature">n/a</dd></div>
+        <div><dt>use_rag</dt><dd id="runDetailUseRag">n/a</dd></div>
+        <div><dt>latency_ms</dt><dd id="runDetailLatency">n/a</dd></div>
+        <div><dt>tokens_total</dt><dd id="runDetailTokensTotal">n/a</dd></div>
+        <div><dt>tokens/s</dt><dd id="runDetailTokensPerSecond">n/a</dd></div>
+        <div><dt>retrieval_status</dt><dd id="runDetailRetrievalStatus">n/a</dd></div>
+        <div><dt>fallback_used</dt><dd id="runDetailFallbackUsed">n/a</dd></div>
+        <div><dt>error_code</dt><dd id="runDetailErrorCode">n/a</dd></div>
+      </dl>
+      <h2>Prompt / config</h2>
+      <pre id="runDetailConfig" class="output small">n/a</pre>
+      <h2>RAG evidence</h2>
+      <pre id="runDetailEvidence" class="output small">n/a</pre>
+      <h2>Error fields</h2>
+      <pre id="runDetailError" class="output small">n/a</pre>
+    </section>
+  </div>
 </body>
 </html>

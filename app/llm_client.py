@@ -84,14 +84,15 @@ def list_chat_models() -> list[dict[str, object]]:
             }
         )
 
-    items.append(
-        {
-            "provider": "openai",
-            "model": DEFAULT_OPENAI_MODEL,
-            "label": f"OpenAI / {DEFAULT_OPENAI_MODEL}",
-            "is_default": False,
-        }
-    )
+    for model_name in sorted(OPENAI_SUPPORTED_MODELS, key=str.casefold):
+        items.append(
+            {
+                "provider": "openai",
+                "model": model_name,
+                "label": f"OpenAI / {model_name}",
+                "is_default": model_name == DEFAULT_OPENAI_MODEL,
+            }
+        )
     return items
 
 

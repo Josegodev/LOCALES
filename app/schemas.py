@@ -301,13 +301,18 @@ class ChatSavedRunResponse(ChatTraceResponse):
 
 
 class ChatRunsStatsResponse(BaseModel):
+    status: str = "ok"
     total_runs: int
     ok_runs: int
     error_runs: int
-    models: dict[str, int] = Field(default_factory=dict)
+    error_rate: float | None = None
     avg_latency_ms: float | None = None
-    avg_tokens_total: float | None = None
-    runs: list[ChatSavedRunResponse] = Field(default_factory=list)
+    p95_latency_ms: float | None = None
+    avg_tokens_per_second: float | None = None
+    rag_hit_rate: float | None = None
+    fallback_rate: float | None = None
+    models: dict[str, int] = Field(default_factory=dict)
+    providers: dict[str, int] = Field(default_factory=dict)
 
 
 class ChatEvalFailure(BaseModel):

@@ -377,7 +377,7 @@ def _load_chat_run_file(path: Path) -> ChatRunRecord | None:
         return None
 
 
-def _load_chat_runs(*, limit: int, path: Path) -> list[ChatRunRecord]:
+def _load_chat_runs(*, limit: int | None, path: Path) -> list[ChatRunRecord]:
     if not path.exists() or not path.is_dir():
         return []
 
@@ -388,12 +388,25 @@ def _load_chat_runs(*, limit: int, path: Path) -> list[ChatRunRecord]:
             records.append(record)
 
     records.sort(key=lambda item: item.created_at, reverse=True)
+    if limit is None:
+        return records
     return records[:limit]
 
 
-def list_chat_runs(limit: int = 50, *, path: Path | None = None) -> list[ChatRunRecord]:
+def list_chat_runs(limit: int | None = 50, *, path: Path | None = None) -> list[ChatRunRecord]:
     resolved_path = resolve_chat_runs_path(path)
     return _load_chat_runs(limit=limit, path=resolved_path)
+
+
+def get_chat_run(trace_id: str, *, path: Path | None = None) -> ChatRunRecord | None:
+    if not isinstance(trace_id, str) or not trace_id.strip():
+        return None
+
+    normalized_trace_id = trace_id.strip()
+    for record in list_chat_runs(limit=None, path=path):
+        if record.trace_id == normalized_trace_id:
+            return record
+    return None
 
 
 def clear_chat_runs(*, path: Path | None = None) -> int:
