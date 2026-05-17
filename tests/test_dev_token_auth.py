@@ -176,7 +176,11 @@ class DevTokenAuthTests(unittest.TestCase):
 
     def test_chat_cors_allows_configured_public_origin(self):
         with patch("app.main.settings.app_env", "prod"):
-            with patch("app.main.settings.frontend_allowed_origins", return_value=["https://example-frontend.com"]):
+            with patch.object(
+                type(app_main.settings),
+                "frontend_allowed_origins",
+                return_value=["https://example-frontend.com"],
+            ):
                 response = TestClient(self._build_cors_test_app()).options(
                     "/chat",
                     headers={
@@ -188,12 +192,17 @@ class DevTokenAuthTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["access-control-allow-origin"], "https://example-frontend.com")
-        self.assertIn("Authorization", response.headers["access-control-allow-headers"])
-        self.assertIn("Content-Type", response.headers["access-control-allow-headers"])
+        allowed_headers = response.headers["access-control-allow-headers"].lower()
+        self.assertIn("authorization", allowed_headers)
+        self.assertIn("content-type", allowed_headers)
 
     def test_chat_cors_blocks_non_listed_origin(self):
         with patch("app.main.settings.app_env", "prod"):
-            with patch("app.main.settings.frontend_allowed_origins", return_value=["https://example-frontend.com"]):
+            with patch.object(
+                type(app_main.settings),
+                "frontend_allowed_origins",
+                return_value=["https://example-frontend.com"],
+            ):
                 response = TestClient(self._build_cors_test_app()).options(
                     "/chat",
                     headers={
@@ -208,7 +217,11 @@ class DevTokenAuthTests(unittest.TestCase):
 
     def test_chat_cors_uses_local_fallback_only_in_local_env(self):
         with patch("app.main.settings.app_env", "local"):
-            with patch("app.main.settings.frontend_allowed_origins", return_value=[]):
+            with patch.object(
+                type(app_main.settings),
+                "frontend_allowed_origins",
+                return_value=[],
+            ):
                 response = TestClient(self._build_cors_test_app()).options(
                     "/chat",
                     headers={
