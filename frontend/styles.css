@@ -329,6 +329,46 @@ dd {
   gap: 12px;
 }
 
+.chat-messages {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 16px;
+}
+
+.chat-message {
+  max-width: 82%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: var(--panel-soft);
+}
+
+.chat-message.user {
+  justify-self: end;
+  border-color: rgba(66, 194, 168, 0.38);
+}
+
+.chat-message.assistant {
+  justify-self: start;
+}
+
+.chat-message p {
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+}
+
+.chat-message small,
+.chat-message-meta {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.chat-message-meta {
+  margin-bottom: 6px;
+  font-weight: 700;
+}
+
 .failure-list {
   display: grid;
   gap: 12px;
@@ -604,5 +644,9 @@ dd {
   .metrics.wide,
   .benchmark-summary {
     grid-template-columns: 1fr;
+  }
+
+  .chat-message {
+    max-width: 100%;
   }
 }

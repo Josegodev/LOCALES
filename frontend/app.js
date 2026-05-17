@@ -16,6 +16,7 @@ const elements = {
   useRagInput: document.querySelector("#useRagInput"),
   chatButton: document.querySelector("#chatButton"),
   chatStatus: document.querySelector("#chatStatus"),
+  chatMessages: document.querySelector("#chatMessages"),
   retrievalStatus: document.querySelector("#retrievalStatus"),
   evidenceUsed: document.querySelector("#evidenceUsed"),
   fallbackUsed: document.querySelector("#fallbackUsed"),
@@ -54,6 +55,11 @@ const elements = {
   temperatureThroughputChart: document.querySelector("#temperatureThroughputChart"),
   temperatureReliabilityChart: document.querySelector("#temperatureReliabilityChart"),
   temperatureRunsRaw: document.querySelector("#temperatureRunsRaw"),
+};
+
+const chatState = {
+  abortController: null,
+  messages: [],
 };
 
 function setActiveTab(tabName) {
@@ -98,6 +104,46 @@ function valueOrDash(value) {
   return String(value);
 }
 
+function numberOrNull(value) {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function formatNumber(value, digits = 0) {
+  const numberValue = numberOrNull(value);
+  if (numberValue === null) {
+    return "-";
+  }
+  return numberValue.toLocaleString("es-ES", {
+    maximumFractionDigits: digits,
+    minimumFractionDigits: digits,
+  });
+}
+
+function formatRate(value) {
+  const numberValue = numberOrNull(value);
+  if (numberValue === null) {
+    return "-";
+  }
+  const percent = numberValue <= 1 ? numberValue * 100 : numberValue;
+  return `${formatNumber(percent, 1)}%`;
+}
+
+function formatMs(value) {
+  const numberValue = numberOrNull(value);
+  return numberValue === null ? "-" : `${Math.round(numberValue).toLocaleString("es-ES")} ms`;
+}
+
+function formatTemperature(value) {
+  const numberValue = numberOrNull(value);
+  return numberValue === null ? "-" : numberValue.toFixed(1).replace(".", ",");
+}
+
+function formatTokensPerSecond(value) {
+  const numberValue = numberOrNull(value);
+  return numberValue === null ? "-" : `${formatNumber(numberValue, 2)} tok/s`;
+}
+
 function truncateText(value, limit = 1200) {
   if (typeof value !== "string") {
     return valueOrDash(value);
@@ -116,6 +162,9 @@ function summarizeChatPayload(data) {
   if (typeof payload.answer === "string") {
     payload.answer = truncateText(payload.answer, 4000);
   }
+  if (typeof payload.response === "string") {
+    payload.response = truncateText(payload.response, 4000);
+  }
   return payload;
 }
 
@@ -124,6 +173,31 @@ function updateBackendLinks() {
   localStorage.setItem("locales.backendUrl", baseUrl);
   elements.docsLink.href = baseUrl ? `${baseUrl}/docs` : "#";
   elements.docsLink.classList.toggle("disabled", !baseUrl);
+}
+
+async function fetchJsonWithLatency(url, options = {}) {
+  const startedAt = performance.now();
+  const response = await fetch(url, options);
+  const latencyMs = Math.round(performance.now() - startedAt);
+  const text = await response.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { raw_text: text };
+  }
+  if (!response.ok) {
+    const error = new Error(`HTTP ${response.status}`);
+    error.status = response.status;
+    error.data = data;
+    error.latencyMs = latencyMs;
+    throw error;
+  }
+  return { data, latencyMs };
+}
+
+async function backendFetch(path, options = {}) {
+  return fetchJsonWithLatency(`${requireBackendBaseUrl()}${path}`, options);
 }
 
 function inferProviderFromModel(modelName) {
@@ -168,6 +242,18 @@ function selectPreferredModel(preferredModel) {
   elements.modelSelect.value = (defaultOption || options[0]).value;
 }
 
+function validateChatModelsPayload(data) {
+  if (!data || typeof data !== "object" || !Array.isArray(data.items)) {
+    throw new Error("Respuesta JSON invalida del endpoint de modelos.");
+  }
+  return data.items.filter((item) => (
+    item
+    && typeof item.provider === "string"
+    && typeof item.model === "string"
+    && typeof item.label === "string"
+  ));
+}
+
 function replaceModelOptions(items) {
   const currentValue = elements.modelSelect.value;
   const savedModel = localStorage.getItem("locales.chatModel");
@@ -199,15 +285,15 @@ function replaceTemperatureOptions(temperatureOptions = {}) {
     const option = document.createElement("option");
     option.value = normalizedValue.toFixed(1);
     option.textContent = normalizedValue === defaultTemperature
-      ? `${formatNumber(normalizedValue, 1)} - default`
-      : formatNumber(normalizedValue, 1);
+      ? `${formatTemperature(normalizedValue)} - default`
+      : formatTemperature(normalizedValue);
     elements.temperatureSelect.appendChild(option);
   }
 
   if (!elements.temperatureSelect.options.length) {
     const option = document.createElement("option");
     option.value = defaultTemperature.toFixed(1);
-    option.textContent = `${formatNumber(defaultTemperature, 1)} - default`;
+    option.textContent = `${formatTemperature(defaultTemperature)} - default`;
     elements.temperatureSelect.appendChild(option);
   }
 
@@ -221,45 +307,57 @@ function replaceTemperatureOptions(temperatureOptions = {}) {
   localStorage.setItem("locales.chatTemperature", elements.temperatureSelect.value);
 }
 
-async function fetchJsonWithLatency(url, options = {}) {
-  const startedAt = performance.now();
-  const response = await fetch(url, options);
-  const latencyMs = Math.round(performance.now() - startedAt);
-  const text = await response.text();
-  let data;
-
+async function loadChatModels() {
+  if (!backendBaseUrl()) {
+    return;
+  }
   try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    data = { raw_text: text };
+    const { data } = await backendFetch("/api/models/chat");
+    const items = validateChatModelsPayload(data);
+    if (items.length) {
+      replaceModelOptions(items);
+    }
+  } catch (error) {
+    setStatus(elements.chatStatus, `No se pudieron cargar modelos: ${visibleChatErrorMessage(error)}`, "error");
   }
-
-  if (!response.ok) {
-    const error = new Error(`HTTP ${response.status}`);
-    error.status = response.status;
-    error.data = data;
-    error.latencyMs = latencyMs;
-    throw error;
-  }
-
-  return { data, latencyMs };
 }
 
-async function backendFetch(path, options = {}) {
-  return fetchJsonWithLatency(`${requireBackendBaseUrl()}${path}`, options);
+async function loadChatOptions() {
+  if (!backendBaseUrl()) {
+    return;
+  }
+  try {
+    const { data } = await backendFetch("/api/chat/options");
+    if (data && typeof data === "object" && data.temperature) {
+      replaceTemperatureOptions(data.temperature);
+    }
+  } catch (error) {
+    setStatus(elements.chatStatus, `No se pudieron cargar opciones: ${visibleChatErrorMessage(error)}`, "error");
+  }
 }
 
-function validateChatModelsPayload(data) {
-  if (!data || typeof data !== "object" || !Array.isArray(data.items)) {
-    throw new Error("Respuesta JSON invalida del endpoint de modelos.");
-  }
+function normalizeChatResponse(data) {
+  return {
+    status: data?.status || "ok",
+    response: data?.response ?? data?.answer ?? "",
+    provider: data?.provider,
+    model: data?.model,
+    temperature: data?.temperature,
+    retrievalStatus: data?.retrieval_status,
+    sourceFilenames: Array.isArray(data?.source_filenames) ? data.source_filenames : [],
+    chunkIds: Array.isArray(data?.chunk_ids) ? data.chunk_ids : [],
+    traceId: data?.trace_id || data?.request_id,
+    raw: data || {},
+  };
+}
 
-  return data.items.filter((item) => (
-    item
-    && typeof item.provider === "string"
-    && typeof item.model === "string"
-    && typeof item.label === "string"
-  ));
+async function sendChatMessage(payload, options = {}) {
+  return backendFetch("/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal: options.signal,
+    body: JSON.stringify(payload),
+  });
 }
 
 function clearChatOutput() {
@@ -276,34 +374,10 @@ function clearChatOutput() {
 
 function setChatPending(isPending) {
   elements.chatButton.disabled = isPending;
-  elements.chatButton.textContent = isPending ? "Sending..." : "Send";
-}
-
-function categorizedBackendErrorMessage(error) {
-  const detail = error?.data?.detail;
-  const code = detail && typeof detail === "object" ? detail.code : undefined;
-
-  if (error?.message === "Failed to fetch") {
-    return "Backend no accesible. Revisa URL, CORS y que FastAPI este arrancado.";
-  }
-  if (code === "dev_token_not_configured") {
-    return "El token operacional no esta configurado en el servidor.";
-  }
-  if (code === "chat_disabled") {
-    return "/chat esta deshabilitado por configuracion del backend.";
-  }
-  if (error?.status === 401 || error?.status === 403) {
-    return "La ruta requiere autenticacion operacional y el navegador no envia ese token.";
-  }
-  return null;
+  elements.chatButton.textContent = isPending ? "Enviando..." : "Enviar";
 }
 
 function visibleChatErrorMessage(error) {
-  const categorized = categorizedBackendErrorMessage(error);
-  if (categorized) {
-    return categorized;
-  }
-
   const detail = error?.data?.detail;
   if (detail && typeof detail === "object") {
     const detailMessage = detail.message || detail.code;
@@ -311,15 +385,65 @@ function visibleChatErrorMessage(error) {
       return String(detailMessage);
     }
   }
-
   if (error?.data?.message) {
     return String(error.data.message);
   }
-
+  if (error?.name === "AbortError") {
+    return "Solicitud cancelada.";
+  }
+  if (error?.message === "Failed to fetch") {
+    return "Backend no accesible. Revisa URL, CORS y que FastAPI este arrancado.";
+  }
   return error?.message || "Error inesperado llamando al backend.";
 }
 
-function renderEvidence(data) {
+function renderChatMessages() {
+  elements.chatMessages.innerHTML = "";
+  if (!chatState.messages.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted-text";
+    empty.textContent = "La conversacion aparecera aqui.";
+    elements.chatMessages.appendChild(empty);
+    return;
+  }
+
+  for (const message of chatState.messages) {
+    const item = document.createElement("article");
+    item.className = `chat-message ${message.role}`;
+
+    const header = document.createElement("div");
+    header.className = "chat-message-meta";
+    header.textContent = message.role === "user" ? "Usuario" : "Asistente";
+
+    const body = document.createElement("p");
+    body.textContent = message.text;
+    item.append(header, body);
+
+    if (message.traceId) {
+      const trace = document.createElement("small");
+      trace.textContent = `trace_id: ${message.traceId}`;
+      item.appendChild(trace);
+    }
+
+    if (message.sources?.length || message.chunkIds?.length) {
+      const sources = document.createElement("small");
+      sources.textContent = [
+        message.sources?.length ? `sources: ${message.sources.join(", ")}` : "",
+        message.chunkIds?.length ? `chunks: ${message.chunkIds.join(", ")}` : "",
+      ].filter(Boolean).join(" | ");
+      item.appendChild(sources);
+    }
+
+    elements.chatMessages.appendChild(item);
+  }
+}
+
+function appendChatMessage(message) {
+  chatState.messages.push(message);
+  renderChatMessages();
+}
+
+function renderEvidence(data, shouldRenderEvidence) {
   const chunks = Array.isArray(data.chunks) ? data.chunks : [];
   const filenames = Array.isArray(data.source_filenames) ? data.source_filenames : [];
   const chunkIds = Array.isArray(data.chunk_ids) ? data.chunk_ids : [];
@@ -328,6 +452,10 @@ function renderEvidence(data) {
   const total = Math.max(chunks.length, filenames.length, chunkIds.length, documentIds.length, scores.length);
 
   elements.evidenceList.innerHTML = "";
+  if (!shouldRenderEvidence) {
+    elements.evidenceList.innerHTML = '<p class="muted-text">RAG desactivado para este mensaje.</p>';
+    return;
+  }
   if (total === 0) {
     elements.evidenceList.innerHTML = '<p class="muted-text">No hay evidencia documental en la respuesta.</p>';
     return;
@@ -353,6 +481,81 @@ function renderEvidence(data) {
   }
 }
 
+function renderChatResponse(data, latencyMs, useRag) {
+  const normalized = normalizeChatResponse(data);
+  elements.retrievalStatus.textContent = valueOrDash(normalized.retrievalStatus);
+  elements.evidenceUsed.textContent = valueOrDash(data.evidence_used);
+  elements.fallbackUsed.textContent = valueOrDash(data.fallback_used);
+  elements.chunksFound.textContent = String(Array.isArray(data.chunks) ? data.chunks.length : 0);
+  elements.providerModel.textContent = `${valueOrDash(normalized.provider)} / ${valueOrDash(normalized.model)}`;
+  elements.responseTemperature.textContent = formatTemperature(normalized.temperature);
+  elements.traceId.textContent = valueOrDash(normalized.traceId);
+  elements.chatLatency.textContent = String(latencyMs);
+  elements.answerText.textContent = valueOrDash(normalized.response);
+  elements.warningsText.textContent = Array.isArray(data.warnings) && data.warnings.length ? data.warnings.join("\n") : "-";
+  elements.chatRaw.textContent = prettyJson(summarizeChatPayload(data));
+  renderEvidence(data, useRag);
+  appendChatMessage({
+    role: "assistant",
+    text: normalized.response || "(respuesta vacia)",
+    traceId: normalized.traceId,
+    sources: useRag ? normalized.sourceFilenames : [],
+    chunkIds: useRag ? normalized.chunkIds : [],
+  });
+}
+
+async function sendChat() {
+  updateBackendLinks();
+  const payload = {
+    message: elements.messageInput.value.trim(),
+    provider: selectedModelProvider(),
+    model: elements.modelSelect.value,
+    use_rag: elements.useRagInput.checked,
+    temperature: numberOrNull(elements.temperatureSelect.value),
+  };
+
+  if (!payload.message) {
+    setStatus(elements.chatStatus, "Escribe un mensaje antes de enviar", "error");
+    return;
+  }
+  if (!String(payload.model || "").trim()) {
+    setStatus(elements.chatStatus, "Selecciona un modelo valido antes de enviar", "error");
+    elements.answerText.textContent = "La UI necesita un modelo explicito para cumplir el contrato de /chat.";
+    return;
+  }
+
+  if (chatState.abortController) {
+    chatState.abortController.abort();
+  }
+  chatState.abortController = new AbortController();
+  setChatPending(true);
+  setStatus(elements.chatStatus, "Enviando a /chat...", "muted");
+  elements.chatRaw.textContent = prettyJson({ request: payload });
+  elements.answerText.textContent = "Esperando respuesta...";
+  clearChatOutput();
+  renderEvidence({}, payload.use_rag);
+  appendChatMessage({ role: "user", text: payload.message });
+
+  try {
+    const { data, latencyMs } = await sendChatMessage(payload, { signal: chatState.abortController.signal });
+    setStatus(elements.chatStatus, "Respuesta recibida", "ok");
+    renderChatResponse(data, latencyMs, payload.use_rag);
+  } catch (error) {
+    const message = visibleChatErrorMessage(error);
+    setStatus(elements.chatStatus, "Error llamando a /chat", "error");
+    clearChatOutput();
+    elements.chatLatency.textContent = error.latencyMs ? String(error.latencyMs) : "-";
+    elements.answerText.textContent = message;
+    elements.warningsText.textContent = "La llamada al backend ha fallado.";
+    elements.chatRaw.textContent = error.data ? prettyJson(error.data) : message;
+    renderEvidence({}, payload.use_rag);
+    appendChatMessage({ role: "assistant", text: message });
+  } finally {
+    chatState.abortController = null;
+    setChatPending(false);
+  }
+}
+
 async function checkHealth() {
   updateBackendLinks();
   setStatus(elements.healthStatus, "Consultando /health...", "muted");
@@ -370,44 +573,8 @@ async function checkHealth() {
     setStatus(elements.healthStatus, "No se pudo conectar", "error");
     elements.healthState.textContent = "ERROR";
     elements.healthLatency.textContent = error.latencyMs ? String(error.latencyMs) : "-";
-    elements.healthRaw.textContent = error.data ? prettyJson(error.data) : error.message;
+    elements.healthRaw.textContent = error.data ? prettyJson(error.data) : visibleChatErrorMessage(error);
   }
-}
-
-async function loadChatModels() {
-  if (!backendBaseUrl()) {
-    return;
-  }
-
-  try {
-    const { data } = await backendFetch("/api/models/chat");
-    const items = validateChatModelsPayload(data);
-    if (items.length) {
-      replaceModelOptions(items);
-    }
-  } catch (error) {
-    console.warn("No se pudo cargar /api/models/chat", error);
-  }
-}
-
-async function loadChatOptions() {
-  if (!backendBaseUrl()) {
-    return;
-  }
-
-  try {
-    const { data } = await backendFetch("/api/chat/options");
-    if (data && typeof data === "object" && data.temperature) {
-      replaceTemperatureOptions(data.temperature);
-    }
-  } catch (error) {
-    console.warn("No se pudo cargar /api/chat/options", error);
-  }
-}
-
-function numberOrNull(value) {
-  const numberValue = Number(value);
-  return Number.isFinite(numberValue) ? numberValue : null;
 }
 
 function isBenchmarkModelVisible(model) {
@@ -425,158 +592,118 @@ function normalizeOperationalBenchmarkPayload(data) {
   if (!data || typeof data !== "object" || !Array.isArray(data.models)) {
     throw new Error("Respuesta JSON invalida del endpoint /api/runs/operational-stats.");
   }
-
-  const models = data.models
-    .filter((item) => item && typeof item === "object")
-    .filter(isBenchmarkModelVisible);
-  const byModelTemperature = Array.isArray(data.by_model_temperature)
-    ? data.by_model_temperature.filter((item) => item && typeof item === "object").filter(isBenchmarkModelVisible)
-    : [];
-
   return {
     timeout_ms: data.timeout_ms ?? null,
-    count: null,
-    models,
-    by_model_temperature: byModelTemperature,
+    models: data.models.filter((item) => item && typeof item === "object").filter(isBenchmarkModelVisible),
+    by_model_temperature: Array.isArray(data.by_model_temperature)
+      ? data.by_model_temperature.filter((item) => item && typeof item === "object").filter(isBenchmarkModelVisible)
+      : [],
   };
 }
 
-function formatNumber(value, digits = 0) {
-  const numberValue = numberOrNull(value);
-  if (numberValue === null) {
-    return "-";
-  }
-  return numberValue.toLocaleString("es-ES", {
-    maximumFractionDigits: digits,
-    minimumFractionDigits: digits,
-  });
-}
-
-function formatMs(value) {
-  const numberValue = numberOrNull(value);
-  if (numberValue === null) {
-    return "-";
-  }
-  return `${Math.round(numberValue).toLocaleString("es-ES")} ms`;
-}
-
-function formatRate(value) {
-  const numberValue = numberOrNull(value);
-  if (numberValue === null) {
-    return "-";
-  }
-  const percent = numberValue <= 1 ? numberValue * 100 : numberValue;
-  return `${percent.toLocaleString("es-ES", { maximumFractionDigits: 1, minimumFractionDigits: 1 })}%`;
-}
-
-function formatTokensPerSecond(value) {
-  const numberValue = numberOrNull(value);
-  if (numberValue === null) {
-    return "-";
-  }
-  return `${numberValue.toLocaleString("es-ES", { maximumFractionDigits: 2, minimumFractionDigits: 1 })} tok/s`;
-}
-
-function formatTemperature(value) {
-  const numberValue = numberOrNull(value);
-  if (numberValue === null) {
-    return "-";
-  }
-  return numberValue.toLocaleString("es-ES", { maximumFractionDigits: 2, minimumFractionDigits: 1 });
-}
-
-function benchmarkLabel(model) {
-  if (Object.prototype.hasOwnProperty.call(model, "temperature")) {
-    return `${valueOrDash(model.model)} · T=${formatTemperature(model.temperature)}`;
-  }
-  return valueOrDash(model.model);
-}
-
-function formatModelMetric(model, field, formatter) {
-  if (!model) {
-    return "-";
-  }
-  return `${benchmarkLabel(model)} (${formatter(model[field])})`;
-}
-
-function pickByMetric(models, field, direction = "min") {
-  const candidates = models.filter((model) => numberOrNull(model[field]) !== null);
-  if (!candidates.length) {
+function pickByMetric(items, metric, direction) {
+  const validItems = items.filter((item) => numberOrNull(item[metric]) !== null);
+  if (!validItems.length) {
     return null;
   }
-  return candidates.sort((left, right) => {
-    const leftValue = numberOrNull(left[field]);
-    const rightValue = numberOrNull(right[field]);
-    return direction === "max" ? rightValue - leftValue : leftValue - rightValue;
-  })[0];
+  return validItems.reduce((best, item) => {
+    const current = numberOrNull(item[metric]);
+    const bestValue = numberOrNull(best[metric]);
+    return direction === "min" ? (current < bestValue ? item : best) : (current > bestValue ? item : best);
+  }, validItems[0]);
 }
 
-function sortedBenchmarkModels(models) {
-  return [...models].sort((left, right) => {
-    const leftLatency = numberOrNull(left.avg_latency_ms);
-    const rightLatency = numberOrNull(right.avg_latency_ms);
-    if (leftLatency === null && rightLatency === null) {
-      return benchmarkLabel(left).localeCompare(benchmarkLabel(right));
-    }
-    if (leftLatency === null) return 1;
-    if (rightLatency === null) return -1;
-    return leftLatency - rightLatency || benchmarkLabel(left).localeCompare(benchmarkLabel(right));
-  });
+function formatModelMetric(item, metric, formatter) {
+  if (!item) {
+    return "-";
+  }
+  return `${item.model}: ${formatter(item[metric])}`;
 }
 
-function renderBenchmarkSummary(payload) {
-  const models = payload.models;
-  const totalRuns = payload.count ?? models.reduce((total, model) => total + (numberOrNull(model.runs) || 0), 0);
-  elements.benchmarkTotalRuns.textContent = formatNumber(totalRuns);
-  elements.benchmarkFastestAvgLatency.textContent = formatModelMetric(
-    pickByMetric(models, "avg_latency_ms", "min"),
-    "avg_latency_ms",
-    formatMs,
-  );
-  elements.benchmarkBestP95Latency.textContent = formatModelMetric(
-    pickByMetric(models, "p95_latency_ms", "min"),
-    "p95_latency_ms",
-    formatMs,
-  );
-  elements.benchmarkHighestOutputTokens.textContent = formatModelMetric(
-    pickByMetric(models, "avg_tokens_output", "max"),
-    "avg_tokens_output",
-    (value) => formatNumber(value, 0),
-  );
-  elements.benchmarkHighestErrorRate.textContent = formatModelMetric(
-    pickByMetric(models, "error_rate", "max"),
-    "error_rate",
-    formatRate,
-  );
+function sortedBenchmarkModels(items) {
+  return [...items].sort((first, second) => String(first.model || "").localeCompare(String(second.model || "")));
 }
 
-function renderBenchmarkTable(models) {
-  elements.benchmarkTableBody.innerHTML = "";
-  if (!models.length) {
-    elements.benchmarkTableBody.innerHTML = '<tr><td colspan="14">No operational runs found yet.</td></tr>';
+function renderGroupedChart(container, rows, series, formatter) {
+  container.classList.remove("empty");
+  container.innerHTML = "";
+  if (!rows.length) {
+    container.classList.add("empty");
+    container.textContent = "Sin datos";
     return;
   }
 
-  for (const model of sortedBenchmarkModels(models)) {
+  const maxValue = Math.max(
+    ...rows.flatMap((row) => series.map((serie) => numberOrNull(row[serie.field]) || 0)),
+    1,
+  );
+
+  for (const row of sortedBenchmarkModels(rows)) {
+    const item = document.createElement("div");
+    item.className = "grouped-row";
+    const label = document.createElement("div");
+    label.className = "chart-label";
+    label.textContent = row.temperature === undefined ? row.model : `${row.model} / temp ${formatTemperature(row.temperature)}`;
+    const bars = document.createElement("div");
+    bars.className = "grouped-bars";
+
+    for (const serie of series) {
+      const value = numberOrNull(row[serie.field]);
+      const width = value === null ? 0 : Math.max(2, Math.round((value / maxValue) * 100));
+      const line = document.createElement("div");
+      line.className = "mini-bar-line";
+      line.innerHTML = `
+        <span class="mini-bar-label"></span>
+        <span class="bar-track"><span class="bar-fill ${serie.className || ""}" style="width: ${width}%"></span></span>
+        <span class="chart-value"></span>
+      `;
+      line.querySelector(".mini-bar-label").textContent = serie.label;
+      line.querySelector(".chart-value").textContent = formatter(value);
+      bars.appendChild(line);
+    }
+
+    item.append(label, bars);
+    container.appendChild(item);
+  }
+}
+
+function renderOperationalSummary(payload) {
+  const models = payload.models;
+  const totalRuns = models.reduce((total, item) => total + (numberOrNull(item.runs) || 0), 0);
+  elements.benchmarkTotalRuns.textContent = formatNumber(totalRuns);
+  elements.benchmarkFastestAvgLatency.textContent = formatModelMetric(pickByMetric(models, "avg_latency_ms", "min"), "avg_latency_ms", formatMs);
+  elements.benchmarkBestP95Latency.textContent = formatModelMetric(pickByMetric(models, "p95_latency_ms", "min"), "p95_latency_ms", formatMs);
+  elements.benchmarkHighestOutputTokens.textContent = formatModelMetric(pickByMetric(models, "avg_tokens_output", "max"), "avg_tokens_output", (value) => formatNumber(value, 0));
+  elements.benchmarkHighestErrorRate.textContent = formatModelMetric(pickByMetric(models, "error_rate", "max"), "error_rate", formatRate);
+}
+
+function renderOperationalTable(items) {
+  elements.benchmarkTableBody.innerHTML = "";
+  if (!items.length) {
+    elements.benchmarkTableBody.innerHTML = '<tr><td colspan="14">No hay runs guardados todavia.</td></tr>';
+    return;
+  }
+
+  for (const item of sortedBenchmarkModels(items)) {
     const row = document.createElement("tr");
-    if ((numberOrNull(model.error_rate) || 0) > 0) {
+    if ((numberOrNull(item.error_rate) || 0) > 0) {
       row.classList.add("error-row");
     }
     [
-      valueOrDash(model.model),
-      formatNumber(model.runs),
-      formatRate(model.success_rate),
-      formatRate(model.error_rate),
-      formatRate(model.timeout_rate),
-      formatMs(model.avg_latency_ms),
-      formatMs(model.p50_latency_ms),
-      formatMs(model.p95_latency_ms),
-      formatMs(model.p99_latency_ms),
-      formatMs(model.std_latency_ms),
-      formatNumber(model.avg_tokens_input),
-      formatNumber(model.avg_tokens_output),
-      formatNumber(model.avg_tokens_total),
-      formatTokensPerSecond(model.avg_tokens_per_second),
+      valueOrDash(item.model),
+      formatNumber(item.runs),
+      formatRate(item.success_rate),
+      formatRate(item.error_rate),
+      formatRate(item.timeout_rate),
+      formatMs(item.avg_latency_ms),
+      formatMs(item.p50_latency_ms),
+      formatMs(item.p95_latency_ms),
+      formatMs(item.p99_latency_ms),
+      formatMs(item.std_latency_ms),
+      formatNumber(item.avg_tokens_input),
+      formatNumber(item.avg_tokens_output),
+      formatNumber(item.avg_tokens_total),
+      formatTokensPerSecond(item.avg_tokens_per_second),
     ].forEach((cellValue) => {
       const cell = document.createElement("td");
       cell.textContent = cellValue;
@@ -586,103 +713,36 @@ function renderBenchmarkTable(models) {
   }
 }
 
-function renderGroupedChart(container, models, series, formatter) {
-  container.innerHTML = "";
-  const values = models.flatMap((model) => series.map((item) => numberOrNull(model[item.field]))).filter((value) => value !== null && value > 0);
-  const maxValue = values.length ? Math.max(...values) : 0;
-
-  if (!models.length || maxValue <= 0) {
-    container.className = "grouped-chart empty";
-    container.textContent = "No hay datos suficientes.";
-    return;
-  }
-
-  container.className = "grouped-chart";
-  for (const model of sortedBenchmarkModels(models)) {
-    const row = document.createElement("div");
-    row.className = "grouped-row";
-    const label = document.createElement("div");
-    label.className = "chart-label";
-    label.textContent = benchmarkLabel(model);
-    const bars = document.createElement("div");
-    bars.className = "grouped-bars";
-
-    for (const item of series) {
-      const value = numberOrNull(model[item.field]);
-      const line = document.createElement("div");
-      line.className = "mini-bar-line";
-      const miniLabel = document.createElement("span");
-      miniLabel.className = "mini-bar-label";
-      miniLabel.textContent = item.label;
-      const track = document.createElement("div");
-      track.className = "bar-track";
-      const fill = document.createElement("div");
-      fill.className = `bar-fill ${item.className || ""}`.trim();
-      fill.style.width = value !== null && value > 0 ? `${Math.max((value / maxValue) * 100, 2)}%` : "0%";
-      track.appendChild(fill);
-      const chartValue = document.createElement("span");
-      chartValue.className = "chart-value";
-      chartValue.textContent = formatter(value);
-      line.append(miniLabel, track, chartValue);
-      bars.appendChild(line);
-    }
-
-    row.append(label, bars);
-    container.appendChild(row);
-  }
-}
-
-function renderBenchmarkCharts(models) {
-  renderGroupedChart(elements.latencyChart, models, [
+function renderOperationalBenchmark(payload) {
+  renderOperationalSummary(payload);
+  renderOperationalTable(payload.models);
+  renderGroupedChart(elements.latencyChart, payload.models, [
     { field: "avg_latency_ms", label: "avg" },
     { field: "p50_latency_ms", label: "p50", className: "alt" },
     { field: "p95_latency_ms", label: "p95", className: "warn" },
   ], formatMs);
-  renderGroupedChart(elements.tokensChart, models, [
+  renderGroupedChart(elements.tokensChart, payload.models, [
     { field: "avg_tokens_input", label: "input" },
     { field: "avg_tokens_output", label: "output", className: "alt" },
     { field: "avg_tokens_total", label: "total", className: "warn" },
   ], (value) => formatNumber(value, 0));
-  renderGroupedChart(elements.throughputChart, models, [
+  renderGroupedChart(elements.throughputChart, payload.models, [
     { field: "avg_tokens_per_second", label: "tok/s" },
   ], formatTokensPerSecond);
-  renderGroupedChart(elements.reliabilityChart, models, [
+  renderGroupedChart(elements.reliabilityChart, payload.models, [
     { field: "success_rate", label: "success" },
     { field: "error_rate", label: "error", className: "danger" },
     { field: "timeout_rate", label: "timeout", className: "warn" },
   ], formatRate);
 }
 
-function renderOperationalBenchmark(payload) {
-  renderBenchmarkSummary(payload);
-  renderBenchmarkTable(payload.models);
-  renderBenchmarkCharts(payload.models);
-}
-
 function renderTemperatureSummary(items) {
-  const payload = { models: items, count: null };
   const totalRuns = items.reduce((total, item) => total + (numberOrNull(item.runs) || 0), 0);
   elements.temperatureTotalRuns.textContent = formatNumber(totalRuns);
-  elements.temperatureFastestAvgLatency.textContent = formatModelMetric(
-    pickByMetric(payload.models, "avg_latency_ms", "min"),
-    "avg_latency_ms",
-    formatMs,
-  );
-  elements.temperatureBestP95Latency.textContent = formatModelMetric(
-    pickByMetric(payload.models, "p95_latency_ms", "min"),
-    "p95_latency_ms",
-    formatMs,
-  );
-  elements.temperatureHighestOutputTokens.textContent = formatModelMetric(
-    pickByMetric(payload.models, "avg_tokens_output", "max"),
-    "avg_tokens_output",
-    (value) => formatNumber(value, 0),
-  );
-  elements.temperatureHighestErrorRate.textContent = formatModelMetric(
-    pickByMetric(payload.models, "error_rate", "max"),
-    "error_rate",
-    formatRate,
-  );
+  elements.temperatureFastestAvgLatency.textContent = formatModelMetric(pickByMetric(items, "avg_latency_ms", "min"), "avg_latency_ms", formatMs);
+  elements.temperatureBestP95Latency.textContent = formatModelMetric(pickByMetric(items, "p95_latency_ms", "min"), "p95_latency_ms", formatMs);
+  elements.temperatureHighestOutputTokens.textContent = formatModelMetric(pickByMetric(items, "avg_tokens_output", "max"), "avg_tokens_output", (value) => formatNumber(value, 0));
+  elements.temperatureHighestErrorRate.textContent = formatModelMetric(pickByMetric(items, "error_rate", "max"), "error_rate", formatRate);
 }
 
 function renderTemperatureTable(items) {
@@ -720,7 +780,9 @@ function renderTemperatureTable(items) {
   }
 }
 
-function renderTemperatureCharts(items) {
+function renderTemperatureBenchmark(items) {
+  renderTemperatureSummary(items);
+  renderTemperatureTable(items);
   renderGroupedChart(elements.temperatureLatencyChart, items, [
     { field: "avg_latency_ms", label: "avg" },
     { field: "p50_latency_ms", label: "p50", className: "alt" },
@@ -740,38 +802,22 @@ function renderTemperatureCharts(items) {
   ], formatRate);
 }
 
-function renderTemperatureBenchmark(items) {
-  renderTemperatureSummary(items);
-  renderTemperatureTable(items);
-  renderTemperatureCharts(items);
-}
-
 async function loadSavedRuns() {
   updateBackendLinks();
-  const benchmarkPath = "/api/runs/operational-stats";
-  const benchmarkUrl = `${backendBaseUrl()}${benchmarkPath}`;
-  setStatus(elements.chatRunsStatus, "Loading operational benchmark...", "muted");
+  setStatus(elements.chatRunsStatus, "Cargando runs guardados...", "muted");
   elements.chatRunsLoadButton.disabled = true;
-  elements.benchmarkTableBody.innerHTML = '<tr><td colspan="14">Loading operational benchmark...</td></tr>';
-  [elements.latencyChart, elements.tokensChart, elements.throughputChart, elements.reliabilityChart].forEach((container) => {
-    container.className = "grouped-chart empty";
-    container.textContent = "Loading operational benchmark...";
-  });
+  elements.benchmarkTableBody.innerHTML = '<tr><td colspan="14">Cargando...</td></tr>';
   elements.chatRunsRaw.textContent = "-";
 
   try {
-    const { data, latencyMs } = await backendFetch(benchmarkPath);
+    const { data, latencyMs } = await backendFetch("/api/runs/operational-stats");
     const payload = normalizeOperationalBenchmarkPayload(data);
     renderOperationalBenchmark(payload);
-    elements.chatRunsRaw.textContent = prettyJson({ ...data, count: payload.models.length, models: payload.models });
-    setStatus(
-      elements.chatRunsStatus,
-      payload.models.length ? `Operational benchmark loaded: ${payload.models.length} modelos (${latencyMs} ms)` : "No operational runs found yet.",
-      "ok",
-    );
+    elements.chatRunsRaw.textContent = prettyJson({ ...data, models: payload.models });
+    setStatus(elements.chatRunsStatus, `Runs guardados cargados: ${payload.models.length} modelos (${latencyMs} ms)`, "ok");
   } catch (error) {
-    setStatus(elements.chatRunsStatus, `Error loading operational benchmark from ${benchmarkUrl || "/api/runs/operational-stats"}`, "error");
-    elements.benchmarkTableBody.innerHTML = '<tr><td colspan="14">No se pudo cargar el benchmark operacional.</td></tr>';
+    setStatus(elements.chatRunsStatus, "Error cargando runs guardados", "error");
+    elements.benchmarkTableBody.innerHTML = '<tr><td colspan="14">No se pudo cargar /api/runs/operational-stats.</td></tr>';
     [elements.latencyChart, elements.tokensChart, elements.throughputChart, elements.reliabilityChart].forEach((container) => {
       container.className = "grouped-chart empty";
       container.textContent = "No se pudo conectar al backend.";
@@ -784,24 +830,13 @@ async function loadSavedRuns() {
 
 async function loadTemperatureRuns() {
   updateBackendLinks();
-  const benchmarkPath = "/api/runs/operational-stats";
-  const benchmarkUrl = `${backendBaseUrl()}${benchmarkPath}`;
-  setStatus(elements.temperatureRunsStatus, "Loading temperature benchmark...", "muted");
+  setStatus(elements.temperatureRunsStatus, "Cargando runs por temperatura...", "muted");
   elements.temperatureRunsLoadButton.disabled = true;
-  elements.temperatureBenchmarkTableBody.innerHTML = '<tr><td colspan="13">Loading temperature benchmark...</td></tr>';
-  [
-    elements.temperatureLatencyChart,
-    elements.temperatureTokensChart,
-    elements.temperatureThroughputChart,
-    elements.temperatureReliabilityChart,
-  ].forEach((container) => {
-    container.className = "grouped-chart empty";
-    container.textContent = "Loading temperature benchmark...";
-  });
+  elements.temperatureBenchmarkTableBody.innerHTML = '<tr><td colspan="13">Cargando...</td></tr>';
   elements.temperatureRunsRaw.textContent = "-";
 
   try {
-    const { data, latencyMs } = await backendFetch(benchmarkPath);
+    const { data, latencyMs } = await backendFetch("/api/runs/operational-stats");
     const payload = normalizeOperationalBenchmarkPayload(data);
     renderTemperatureBenchmark(payload.by_model_temperature);
     elements.temperatureRunsRaw.textContent = prettyJson({
@@ -810,14 +845,10 @@ async function loadTemperatureRuns() {
       count: payload.by_model_temperature.length,
       by_model_temperature: payload.by_model_temperature,
     });
-    setStatus(
-      elements.temperatureRunsStatus,
-      payload.by_model_temperature.length ? `Temperature benchmark loaded: ${payload.by_model_temperature.length} configuraciones (${latencyMs} ms)` : "No hay runs con temperatura guardada todavia.",
-      "ok",
-    );
+    setStatus(elements.temperatureRunsStatus, `Runs por temperatura cargados: ${payload.by_model_temperature.length} configuraciones (${latencyMs} ms)`, "ok");
   } catch (error) {
-    setStatus(elements.temperatureRunsStatus, `Error loading temperature benchmark from ${benchmarkUrl || "/api/runs/operational-stats"}`, "error");
-    elements.temperatureBenchmarkTableBody.innerHTML = '<tr><td colspan="13">No se pudo cargar el benchmark por temperatura.</td></tr>';
+    setStatus(elements.temperatureRunsStatus, "Error cargando runs por temperatura", "error");
+    elements.temperatureBenchmarkTableBody.innerHTML = '<tr><td colspan="13">No se pudo cargar /api/runs/operational-stats.</td></tr>';
     [
       elements.temperatureLatencyChart,
       elements.temperatureTokensChart,
@@ -833,73 +864,9 @@ async function loadTemperatureRuns() {
   }
 }
 
-async function sendChat() {
-  updateBackendLinks();
-  setChatPending(true);
-
-  const payload = {
-    message: elements.messageInput.value.trim(),
-    provider: selectedModelProvider(),
-    model: elements.modelSelect.value,
-    temperature: numberOrNull(elements.temperatureSelect.value),
-    use_rag: elements.useRagInput.checked,
-  };
-
-  if (!payload.message) {
-    setStatus(elements.chatStatus, "Escribe un mensaje antes de enviar", "error");
-    setChatPending(false);
-    return;
-  }
-
-  if (!String(payload.model || "").trim()) {
-    setStatus(elements.chatStatus, "Selecciona un modelo valido antes de enviar", "error");
-    elements.answerText.textContent = "La UI necesita cargar o seleccionar un modelo explicito.";
-    setChatPending(false);
-    return;
-  }
-
-  setStatus(elements.chatStatus, "Enviando a /chat...", "muted");
-  elements.chatRaw.textContent = prettyJson({ request: payload });
-  elements.answerText.textContent = "Esperando respuesta...";
-  clearChatOutput();
-  renderEvidence({});
-
-  try {
-    const { data, latencyMs } = await backendFetch("/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    setStatus(elements.chatStatus, "Respuesta recibida", "ok");
-    elements.retrievalStatus.textContent = valueOrDash(data.retrieval_status);
-    elements.evidenceUsed.textContent = valueOrDash(data.evidence_used);
-    elements.fallbackUsed.textContent = valueOrDash(data.fallback_used);
-    elements.chunksFound.textContent = String(Array.isArray(data.chunks) ? data.chunks.length : 0);
-    elements.providerModel.textContent = `${valueOrDash(data.provider)} / ${valueOrDash(data.model)}`;
-    elements.responseTemperature.textContent = formatTemperature(data.temperature);
-    elements.traceId.textContent = valueOrDash(data.trace_id || data.request_id);
-    elements.chatLatency.textContent = String(latencyMs);
-    elements.answerText.textContent = valueOrDash(data.answer);
-    elements.warningsText.textContent = Array.isArray(data.warnings) && data.warnings.length ? data.warnings.join("\n") : "-";
-    elements.chatRaw.textContent = prettyJson(summarizeChatPayload(data));
-    renderEvidence(data);
-  } catch (error) {
-    setStatus(elements.chatStatus, "Error llamando a /chat", "error");
-    clearChatOutput();
-    elements.chatLatency.textContent = error.latencyMs ? String(error.latencyMs) : "-";
-    elements.answerText.textContent = visibleChatErrorMessage(error);
-    elements.warningsText.textContent = "La llamada al backend ha fallado.";
-    elements.chatRaw.textContent = error.data ? prettyJson(error.data) : error.message;
-    renderEvidence({});
-  } finally {
-    try {
-      await loadSavedRuns();
-      await loadTemperatureRuns();
-    } catch {
-      // La UI principal no debe quedarse bloqueada si falla la carga de trazas.
-    }
-    setChatPending(false);
+function addEventListenerIfPresent(element, eventName, handler) {
+  if (element) {
+    element.addEventListener(eventName, handler);
   }
 }
 
@@ -920,6 +887,8 @@ if (savedTemperature && Array.from(elements.temperatureSelect.options).some((opt
 
 updateBackendLinks();
 setActiveTab("chat");
+renderChatMessages();
+
 elements.tabButtons.forEach((button) => {
   button.addEventListener("click", () => setActiveTab(button.dataset.tabTarget));
 });
@@ -943,9 +912,8 @@ elements.docsLink.addEventListener("click", (event) => {
 });
 elements.healthButton.addEventListener("click", checkHealth);
 elements.chatButton.addEventListener("click", sendChat);
-elements.chatRunsLoadButton.addEventListener("click", loadSavedRuns);
-elements.temperatureRunsLoadButton.addEventListener("click", loadTemperatureRuns);
+addEventListenerIfPresent(elements.chatRunsLoadButton, "click", loadSavedRuns);
+addEventListenerIfPresent(elements.temperatureRunsLoadButton, "click", loadTemperatureRuns);
+
 loadChatModels().catch(() => {});
 loadChatOptions().catch(() => {});
-loadSavedRuns().catch(() => {});
-loadTemperatureRuns().catch(() => {});

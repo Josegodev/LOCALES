@@ -54,7 +54,7 @@
       <div id="tab-chat" class="tab-panel active" data-tab-panel="chat">
         <section class="grid-two">
           <article class="panel">
-            <h2>Chat / RAG test</h2>
+            <h2>Chat Mode</h2>
             <label for="messageInput">Mensaje</label>
             <textarea id="messageInput" rows="5">Que es un transformer?</textarea>
             <label for="modelSelect">Modelo</label>
@@ -85,9 +85,9 @@
             </p>
             <label class="checkbox">
               <input id="useRagInput" type="checkbox" checked />
-              use_rag=true
+              RAG activo
             </label>
-            <button id="chatButton" type="button">Send</button>
+            <button id="chatButton" type="button">Enviar</button>
           </article>
 
           <article class="panel">
@@ -105,6 +105,8 @@
         <section class="panel">
           <h2>Respuesta /chat</h2>
           <div id="chatStatus" class="status muted">Sin ejecutar</div>
+          <h3>Conversacion</h3>
+          <div id="chatMessages" class="chat-messages"></div>
           <dl class="metrics wide">
             <div><dt>retrieval_status</dt><dd id="retrievalStatus">-</dd></div>
             <div><dt>evidence_used</dt><dd id="evidenceUsed">-</dd></div>
@@ -150,7 +152,7 @@
         <section class="panel benchmark-panel">
           <div class="section-heading-row">
             <div>
-              <h2>Operational Benchmark</h2>
+              <h2>Runs guardados</h2>
               <p class="muted-text">
                 Vista de solo lectura sobre estadisticas operacionales ya calculadas por el backend.
               </p>
