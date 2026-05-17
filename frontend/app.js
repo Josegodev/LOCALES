@@ -33,6 +33,8 @@ const elements = {
   runsFilterProvider: document.querySelector("#runsFilterProvider"),
   runsFilterUseRag: document.querySelector("#runsFilterUseRag"),
   runsFilterStatus: document.querySelector("#runsFilterStatus"),
+  runsFilterDateFrom: document.querySelector("#runsFilterDateFrom"),
+  runsFilterDateTo: document.querySelector("#runsFilterDateTo"),
   runsTotalRuns: document.querySelector("#runsTotalRuns"),
   runsOkRuns: document.querySelector("#runsOkRuns"),
   runsErrorRate: document.querySelector("#runsErrorRate"),
@@ -58,6 +60,9 @@ const elements = {
   runDetailRetrievalStatus: document.querySelector("#runDetailRetrievalStatus"),
   runDetailFallbackUsed: document.querySelector("#runDetailFallbackUsed"),
   runDetailErrorCode: document.querySelector("#runDetailErrorCode"),
+  runDetailErrorMessage: document.querySelector("#runDetailErrorMessage"),
+  runDetailChunkIds: document.querySelector("#runDetailChunkIds"),
+  runDetailSourceFilenames: document.querySelector("#runDetailSourceFilenames"),
   runDetailConfig: document.querySelector("#runDetailConfig"),
   runDetailEvidence: document.querySelector("#runDetailEvidence"),
   runDetailError: document.querySelector("#runDetailError"),
@@ -71,6 +76,10 @@ const fallbackModels = [
   { provider: "openai", model: "gpt-5.4-mini", label: "OpenAI / gpt-5.4-mini" },
   { provider: "openai", model: "gpt-4o-mini", label: "OpenAI / gpt-4o-mini" },
 ];
+
+const hiddenModelNames = new Set([
+  "qwen2.5-coder:1.5b-base",
+]);
 
 const chatState = {
   messages: [],
@@ -240,7 +249,8 @@ function modelOptionValue(item) {
 
 function replaceModelOptions(items) {
   elements.modelSelect.innerHTML = "";
-  const models = Array.isArray(items) && items.length ? items : fallbackModels;
+  const models = (Array.isArray(items) && items.length ? items : fallbackModels)
+    .filter((item) => item?.model && !hiddenModelNames.has(String(item.model).trim()));
   const seen = new Set();
   for (const item of models) {
     if (!item?.provider || !item?.model) continue;
@@ -570,6 +580,18 @@ function rate(count, total) {
   return count / total;
 }
 
+function parseRunDate(run) {
+  const rawValue = run?.created_at || run?.timestamp;
+  if (typeof rawValue !== "string" || !rawValue.trim()) {
+    return null;
+  }
+  const parsed = new Date(rawValue);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed;
+}
+
 function matchesRunFilters(run) {
   if (elements.runsFilterModel.value !== "all" && (run.model || "") !== elements.runsFilterModel.value) {
     return false;
@@ -583,6 +605,25 @@ function matchesRunFilters(run) {
   if (elements.runsFilterUseRag.value !== "all") {
     const wanted = elements.runsFilterUseRag.value === "true";
     if (run.use_rag !== wanted) {
+      return false;
+    }
+  }
+  const runDate = parseRunDate(run);
+  if (elements.runsFilterDateFrom.value) {
+    if (runDate === null) {
+      return false;
+    }
+    const fromDate = new Date(`${elements.runsFilterDateFrom.value}T00:00:00`);
+    if (runDate < fromDate) {
+      return false;
+    }
+  }
+  if (elements.runsFilterDateTo.value) {
+    if (runDate === null) {
+      return false;
+    }
+    const toDate = new Date(`${elements.runsFilterDateTo.value}T23:59:59.999`);
+    if (runDate > toDate) {
       return false;
     }
   }
@@ -611,6 +652,15 @@ function setSelectOptions(select, values, placeholder = "All") {
   } else {
     select.value = "all";
   }
+}
+
+function resetRunsFiltersToDefault() {
+  elements.runsFilterModel.value = "all";
+  elements.runsFilterProvider.value = "all";
+  elements.runsFilterUseRag.value = "all";
+  elements.runsFilterStatus.value = "all";
+  elements.runsFilterDateFrom.value = "";
+  elements.runsFilterDateTo.value = "";
 }
 
 function renderRunsFilters() {
@@ -759,6 +809,7 @@ function renderRunsTable(runs) {
     row.dataset.traceId = run.trace_id || "";
     row.innerHTML = `
       <td>${runCellText(run.created_at || run.timestamp)}</td>
+      <td>${runCellText(run.trace_id)}</td>
       <td>${runCellText(run.model)}</td>
       <td>${runCellText(run.provider)}</td>
       <td>${runCellText(run.use_rag)}</td>
@@ -766,9 +817,8 @@ function renderRunsTable(runs) {
       <td>${runCellText(run.latency_ms, (value) => Math.round(value))}</td>
       <td>${runCellText(run.tokens_total, (value) => Number(value).toFixed(0))}</td>
       <td>${runCellText(run.output_tokens_per_second, (value) => Number(value).toFixed(1))}</td>
-      <td>${runCellText(run.status)}</td>
       <td>${runCellText(run.fallback_used)}</td>
-      <td>${runCellText(run.trace_id)}</td>
+      <td>${runCellText(run.status)}</td>
     `;
     row.addEventListener("click", () => openRunDetail(run.trace_id));
     elements.runsTableBody.appendChild(row);
@@ -788,10 +838,13 @@ async function loadRunsDashboard() {
   try {
     const [{ data: statsData }, { data: runsData }] = await Promise.all([
       fetchJsonWithLatency(endpoint("/api/chat-runs/stats")),
-      fetchJsonWithLatency(endpoint("/api/chat-runs?limit=100")),
+      fetchJsonWithLatency(endpoint("/api/chat-runs?limit=1000")),
     ]);
     runsState.stats = statsData;
     runsState.runs = Array.isArray(runsData?.items) ? runsData.items : [];
+    if (!runsState.loaded) {
+      resetRunsFiltersToDefault();
+    }
     runsState.loaded = true;
     renderRunsFilters();
     applyRunsFilters();
@@ -800,6 +853,9 @@ async function loadRunsDashboard() {
     runsState.stats = null;
     runsState.runs = [];
     runsState.filteredRuns = [];
+    if (!runsState.loaded) {
+      resetRunsFiltersToDefault();
+    }
     renderRunsFilters();
     applyRunsFilters();
     setStatus(elements.runsStatus, visibleChatErrorMessage(error), "error");
@@ -821,6 +877,9 @@ function renderRunDetail(detail) {
   elements.runDetailRetrievalStatus.textContent = valueOrDash(detail.retrieval_status);
   elements.runDetailFallbackUsed.textContent = valueOrDash(detail.fallback_used);
   elements.runDetailErrorCode.textContent = valueOrDash(detail.error_code);
+  elements.runDetailErrorMessage.textContent = valueOrDash(detail.error_message);
+  elements.runDetailChunkIds.textContent = Array.isArray(detail.chunk_ids) && detail.chunk_ids.length ? detail.chunk_ids.join(", ") : "n/a";
+  elements.runDetailSourceFilenames.textContent = Array.isArray(detail.source_filenames) && detail.source_filenames.length ? detail.source_filenames.join(", ") : "n/a";
   elements.runDetailConfig.textContent = prettyJson({
     requested_model: detail.requested_model,
     temperature: detail.temperature,
@@ -902,6 +961,8 @@ function init() {
     elements.runsFilterProvider,
     elements.runsFilterUseRag,
     elements.runsFilterStatus,
+    elements.runsFilterDateFrom,
+    elements.runsFilterDateTo,
   ].forEach((select) => {
     select.addEventListener("change", applyRunsFilters);
   });

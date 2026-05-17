@@ -149,6 +149,14 @@
             <option value="error">error</option>
           </select>
         </label>
+        <label>
+          Date from
+          <input id="runsFilterDateFrom" type="date">
+        </label>
+        <label>
+          Date to
+          <input id="runsFilterDateTo" type="date">
+        </label>
       </section>
 
       <section class="metric-card-grid">
@@ -188,6 +196,7 @@
             <thead>
               <tr>
                 <th>created_at</th>
+                <th>trace_id</th>
                 <th>model</th>
                 <th>provider</th>
                 <th>use_rag</th>
@@ -195,9 +204,8 @@
                 <th>latency_ms</th>
                 <th>tokens_total</th>
                 <th>output_tokens_per_second</th>
-                <th>status</th>
                 <th>fallback_used</th>
-                <th>trace_id</th>
+                <th>status</th>
               </tr>
             </thead>
             <tbody id="runsTableBody">
@@ -231,6 +239,9 @@
         <div><dt>retrieval_status</dt><dd id="runDetailRetrievalStatus">n/a</dd></div>
         <div><dt>fallback_used</dt><dd id="runDetailFallbackUsed">n/a</dd></div>
         <div><dt>error_code</dt><dd id="runDetailErrorCode">n/a</dd></div>
+        <div><dt>error_message</dt><dd id="runDetailErrorMessage">n/a</dd></div>
+        <div><dt>chunk_ids</dt><dd id="runDetailChunkIds">n/a</dd></div>
+        <div><dt>source_filenames</dt><dd id="runDetailSourceFilenames">n/a</dd></div>
       </dl>
       <h2>Prompt / config</h2>
       <pre id="runDetailConfig" class="output small">n/a</pre>
