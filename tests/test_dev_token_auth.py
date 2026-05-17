@@ -1,7 +1,9 @@
+import app.main as app_main
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -13,6 +15,16 @@ FRONTEND_INDEX_HTML = REPO_ROOT / "frontend" / "index.html"
 
 class DevTokenAuthTests(unittest.TestCase):
     CHAT_PAYLOAD = {"message": "hola", "provider": "ollama", "model": "granite4.1:8b"}
+
+    def _build_cors_test_app(self) -> FastAPI:
+        cors_app = FastAPI()
+        app_main._configure_cors(cors_app)
+
+        @cors_app.post("/chat")
+        def chat() -> dict:
+            return {"status": "ok"}
+
+        return cors_app
 
     def test_health_remains_open_without_token(self):
         with patch("app.auth.settings.jose_dev_token", "test-dev-token"):
@@ -162,18 +174,52 @@ class DevTokenAuthTests(unittest.TestCase):
         self.assertEqual(response.json()["items"][0]["model"], "granite4.1:8b")
         self.assertEqual(response.json()["items"][1]["provider"], "openai")
 
-    def test_chat_cors_allows_lan_dev_frontend_port(self):
-        response = TestClient(app).options(
-            "/chat",
-            headers={
-                "Origin": "http://192.168.1.20:4177",
-                "Access-Control-Request-Method": "POST",
-                "Access-Control-Request-Headers": "content-type",
-            },
-        )
+    def test_chat_cors_allows_configured_public_origin(self):
+        with patch("app.main.settings.app_env", "prod"):
+            with patch("app.main.settings.frontend_allowed_origins", return_value=["https://example-frontend.com"]):
+                response = TestClient(self._build_cors_test_app()).options(
+                    "/chat",
+                    headers={
+                        "Origin": "https://example-frontend.com",
+                        "Access-Control-Request-Method": "POST",
+                        "Access-Control-Request-Headers": "authorization,content-type",
+                    },
+                )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.headers["access-control-allow-origin"], "http://192.168.1.20:4177")
+        self.assertEqual(response.headers["access-control-allow-origin"], "https://example-frontend.com")
+        self.assertIn("Authorization", response.headers["access-control-allow-headers"])
+        self.assertIn("Content-Type", response.headers["access-control-allow-headers"])
+
+    def test_chat_cors_blocks_non_listed_origin(self):
+        with patch("app.main.settings.app_env", "prod"):
+            with patch("app.main.settings.frontend_allowed_origins", return_value=["https://example-frontend.com"]):
+                response = TestClient(self._build_cors_test_app()).options(
+                    "/chat",
+                    headers={
+                        "Origin": "https://forbidden-frontend.com",
+                        "Access-Control-Request-Method": "POST",
+                        "Access-Control-Request-Headers": "authorization",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn("access-control-allow-origin", response.headers)
+
+    def test_chat_cors_uses_local_fallback_only_in_local_env(self):
+        with patch("app.main.settings.app_env", "local"):
+            with patch("app.main.settings.frontend_allowed_origins", return_value=[]):
+                response = TestClient(self._build_cors_test_app()).options(
+                    "/chat",
+                    headers={
+                        "Origin": "http://localhost:5173",
+                        "Access-Control-Request-Method": "POST",
+                        "Access-Control-Request-Headers": "content-type",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["access-control-allow-origin"], "http://localhost:5173")
 
     def test_saved_eval_runs_endpoint_is_open_in_local_open_mode(self):
         with patch("app.auth.settings.chat_auth_mode", "local_open"):

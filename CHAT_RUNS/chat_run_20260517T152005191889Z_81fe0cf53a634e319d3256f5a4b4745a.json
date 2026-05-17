@@ -1,0 +1,59 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "81fe0cf53a634e319d3256f5a4b4745a",
+  "created_at": "2026-05-17T15:20:05.191889+00:00",
+  "timestamp": "2026-05-17T15:20:05.191889+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "\u00bfQu\u00e9 informaci\u00f3n aporta trace_id en una ejecuci\u00f3n?",
+  "response": "Seg\u00fan la documentaci\u00f3n del AgentRuntime, en el paso 15, se menciona que si `request.options.agent_mode == \"proposal_only\"`, persiste la proposal por `trace_id`. Esto sugiere que `trace_id` se utiliza para identificar y persistir una propuesta (proposal) cuando se ejecuta en modo de propuesta (`agent_mode=\"proposal_only\"`).\nAdem\u00e1s, en el paso 14, se menciona que si `dry_run=True`, registra un paso de tool como `skipped` con `executed=False`. Esto sugiere que `trace_id` tambi\u00e9n se utiliza para rastrear y registrar la ejecuci\u00f3n (o no ejecuci\u00f3n) de una herramienta (`tool`) en el runtime.\nEn resumen, `trace_id` parece utilizarse para identificar y persistir propuestas, as\u00ed como para rastrear y registrar la ejecuci\u00f3n de herramientas en el runtime.",
+  "model": "llama3.1:8b",
+  "provider": "ollama",
+  "requested_model": "llama3.1:8b",
+  "temperature": 0.7,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.7,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    202,
+    223,
+    245
+  ],
+  "document_ids": [
+    4,
+    10,
+    18
+  ],
+  "source_filenames": [
+    "EVOLUTION_MAP.md",
+    "architecture.md",
+    "orchestrator.md"
+  ],
+  "tokens_input": 1569,
+  "tokens_output": 189,
+  "tokens_total": 1758,
+  "prompt_eval_count": 1569,
+  "eval_count": 189,
+  "prompt_eval_duration": 13904458,
+  "eval_duration": 2445753688,
+  "total_duration": 2601910350,
+  "load_duration": 68455312,
+  "output_tokens_per_second": 77.2768,
+  "latency_ms": 2611,
+  "generation_latency_ms": 2603,
+  "retrieval_latency_ms": 5,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

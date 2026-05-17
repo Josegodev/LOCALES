@@ -1,0 +1,59 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "7ef15edc894e43369ee915b87e055b88",
+  "created_at": "2026-05-17T17:22:38.787085+00:00",
+  "timestamp": "2026-05-17T17:22:38.787085+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "que es el self rag?",
+  "response": "El **Self-Reflective Retrieval-Augmented Generation (SELF-RAG)** es un marco que mejora la calidad y factualidad de los modelos de lenguaje grandes (LLMs) mediante la recuperaci\u00f3n de informaci\u00f3n relevante y la reflexi\u00f3n propia. Este enfoque permite a un \u00fanico modelo adaptarse din\u00e1micamente para decidir cu\u00e1ndo es necesario realizar una recuperaci\u00f3n, si las pasajes recuperadas son relevantes y c\u00f3mo incorporar adecuadamente los resultados en la generaci\u00f3n de respuesta, mejorando as\u00ed la versatilidad del modelo y reduciendo la aparici\u00f3n de respuestas con informaci\u00f3n incorrecta.",
+  "model": "granite4.1:8b",
+  "provider": "ollama",
+  "requested_model": "granite4.1:8b",
+  "temperature": 0.7,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.7,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    418,
+    567,
+    376
+  ],
+  "document_ids": [
+    69,
+    71,
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf",
+    "Language Models can teach themselves to use tools2023.pdf",
+    "selg-rag. learning to retrievee, generate and critique through self reflection.pdf"
+  ],
+  "tokens_input": 1099,
+  "tokens_output": 133,
+  "tokens_total": 1232,
+  "prompt_eval_count": 1099,
+  "eval_count": 133,
+  "prompt_eval_duration": 347715156,
+  "eval_duration": 1864926946,
+  "total_duration": 3593862770,
+  "load_duration": 1340906975,
+  "output_tokens_per_second": 71.3165,
+  "latency_ms": 3604,
+  "generation_latency_ms": 3595,
+  "retrieval_latency_ms": 6,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

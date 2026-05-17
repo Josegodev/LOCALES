@@ -1,0 +1,57 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "99212ee00b554d0097f44547bdd4ad73",
+  "created_at": "2026-05-17T14:21:20.233826+00:00",
+  "timestamp": "2026-05-17T14:21:20.233826+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "que es un transformer?",
+  "response": "La evidencia proporciona informaci\u00f3n sobre el art\u00edculo \"Attention Is All You Need\" de Ashish Vaswani et al. En la introducci\u00f3n del art\u00edculo se describe una nueva arquitectura de red neuronal llamada Transformer, que se basa \u00fanicamente en mecanismos de atenci\u00f3n y no utiliza recurrencia ni convoluciones.\nPor lo tanto, la respuesta es: La evidencia indica que un Transformer es una arquitectura de red neuronal que se basa en mecanismos de atenci\u00f3n.",
+  "model": "llama3.1:8b",
+  "provider": "ollama",
+  "requested_model": "llama3.1:8b",
+  "temperature": 0.7,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.7,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    375,
+    552,
+    553
+  ],
+  "document_ids": [
+    68,
+    70
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf",
+    "rag_knowledge_intensive_nlp_2021.pdf"
+  ],
+  "tokens_input": 1315,
+  "tokens_output": 108,
+  "tokens_total": 1423,
+  "prompt_eval_count": 1315,
+  "eval_count": 108,
+  "prompt_eval_duration": 360523217,
+  "eval_duration": 1360826902,
+  "total_duration": 3225970291,
+  "load_duration": 1464263493,
+  "output_tokens_per_second": 79.3635,
+  "latency_ms": 3236,
+  "generation_latency_ms": 3227,
+  "retrieval_latency_ms": 7,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

@@ -1,0 +1,57 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "1caf03bbc8804fe7bea38b2f2d2d082f",
+  "created_at": "2026-05-17T15:19:36.858982+00:00",
+  "timestamp": "2026-05-17T15:19:36.858982+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "\u00bfCu\u00e1l es el flujo completo desde Request hasta Response en este sistema?",
+  "response": ". La evidencia proporcionada no describe completamente el flujo desde la solicitud hasta la respuesta del sistema, por lo que no puedo proporcionar una respuesta precisa. Sin embargo, se menciona que el sistema utiliza Retrieval-Augmented Generation (RAG) y Self-Reflective Retrieval-Augmented Generation (SELF-RAG), pero no se describe en detalle c\u00f3mo funciona el flujo de solicitudes y respuestas.",
+  "model": "llama3.1:8b",
+  "provider": "ollama",
+  "requested_model": "llama3.1:8b",
+  "temperature": 0.7,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.7,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    676,
+    567,
+    500
+  ],
+  "document_ids": [
+    71,
+    70
+  ],
+  "source_filenames": [
+    "rag_knowledge_intensive_nlp_2021.pdf",
+    "selg-rag. learning to retrievee, generate and critique through self reflection.pdf"
+  ],
+  "tokens_input": 1103,
+  "tokens_output": 92,
+  "tokens_total": 1195,
+  "prompt_eval_count": 1103,
+  "eval_count": 92,
+  "prompt_eval_duration": 290654130,
+  "eval_duration": 1174212222,
+  "total_duration": 1571585288,
+  "load_duration": 72926301,
+  "output_tokens_per_second": 78.3504,
+  "latency_ms": 1582,
+  "generation_latency_ms": 1573,
+  "retrieval_latency_ms": 7,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

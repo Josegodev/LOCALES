@@ -1,0 +1,59 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "d64bfc99507f41f5bf4ee4f38c38d9e4",
+  "created_at": "2026-05-17T15:19:59.983203+00:00",
+  "timestamp": "2026-05-17T15:19:59.983203+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "\u00bfQu\u00e9 informaci\u00f3n aporta trace_id en una ejecuci\u00f3n?",
+  "response": "Seg\u00fan la evidencia documental proporcionada, el `trace_id` se utiliza para persistir una propuesta cuando `agent_mode=\"proposal_only\"` y `dry_run=True`. En este caso, el runtime devuelve una respuesta con `executed=false`, `execution_allowed=false` y `execution_state=PROPOSED`, en lugar de ejecutar la herramienta.\nLa evidencia no proporciona informaci\u00f3n sobre qu\u00e9 informaci\u00f3n aporta el `trace_id` en una ejecuci\u00f3n. Sin embargo, se puede inferir que el `trace_id` se utiliza para identificar y persistir la propuesta en un estado espec\u00edfico (en este caso, \"proposed\") durante la ejecuci\u00f3n del runtime.\nRespuesta:",
+  "model": "llama3.1:8b",
+  "provider": "ollama",
+  "requested_model": "llama3.1:8b",
+  "temperature": 0.7,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.7,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    202,
+    223,
+    245
+  ],
+  "document_ids": [
+    4,
+    10,
+    18
+  ],
+  "source_filenames": [
+    "EVOLUTION_MAP.md",
+    "architecture.md",
+    "orchestrator.md"
+  ],
+  "tokens_input": 1569,
+  "tokens_output": 154,
+  "tokens_total": 1723,
+  "prompt_eval_count": 1569,
+  "eval_count": 154,
+  "prompt_eval_duration": 418328515,
+  "eval_duration": 1951497292,
+  "total_duration": 2500420854,
+  "load_duration": 72174334,
+  "output_tokens_per_second": 78.9138,
+  "latency_ms": 2509,
+  "generation_latency_ms": 2502,
+  "retrieval_latency_ms": 5,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

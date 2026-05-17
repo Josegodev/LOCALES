@@ -1,0 +1,59 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "2894b811dd7e4642aff290de92b243fc",
+  "created_at": "2026-05-17T15:19:27.149567+00:00",
+  "timestamp": "2026-05-17T15:19:27.149567+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "\u00bfQu\u00e9 papel cumple el PolicyEngine?",
+  "response": "El PolicyEngine eval\u00faa si la policy permite que una acci\u00f3n sea ejecutada. A continuaci\u00f3n, se muestra el contrato critico del core donde se indica su funci\u00f3n:\n```\nPlannedAction\n-> PolicyEngine.evaluate(...)\n-> ToolRegistry.get(...)\n-> BaseTool.validate_input(...)\n-> BaseTool.run(...)\n-> BaseTool.validate_output(...)\n```",
+  "model": "llama3.1:8b",
+  "provider": "ollama",
+  "requested_model": "llama3.1:8b",
+  "temperature": 0.7,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.7,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    287,
+    221,
+    202
+  ],
+  "document_ids": [
+    35,
+    9,
+    4
+  ],
+  "source_filenames": [
+    "CONTRACT_POLICY_TOOLREGISTRY.md",
+    "EVOLUTION_MAP.md",
+    "planner_llm_augmentation.md"
+  ],
+  "tokens_input": 1529,
+  "tokens_output": 70,
+  "tokens_total": 1599,
+  "prompt_eval_count": 1529,
+  "eval_count": 70,
+  "prompt_eval_duration": 399501609,
+  "eval_duration": 912084900,
+  "total_duration": 1400744282,
+  "load_duration": 61224999,
+  "output_tokens_per_second": 76.7472,
+  "latency_ms": 1409,
+  "generation_latency_ms": 1402,
+  "retrieval_latency_ms": 5,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

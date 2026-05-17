@@ -1,0 +1,57 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "24379398e4574b3b8207a12407d1d252",
+  "created_at": "2026-05-17T19:07:34.029651+00:00",
+  "timestamp": "2026-05-17T19:07:34.029651+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "hola, responde solo OK",
+  "response": "OK",
+  "model": "llama3.1:8b",
+  "provider": "ollama",
+  "requested_model": "llama3.1:8b",
+  "temperature": 0.2,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.2,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    558,
+    375,
+    538
+  ],
+  "document_ids": [
+    70,
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf",
+    "rag_knowledge_intensive_nlp_2021.pdf"
+  ],
+  "tokens_input": 1222,
+  "tokens_output": 2,
+  "tokens_total": 1224,
+  "prompt_eval_count": 1222,
+  "eval_count": 2,
+  "prompt_eval_duration": 358129643,
+  "eval_duration": 15429371,
+  "total_duration": 1989539453,
+  "load_duration": 1611676550,
+  "output_tokens_per_second": 129.6229,
+  "latency_ms": 2004,
+  "generation_latency_ms": 1991,
+  "retrieval_latency_ms": 11,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

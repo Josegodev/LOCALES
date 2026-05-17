@@ -11,6 +11,10 @@ ENV_FILE = REPO_ROOT / ".env"
 
 class Settings(BaseSettings):
     app_env: str = "local"
+    frontend_allowed_origins_raw: str = Field(
+        default="",
+        validation_alias=AliasChoices("FRONTEND_ALLOWED_ORIGINS"),
+    )
     backend_url: str = Field(
         default="http://127.0.0.1:8000",
         validation_alias=AliasChoices("BACKEND_URL", "BACKEND_BASE_URL"),
@@ -46,6 +50,13 @@ class Settings(BaseSettings):
 
     def backend_base_url(self) -> str:
         return self.backend_url.rstrip("/")
+
+    def frontend_allowed_origins(self) -> list[str]:
+        return [
+            origin.strip()
+            for origin in self.frontend_allowed_origins_raw.split(",")
+            if origin.strip()
+        ]
 
     def rag_service_base_url(self) -> str:
         return self.rag_service_url.rstrip("/")

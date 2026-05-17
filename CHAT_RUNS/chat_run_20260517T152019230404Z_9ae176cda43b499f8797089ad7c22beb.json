@@ -1,0 +1,59 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "9ae176cda43b499f8797089ad7c22beb",
+  "created_at": "2026-05-17T15:20:19.230404+00:00",
+  "timestamp": "2026-05-17T15:20:19.230404+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "\u00bfQui\u00e9n dise\u00f1\u00f3 el m\u00f3dulo QuantumPlannerRuntime?",
+  "response": ". La evidencia proporcionada no menciona a nadie que haya dise\u00f1ado el m\u00f3dulo QuantumPlannerRuntime.",
+  "model": "llama3.1:8b",
+  "provider": "ollama",
+  "requested_model": "llama3.1:8b",
+  "temperature": 0.7,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.7,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    239,
+    240,
+    272
+  ],
+  "document_ids": [
+    13,
+    14,
+    28
+  ],
+  "source_filenames": [
+    "files_audit.md",
+    "repo_audit.md",
+    "session_log_docs_esp_sync.md"
+  ],
+  "tokens_input": 1467,
+  "tokens_output": 33,
+  "tokens_total": 1500,
+  "prompt_eval_count": 1467,
+  "eval_count": 33,
+  "prompt_eval_duration": 386209180,
+  "eval_duration": 409770722,
+  "total_duration": 901806190,
+  "load_duration": 84854765,
+  "output_tokens_per_second": 80.5328,
+  "latency_ms": 908,
+  "generation_latency_ms": 903,
+  "retrieval_latency_ms": 3,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

@@ -1,0 +1,59 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "3d655d586a3b456cbc61a370373287bf",
+  "created_at": "2026-05-17T15:18:35.712845+00:00",
+  "timestamp": "2026-05-17T15:18:35.712845+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "\u00bfQu\u00e9 funci\u00f3n tiene el orquestador en este sistema?",
+  "response": "El orquestador (AgentRuntime) es el \"orquestador central de ejecuci\u00f3n del runtime de producci\u00f3n\" y su funci\u00f3n es realizar la siguiente secuencia de acciones:\n1. Inicia una traza interna en memoria\n2. Pide al planner un `PlannedAction`\n3. Registra el paso del planner\n4. Valida que el planner devolvi\u00f3 un `PlannedAction` versionado\n5. Si el plan es `no_plan`, devuelve una respuesta estructurada `rejected`\n6. Si no, extrae `tool_name` y `payload`\n7. Pide autorizaci\u00f3n al `PolicyEngine`\n8. Registra el paso de policy\n9. Si la policy deniega, devuelve `rejected` estructurado\n10. Resuelve la tool desde el `ToolRegistry` de producci\u00f3n\n11. Registra el paso del registry\n12. Si falta, registra el paso como `error` y devuelve `error` estructurado\n13. Valida el payload planificado contra el contrato de la tool seleccionada\n14. Si `dry_run=True`, registra un paso de tool como `skipped` con `executed=False` y no ejecuta la tool\n15. Si `request.options.agent_mode == \"proposal_only\"`, persiste la proposal por `trace_id`\n16. Si no, ejecuta `tool.run(payload, context=context)`\n17. Valida la salida de la tool contra el contrato de la tool seleccionada\n18. Registra success o error para el paso de tool\n19. Devuelve `AgentResponse`",
+  "model": "llama3.1:8b",
+  "provider": "ollama",
+  "requested_model": "llama3.1:8b",
+  "temperature": 0.7,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.7,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    202,
+    245,
+    295
+  ],
+  "document_ids": [
+    4,
+    18,
+    37
+  ],
+  "source_filenames": [
+    "EVOLUTION_MAP.md",
+    "REFACTOR_AUDIT.md",
+    "orchestrator.md"
+  ],
+  "tokens_input": 1527,
+  "tokens_output": 332,
+  "tokens_total": 1859,
+  "prompt_eval_count": 1527,
+  "eval_count": 332,
+  "prompt_eval_duration": 408145871,
+  "eval_duration": 4187872365,
+  "total_duration": 6399720776,
+  "load_duration": 1688707214,
+  "output_tokens_per_second": 79.2765,
+  "latency_ms": 6415,
+  "generation_latency_ms": 6401,
+  "retrieval_latency_ms": 12,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

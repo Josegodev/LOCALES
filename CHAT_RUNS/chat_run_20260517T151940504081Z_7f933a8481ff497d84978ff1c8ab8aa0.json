@@ -1,0 +1,57 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "7f933a8481ff497d84978ff1c8ab8aa0",
+  "created_at": "2026-05-17T15:19:40.504081+00:00",
+  "timestamp": "2026-05-17T15:19:40.504081+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "\u00bfQu\u00e9 diferencia hay entre Planner, PolicyEngine y ToolRegistry?",
+  "response": ". La evidencia proporcionada no contiene informaci\u00f3n sobre la diferencia entre Planner, PolicyEngine y ToolRegistry.",
+  "model": "llama3.1:8b",
+  "provider": "ollama",
+  "requested_model": "llama3.1:8b",
+  "temperature": 0.7,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.7,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    726,
+    727,
+    202
+  ],
+  "document_ids": [
+    72,
+    4
+  ],
+  "source_filenames": [
+    "EVOLUTION_MAP.md",
+    "synergizing reasoning and acting in language models2023.pdf"
+  ],
+  "tokens_input": 1424,
+  "tokens_output": 29,
+  "tokens_total": 1453,
+  "prompt_eval_count": 1424,
+  "eval_count": 29,
+  "prompt_eval_duration": 383586196,
+  "eval_duration": 362619027,
+  "total_duration": 837820979,
+  "load_duration": 71325386,
+  "output_tokens_per_second": 79.9737,
+  "latency_ms": 847,
+  "generation_latency_ms": 839,
+  "retrieval_latency_ms": 6,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

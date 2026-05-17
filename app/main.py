@@ -26,31 +26,64 @@ from app.schemas import (
     TEMPERATURE_MAX,
     TEMPERATURE_MIN,
 )
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import ValidationError
 
 app = FastAPI(title="Local LLM Gateway")
 
-FRONTEND_DEV_ORIGINS = [
+LOCAL_FRONTEND_FALLBACK_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "http://192.168.1.20:3000",
-    "http://localhost:8080",
-    "http://127.0.0.1:8080",
 ]
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=FRONTEND_DEV_ORIGINS,
-    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1|192\.168\.1\.20):\d+$",
-    allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
-)
+
+def _resolve_cors_allowed_origins() -> list[str]:
+    configured_origins = settings.frontend_allowed_origins()
+    if configured_origins:
+        return configured_origins
+
+    app_env = settings.app_env.strip().lower()
+    if app_env in {"local", "dev"}:
+        return LOCAL_FRONTEND_FALLBACK_ORIGINS
+
+    return []
+
+
+def _configure_cors(application: FastAPI) -> None:
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=_resolve_cors_allowed_origins(),
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["*"],
+    )
+
+
+_configure_cors(app)
 app.include_router(runs_router, prefix="/api")
 app.include_router(chat_runs_router, prefix="/api")
+
+
+@app.middleware("http")
+async def log_rejected_cors_preflight(request: Request, call_next):
+    response = await call_next(request)
+
+    if request.method == "OPTIONS" and response.status_code == 400:
+        log_event(
+            component="http.cors",
+            event="cors_preflight_rejected",
+            level=30,
+            path=request.url.path,
+            origin=request.headers.get("origin"),
+            access_control_request_method=request.headers.get("access-control-request-method"),
+            access_control_request_headers=request.headers.get("access-control-request-headers"),
+        )
+
+    return response
 
 
 def _sync_chat_runtime_dependencies() -> None:

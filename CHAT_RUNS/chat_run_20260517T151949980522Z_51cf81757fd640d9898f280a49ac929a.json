@@ -1,0 +1,57 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "51cf81757fd640d9898f280a49ac929a",
+  "created_at": "2026-05-17T15:19:49.980522+00:00",
+  "timestamp": "2026-05-17T15:19:49.980522+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "\u00bfQu\u00e9 campos m\u00ednimos deber\u00eda guardar cada ejecuci\u00f3n de chat?",
+  "response": ".",
+  "model": "llama3.1:8b",
+  "provider": "ollama",
+  "requested_model": "llama3.1:8b",
+  "temperature": 0.7,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.7,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    533,
+    568,
+    575
+  ],
+  "document_ids": [
+    70,
+    71
+  ],
+  "source_filenames": [
+    "rag_knowledge_intensive_nlp_2021.pdf",
+    "selg-rag. learning to retrievee, generate and critique through self reflection.pdf"
+  ],
+  "tokens_input": 1139,
+  "tokens_output": 9,
+  "tokens_total": 1148,
+  "prompt_eval_count": 1139,
+  "eval_count": 9,
+  "prompt_eval_duration": 293801203,
+  "eval_duration": 108152651,
+  "total_duration": 489932601,
+  "load_duration": 73377381,
+  "output_tokens_per_second": 83.2157,
+  "latency_ms": 499,
+  "generation_latency_ms": 491,
+  "retrieval_latency_ms": 6,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

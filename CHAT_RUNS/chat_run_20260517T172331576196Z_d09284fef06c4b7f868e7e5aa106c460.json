@@ -1,0 +1,59 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "d09284fef06c4b7f868e7e5aa106c460",
+  "created_at": "2026-05-17T17:23:31.576196+00:00",
+  "timestamp": "2026-05-17T17:23:31.576196+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "que es el self rag?",
+  "response": "Seg\u00fan la evidencia proporcionada en el documento con chunk_id=567 (selg-rag. learning to retrievee, generate and critique through self reflection.pdf), SELF-RAG se refiere a un nuevo marco de trabajo llamado **Self-Reflective Retrieval-Augmented Generation (SELF-RAG)**, que es una mejora sobre la Retrieval-Augmented Generation (RAG) tradicional. El SELF-RAG permite que los modelos de lenguaje adaptativamente recuperen y se reflejen sobre el conocimiento incorporando una capacidad de auto-reflexi\u00f3n.",
+  "model": "llama3.1:8b",
+  "provider": "ollama",
+  "requested_model": "llama3.1:8b",
+  "temperature": 0.7,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.7,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    418,
+    567,
+    376
+  ],
+  "document_ids": [
+    69,
+    71,
+    68
+  ],
+  "source_filenames": [
+    "Attention is all yout need.pdf",
+    "Language Models can teach themselves to use tools2023.pdf",
+    "selg-rag. learning to retrievee, generate and critique through self reflection.pdf"
+  ],
+  "tokens_input": 1096,
+  "tokens_output": 121,
+  "tokens_total": 1217,
+  "prompt_eval_count": 1096,
+  "eval_count": 121,
+  "prompt_eval_duration": 298268726,
+  "eval_duration": 1480119006,
+  "total_duration": 3251577226,
+  "load_duration": 1430082571,
+  "output_tokens_per_second": 81.7502,
+  "latency_ms": 3261,
+  "generation_latency_ms": 3253,
+  "retrieval_latency_ms": 6,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}

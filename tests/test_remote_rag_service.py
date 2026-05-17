@@ -103,6 +103,112 @@ def _create_documents_db(db_path: Path) -> None:
 
 
 class RemoteRagServiceTests(unittest.TestCase):
+    def test_chat_without_evidence_returns_safe_refusal_without_calling_model(self):
+        client = TestClient(chat_app, headers=AUTH_HEADERS)
+
+        with patch("app.main.settings.use_remote_rag", False):
+            with patch(
+                "app.main.build_document_prompt",
+                return_value={
+                    "status": "NO_EVIDENCE",
+                    "retrieval_status": "NO_EVIDENCE",
+                    "prompt": "No hay evidencia documental suficiente para responder.",
+                    "chunks": [],
+                    "warnings": [],
+                    "query_original": "que es self rag?",
+                    "query_normalized": "que es self rag",
+                    "query_terms": ["self"],
+                    "quoted_terms": [],
+                    "source_intent": "mixed",
+                    "selected_corpus": "mixed",
+                    "candidate_filenames": [],
+                    "selected_filenames": [],
+                    "scores": [],
+                },
+            ):
+                with patch("app.main.ask_chat") as ask_chat_mock:
+                    response = client.post(
+                        "/chat",
+                        json={
+                            "message": "que es self rag?",
+                            "model": "granite4.1:8b",
+                            "trace_id": REQUEST_ID,
+                            "user_id": 123,
+                            "chat_id": 456,
+                        },
+                    )
+
+        self.assertEqual(response.status_code, 200)
+        ask_chat_mock.assert_not_called()
+        body = response.json()
+        self.assertEqual(body["retrieval_status"], "NO_EVIDENCE_FOR_ANSWER")
+        self.assertEqual(body["answer_mode"], "safe_refusal")
+        self.assertFalse(body["evidence_used"])
+        self.assertTrue(body["fallback_used"])
+        self.assertEqual(body["chunks"], [])
+        self.assertIn("No hay evidencia documental suficiente para responder.", body["answer"])
+
+    def test_chat_marker_only_no_evidence_does_not_trigger_second_free_generation(self):
+        client = TestClient(chat_app, headers=AUTH_HEADERS)
+
+        with patch("app.main.settings.use_remote_rag", False):
+            with patch(
+                "app.main.build_document_prompt",
+                return_value={
+                    "status": "EVIDENCE_FOUND",
+                    "retrieval_status": "EVIDENCE_FOUND",
+                    "prompt": "context prompt",
+                    "chunks": [
+                        {
+                            "id": 7,
+                            "document_id": 3,
+                            "filename": "doc.md",
+                            "text": "self-rag usa self reflection tokens.",
+                        }
+                    ],
+                    "warnings": [],
+                    "query_original": "que es self rag?",
+                    "query_normalized": "que es self rag",
+                    "query_terms": ["self"],
+                    "quoted_terms": [],
+                    "source_intent": "mixed",
+                    "selected_corpus": "mixed",
+                    "candidate_filenames": ["doc.md"],
+                    "selected_filenames": ["doc.md"],
+                    "scores": [1],
+                },
+            ):
+                with patch(
+                    "app.main.ask_chat",
+                    return_value={
+                        "status": "ok",
+                        "provider": "ollama",
+                        "model": "granite4.1:8b",
+                        "temperature": 0.2,
+                        "use_rag": True,
+                        "answer": "NO_EVIDENCE_FOR_ANSWER",
+                    },
+                ) as ask_chat_mock:
+                    response = client.post(
+                        "/chat",
+                        json={
+                            "message": "que es self rag?",
+                            "model": "granite4.1:8b",
+                            "trace_id": REQUEST_ID,
+                            "user_id": 123,
+                            "chat_id": 456,
+                        },
+                    )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(ask_chat_mock.call_count, 1)
+        body = response.json()
+        self.assertEqual(body["retrieval_status"], "NO_EVIDENCE_FOR_ANSWER")
+        self.assertEqual(body["answer_mode"], "safe_refusal")
+        self.assertEqual(body["chunks"], [])
+        self.assertEqual(body["chunk_ids"], [])
+        self.assertEqual(body["selected_filenames"], [])
+
     def test_chat_uses_local_rag_when_remote_rag_is_disabled(self):
         client = TestClient(chat_app, headers=AUTH_HEADERS)
 
@@ -131,6 +237,7 @@ class RemoteRagServiceTests(unittest.TestCase):
                             "/chat",
                             json={
                                 "message": "hola",
+                                "model": "granite4.1:8b",
                                 "trace_id": REQUEST_ID,
                                 "user_id": 123,
                                 "chat_id": 456,
@@ -178,6 +285,7 @@ class RemoteRagServiceTests(unittest.TestCase):
                             "/chat",
                             json={
                                 "message": "que es un transformer?",
+                                "model": "granite4.1:8b",
                                 "trace_id": REQUEST_ID,
                                 "user_id": 123,
                                 "chat_id": 456,

@@ -18,18 +18,12 @@ NO_EVIDENCE_MARKER = "NO_EVIDENCE_FOR_ANSWER"
 NO_EVIDENCE_EXPLANATION = "No hay evidencia documental suficiente para responder."
 ANSWER_MODE_DOCUMENTARY = "documentary_answer"
 ANSWER_MODE_SAFE_REFUSAL = "safe_refusal"
-ANSWER_MODE_MODEL_INTERNAL = "model_internal_answer"
 ANSWER_MODE_STANDARD = "standard_answer"
 MARKER_ONLY_RETRIEVAL_STATUSES = {"NO_EVIDENCE", "NO_EVIDENCE_FOR_ANSWER"}
-MODEL_INTERNAL_WARNING = "Respuesta generada sin evidencia documental local. Puede requerir verificación."
 ACTIVE_CONTEXT_NO_EVIDENCE_WARNING = (
-    "Contexto activo detectado, pero sin chunks documentales suficientes. "
-    "Respuesta generada con conocimiento general del modelo."
+    "Contexto activo detectado, pero sin chunks documentales suficientes para responder."
 )
-MODEL_INTERNAL_VISIBLE_PREFIX = (
-    "No he encontrado evidencia suficiente en los documentos cargados. "
-    "Respuesta basada en conocimiento general del modelo:"
-)
+NO_EVIDENCE_WARNING = "No hay evidencia documental local suficiente para responder."
 COMMON_QUERY_TERMS = {
     "about",
     "busca",
@@ -103,93 +97,9 @@ def _clear_evidence_trace(context: dict) -> None:
         "document_ids",
         "source_filenames",
         "selected_filenames",
-        "candidate_filenames",
         "scores",
     ):
         context[key] = []
-
-
-def _build_model_internal_prompt(query: str) -> str:
-    return (
-        "No hay evidencia documental local suficiente para responder a la pregunta siguiente.\n"
-        "Responde usando solo conocimiento general del modelo.\n"
-        "- No cites documentos cargados.\n"
-        "- No inventes fuentes ni referencias documentales.\n"
-        "- Si no estás seguro, dilo claramente.\n"
-        "- Responde en el mismo idioma que la pregunta.\n\n"
-        f"PREGUNTA:\n{query}"
-    )
-
-
-def _finalize_model_internal_answer(raw_answer: str | None) -> str:
-    cleaned = _strip_no_evidence_markers(raw_answer if isinstance(raw_answer, str) else "")
-    if not cleaned:
-        raise LLMClientError(
-            "rag_answer_contract_invalid",
-            "model_internal_answer_empty_after_sanitization",
-        )
-    return f"{MODEL_INTERNAL_VISIBLE_PREFIX}\n{cleaned}"
-
-
-def _build_model_internal_chat_response(
-    *,
-    trace_id: str,
-    result: dict,
-    context: dict,
-    provider: str,
-    model: str,
-    temperature: float,
-    temperature_ignored: bool,
-    use_rag: bool,
-    retrieval_status: str,
-) -> ChatResponse:
-    response_payload = dict(result)
-    response_payload.pop("retrieval_status", None)
-    response_payload.pop("chunks", None)
-    response_payload.pop("chunk_ids", None)
-    response_payload.pop("document_ids", None)
-    response_payload.pop("source_filenames", None)
-    response_payload.pop("warnings", None)
-    if not isinstance(response_payload.get("provider"), str) or not response_payload["provider"].strip():
-        response_payload["provider"] = provider
-    if not isinstance(response_payload.get("temperature"), (int, float)):
-        response_payload["temperature"] = temperature
-    if not isinstance(response_payload.get("temperature_ignored"), bool):
-        response_payload["temperature_ignored"] = temperature_ignored
-    response_payload["use_rag"] = use_rag
-    response_payload["answer"] = _finalize_model_internal_answer(response_payload.get("answer"))
-    warnings = list(context.get("warnings", [])) or [MODEL_INTERNAL_WARNING]
-    response_payload["warnings"] = warnings
-    _clear_evidence_trace(context)
-
-    return ChatResponse(
-        trace_id=trace_id,
-        **response_payload,
-        retrieval_status=NO_EVIDENCE_MARKER,
-        answer_mode=ANSWER_MODE_MODEL_INTERNAL,
-        query_original=context.get("query_original"),
-        query_normalized=context.get("query_normalized"),
-        query_terms=context.get("query_terms", []),
-        quoted_terms=context.get("quoted_terms", []),
-        source_intent=context.get("source_intent"),
-        selected_corpus=context.get("selected_corpus"),
-        active_document_id=context.get("active_document_id"),
-        active_document_title=context.get("active_document_title"),
-        active_context_used=bool(context.get("active_context_used")),
-        active_context_reason=context.get("active_context_reason"),
-        evidence_used=False,
-        fallback_used=True,
-        query_expansion_used=bool(context.get("query_expansion_used")),
-        query_expansion_reason=context.get("query_expansion_reason"),
-        expanded_query_terms=context.get("expanded_query_terms", []),
-        candidate_filenames=[],
-        selected_filenames=[],
-        chunks=[],
-        chunk_ids=[],
-        document_ids=[],
-        source_filenames=[],
-        scores=[],
-    )
 
 
 def _evidence_used_from_payload(
@@ -207,8 +117,6 @@ def _fallback_used_from_state(
     answer_mode: str | None,
     evidence_used: bool,
 ) -> bool:
-    if answer_mode == ANSWER_MODE_MODEL_INTERNAL:
-        return True
     if retrieval_status in MARKER_ONLY_RETRIEVAL_STATUSES:
         return True
     return not evidence_used and answer_mode == ANSWER_MODE_SAFE_REFUSAL
@@ -226,8 +134,6 @@ def _fallback_reason_from_state(
         evidence_used=evidence_used,
     ):
         return None
-    if answer_mode == ANSWER_MODE_MODEL_INTERNAL:
-        return "model_internal_no_evidence"
     if answer_mode == ANSWER_MODE_SAFE_REFUSAL:
         return "safe_refusal_no_evidence"
     if retrieval_status in MARKER_ONLY_RETRIEVAL_STATUSES:
@@ -238,7 +144,63 @@ def _fallback_reason_from_state(
 def _no_evidence_warning_for_context(context: dict) -> str:
     if bool(context.get("active_context_used")):
         return ACTIVE_CONTEXT_NO_EVIDENCE_WARNING
-    return MODEL_INTERNAL_WARNING
+    return NO_EVIDENCE_WARNING
+
+
+def _build_safe_refusal_chat_response(
+    *,
+    trace_id: str,
+    context: dict,
+    provider: str,
+    model: str,
+    temperature: float,
+    temperature_ignored: bool,
+    use_rag: bool,
+    latency_ms: int,
+) -> ChatResponse:
+    response_warnings = list(context.get("warnings", []))
+    no_evidence_warning = _no_evidence_warning_for_context(context)
+    if no_evidence_warning not in response_warnings:
+        response_warnings.append(no_evidence_warning)
+    context["warnings"] = response_warnings
+    _clear_evidence_trace(context)
+
+    return ChatResponse(
+        trace_id=trace_id,
+        status="ok",
+        provider=provider,
+        model=model,
+        temperature=temperature,
+        temperature_ignored=temperature_ignored,
+        use_rag=use_rag,
+        answer=_no_evidence_answer(),
+        latency_ms=latency_ms,
+        retrieval_status=NO_EVIDENCE_MARKER,
+        answer_mode=ANSWER_MODE_SAFE_REFUSAL,
+        query_original=context.get("query_original"),
+        query_normalized=context.get("query_normalized"),
+        query_terms=context.get("query_terms", []),
+        quoted_terms=context.get("quoted_terms", []),
+        source_intent=context.get("source_intent"),
+        selected_corpus=context.get("selected_corpus"),
+        active_document_id=context.get("active_document_id"),
+        active_document_title=context.get("active_document_title"),
+        active_context_used=bool(context.get("active_context_used")),
+        active_context_reason=context.get("active_context_reason"),
+        evidence_used=False,
+        fallback_used=True,
+        query_expansion_used=bool(context.get("query_expansion_used")),
+        query_expansion_reason=context.get("query_expansion_reason"),
+        expanded_query_terms=context.get("expanded_query_terms", []),
+        candidate_filenames=context.get("candidate_filenames", []),
+        selected_filenames=[],
+        chunks=[],
+        chunk_ids=[],
+        document_ids=[],
+        source_filenames=[],
+        scores=[],
+        warnings=response_warnings,
+    )
 
 
 def _finalize_rag_answer(
@@ -643,11 +605,26 @@ def run_chat_request(
             retrieval_status = "DISABLED"
             context["retrieval_status"] = retrieval_status
 
+        if use_rag and retrieval_status in MARKER_ONLY_RETRIEVAL_STATUSES:
+            status = "ok"
+            final_answer = _no_evidence_answer()
+            answer_mode = ANSWER_MODE_SAFE_REFUSAL
+            safe_refusal_response = _build_safe_refusal_chat_response(
+                trace_id=trace_id,
+                context=context,
+                provider=provider,
+                model=model,
+                temperature=temperature,
+                temperature_ignored=temperature_ignored,
+                use_rag=True,
+                latency_ms=int((time.perf_counter() - started_at) * 1000),
+            )
+            warnings = [item for item in safe_refusal_response.warnings if isinstance(item, str)]
+            return safe_refusal_response
+
         llm_started_at = time.perf_counter()
         llm_message = context["prompt"]
         llm_use_rag = use_rag
-        if use_rag and retrieval_status in MARKER_ONLY_RETRIEVAL_STATUSES:
-            llm_message = _build_model_internal_prompt(request.message)
         result = ask_chat(
             message=llm_message,
             provider=provider,
@@ -697,26 +674,6 @@ def run_chat_request(
             warnings.append("temperature_ignored_by_provider")
         status = "ok"
 
-        if use_rag and retrieval_status in MARKER_ONLY_RETRIEVAL_STATUSES:
-            warnings = [_no_evidence_warning_for_context(context)]
-            context["warnings"] = warnings
-            internal_response = _build_model_internal_chat_response(
-                trace_id=trace_id,
-                result=result,
-                context=context,
-                provider=provider,
-                model=model,
-                temperature=temperature,
-                temperature_ignored=temperature_ignored,
-                use_rag=True,
-                retrieval_status=retrieval_status,
-            )
-            final_answer = internal_response.answer
-            answer_mode = internal_response.answer_mode or ANSWER_MODE_MODEL_INTERNAL
-            response_chunk_ids = list(internal_response.chunk_ids)
-            warnings = [item for item in internal_response.warnings if isinstance(item, str)]
-            return internal_response
-
         chunk_texts, chunk_ids, document_ids, source_filenames = _extract_chunk_response_data(context.get("chunks", [])) if use_rag else ([], [], [], [])
         context["chunk_ids"] = list(chunk_ids)
         context["document_ids"] = list(document_ids)
@@ -740,59 +697,21 @@ def run_chat_request(
         ):
             retrieval_status = NO_EVIDENCE_MARKER
             context["retrieval_status"] = retrieval_status
-            warnings = [_no_evidence_warning_for_context(context)]
-            context["warnings"] = warnings
-            fallback_started_at = time.perf_counter()
-            internal_result = ask_chat(
-                message=_build_model_internal_prompt(request.message),
-                provider=provider,
-                model=model,
-                max_tokens=request.max_tokens,
-                temperature=temperature,
-                top_p=top_p,
-                use_rag=True,
-            )
-            internal_result["latency_ms"] = int((time.perf_counter() - fallback_started_at) * 1000)
-            generation_latency_ms += internal_result["latency_ms"]
-            internal_result["warnings"] = warnings
-            llm_metrics["tokens_input"] = internal_result.get("prompt_eval_count")
-            llm_metrics["tokens_output"] = internal_result.get("eval_count")
-            llm_metrics["prompt_eval_count"] = internal_result.get("prompt_eval_count")
-            llm_metrics["eval_count"] = internal_result.get("eval_count")
-            llm_metrics["prompt_eval_duration"] = internal_result.get("prompt_eval_duration")
-            llm_metrics["eval_duration"] = internal_result.get("eval_duration")
-            llm_metrics["total_duration"] = internal_result.get("total_duration")
-            llm_metrics["load_duration"] = internal_result.get("load_duration")
-            llm_metrics["tokens_total"] = (
-                internal_result.get("tokens_total")
-                if isinstance(internal_result.get("tokens_total"), (int, float))
-                else None
-            )
-            if llm_metrics["tokens_total"] is None:
-                prompt_eval_count = llm_metrics["tokens_input"]
-                eval_count = llm_metrics["tokens_output"]
-                if isinstance(prompt_eval_count, (int, float)) and isinstance(eval_count, (int, float)):
-                    llm_metrics["tokens_total"] = prompt_eval_count + eval_count
-            if isinstance(internal_result.get("top_p"), (int, float)):
-                top_p = float(internal_result["top_p"])
-            if isinstance(internal_result.get("max_tokens"), int):
-                effective_max_tokens = internal_result["max_tokens"]
-            internal_response = _build_model_internal_chat_response(
+            final_answer = _no_evidence_answer()
+            answer_mode = ANSWER_MODE_SAFE_REFUSAL
+            safe_refusal_response = _build_safe_refusal_chat_response(
                 trace_id=trace_id,
-                result=internal_result,
                 context=context,
                 provider=provider,
                 model=model,
                 temperature=temperature,
                 temperature_ignored=temperature_ignored,
                 use_rag=True,
-                retrieval_status=retrieval_status,
+                latency_ms=result["latency_ms"],
             )
-            final_answer = internal_response.answer
-            answer_mode = internal_response.answer_mode or ANSWER_MODE_MODEL_INTERNAL
-            response_chunk_ids = list(internal_response.chunk_ids)
-            warnings = [item for item in internal_response.warnings if isinstance(item, str)]
-            return internal_response
+            response_chunk_ids = list(safe_refusal_response.chunk_ids)
+            warnings = [item for item in safe_refusal_response.warnings if isinstance(item, str)]
+            return safe_refusal_response
 
         final_answer, answer_mode = _finalize_rag_answer(
             retrieval_status=retrieval_status,
