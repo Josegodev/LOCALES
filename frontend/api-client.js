@@ -143,6 +143,10 @@
   }
 
   function buildUrl(path, baseUrl) {
+    if (/^https?:\/\//i.test(path)) {
+      return path;
+    }
+
     const resolvedBaseUrl = resolveConfiguredBaseUrl(baseUrl);
     if (!resolvedBaseUrl) {
       const message = "BACKEND_BASE_URL no configurada. Define runtime-config.js o usa Backend base URL.";
@@ -151,10 +155,6 @@
         code: "backend_base_url_missing",
         isConfigError: true,
       });
-    }
-
-    if (/^https?:\/\//i.test(path)) {
-      return path;
     }
 
     const normalizedPath = String(path || "").startsWith("/") ? String(path) : `/${String(path || "")}`;
