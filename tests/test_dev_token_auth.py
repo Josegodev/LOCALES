@@ -10,6 +10,7 @@ from app.main import app
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FRONTEND_APP_JS = REPO_ROOT / "frontend" / "app.js"
+FRONTEND_API_CLIENT_JS = REPO_ROOT / "frontend" / "api-client.js"
 FRONTEND_INDEX_HTML = REPO_ROOT / "frontend" / "index.html"
 
 
@@ -32,6 +33,26 @@ class DevTokenAuthTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ok"})
+
+    def test_root_endpoint_returns_service_metadata(self):
+        response = TestClient(app).get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "service": "nucleochat",
+                "status": "ok",
+                "docs": "/docs",
+                "health": "/health",
+            },
+        )
+
+    def test_favicon_endpoint_returns_204(self):
+        response = TestClient(app).get("/favicon.ico")
+
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(response.text, "")
 
     def test_startup_logs_chat_only_runtime_mode(self):
         with patch("app.main.settings.jose_dev_token", "test-dev-token"):
@@ -234,6 +255,25 @@ class DevTokenAuthTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["access-control-allow-origin"], "http://localhost:5173")
 
+    def test_chat_cors_allows_wildcard_origin_when_configured(self):
+        with patch("app.main.settings.app_env", "prod"):
+            with patch.object(
+                type(app_main.settings),
+                "frontend_allowed_origins",
+                return_value=["*"],
+            ):
+                response = TestClient(self._build_cors_test_app()).options(
+                    "/chat",
+                    headers={
+                        "Origin": "https://demo.vercel.app",
+                        "Access-Control-Request-Method": "POST",
+                        "Access-Control-Request-Headers": "content-type",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["access-control-allow-origin"], "*")
+
     def test_saved_eval_runs_endpoint_is_open_in_local_open_mode(self):
         with patch("app.auth.settings.chat_auth_mode", "local_open"):
             response = TestClient(app).get("/api/evals/runs")
@@ -274,6 +314,16 @@ class DevTokenAuthTests(unittest.TestCase):
         self.assertIn("locales.chatModelKey", frontend_js)
         self.assertIn("provider: selected.provider", frontend_js)
         self.assertIn("model: selected.model", frontend_js)
+
+    def test_frontend_uses_normalized_backend_url_and_health_endpoint(self):
+        frontend_js = FRONTEND_APP_JS.read_text(encoding="utf-8")
+        api_client_js = FRONTEND_API_CLIENT_JS.read_text(encoding="utf-8")
+
+        self.assertIn("normalizeBackendBaseUrl", api_client_js)
+        self.assertIn("https://", api_client_js)
+        self.assertIn('cloudflared tunnel --url', api_client_js)
+        self.assertIn('fetchJsonWithLatency("/health")', frontend_js)
+        self.assertIn('`${baseUrl}/docs`', frontend_js)
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ const elements = {
   docsLink: document.querySelector("#docsLink"),
   healthButton: document.querySelector("#healthButton"),
   healthStatus: document.querySelector("#healthStatus"),
+  backendStatusDetail: document.querySelector("#backendStatusDetail"),
   mainTabs: document.querySelectorAll("[data-main-tab]"),
   mainPanels: document.querySelectorAll("[data-main-panel]"),
   chatForm: document.querySelector("#chatForm"),
@@ -128,22 +129,84 @@ function normalizeProviderModel(provider, model) {
 }
 
 function backendBaseUrl() {
-  return apiClient.normalizeBaseUrl(elements.backendUrl.value || DEFAULT_BACKEND_URL);
+  const state = apiClient.normalizeBackendBaseUrl(elements.backendUrl.value || DEFAULT_BACKEND_URL);
+  return state.ok ? state.baseUrl : "";
+}
+
+function backendBaseUrlState() {
+  return apiClient.normalizeBackendBaseUrl(elements.backendUrl.value || DEFAULT_BACKEND_URL);
+}
+
+function createBackendBaseUrlError(state) {
+  const error = new Error(state?.message || "Backend base URL inválida.");
+  error.code = state?.code || "invalid_backend_base_url";
+  error.isConfigError = true;
+  error.baseUrl = state?.baseUrl || "";
+  error.rawValue = state?.rawValue || "";
+  error.extractedUrl = state?.extractedUrl || "";
+  return error;
 }
 
 function endpoint(path) {
-  return apiClient.buildUrl(path, backendBaseUrl());
+  const baseUrlState = backendBaseUrlState();
+  if (!baseUrlState.ok) {
+    throw createBackendBaseUrlError(baseUrlState);
+  }
+  return apiClient.buildUrl(path, baseUrlState.baseUrl);
+}
+
+function renderBackendStatusDetail(details = {}) {
+  const lines = [
+    `base_url: ${valueOrDash(details.baseUrl)}`,
+    `endpoint: ${valueOrDash(details.endpoint)}`,
+    `http_status: ${valueOrDash(details.httpStatus)}`,
+    `technical: ${valueOrDash(details.technicalMessage)}`,
+  ];
+
+  if (details.warning) {
+    lines.push(`warning: ${details.warning}`);
+  }
+  if (details.extractedUrl) {
+    lines.push(`extracted_url: ${details.extractedUrl}`);
+  }
+
+  elements.backendStatusDetail.textContent = lines.join("\n");
 }
 
 function updateBackendLinks() {
-  const baseUrl = backendBaseUrl();
-  localStorage.setItem("locales.backendUrl", baseUrl);
+  const rawValue = elements.backendUrl.value || DEFAULT_BACKEND_URL;
+  const baseUrlState = backendBaseUrlState();
+  const baseUrl = baseUrlState.ok ? baseUrlState.baseUrl : "";
+  const docsUrl = baseUrl ? `${baseUrl}/docs` : "";
+  const healthUrl = baseUrl ? `${baseUrl}/health` : "";
+
+  localStorage.setItem("locales.backendUrl", String(rawValue).trim());
+  console.info("[backend] raw base url", rawValue);
+  console.info("[backend] normalized base url", baseUrl);
+  console.info("[backend] health url", healthUrl);
+  console.info("[backend] docs url", docsUrl);
+
   if (baseUrl) {
     elements.docsLink.href = `${baseUrl}/docs`;
     elements.docsLink.removeAttribute("aria-disabled");
   } else {
     elements.docsLink.href = "#";
     elements.docsLink.setAttribute("aria-disabled", "true");
+  }
+
+  renderBackendStatusDetail({
+    baseUrl,
+    endpoint: healthUrl || "-",
+    technicalMessage: baseUrlState.message || (baseUrl ? "Pendiente de comprobación" : "Backend base URL no configurada"),
+    warning: baseUrlState.code === "cloudflared_command_instead_of_public_url" ? baseUrlState.message : "",
+    extractedUrl: baseUrlState.extractedUrl || "",
+  });
+}
+
+function normalizeBackendUrlInputValue() {
+  const baseUrlState = backendBaseUrlState();
+  if (baseUrlState.ok) {
+    elements.backendUrl.value = baseUrlState.baseUrl;
   }
 }
 
@@ -216,9 +279,9 @@ function isCreateDocumentCommand(message) {
   return typeof message === "string" && message.trim().toLowerCase().startsWith(CREATE_DOCUMENT_PREFIX);
 }
 
-async function fetchJsonWithLatency(url, options = {}) {
+async function fetchJsonWithLatency(path, options = {}) {
+  const url = endpoint(path);
   return apiClient.fetchJson(url, {
-    baseUrl: backendBaseUrl(),
     ...options,
   });
 }
@@ -235,6 +298,12 @@ function visibleChatErrorMessage(error) {
   if (error?.status === 422) {
     return "Payload incompatible con ChatRequest.";
   }
+  if (error?.code === "invalid_backend_base_url") {
+    return "Backend base URL inválida. Pega solo la URL pública HTTPS del túnel.";
+  }
+  if (error?.code === "cloudflared_command_instead_of_public_url") {
+    return "Has pegado el comando de cloudflared, no la URL pública del túnel.";
+  }
   if (error?.code === "backend_base_url_missing") {
     return "Backend base URL no configurada. Define runtime-config.js o rellena el campo Backend base URL.";
   }
@@ -247,12 +316,15 @@ function visibleChatErrorMessage(error) {
   if (error?.status === 403) {
     return "403 Forbidden. El backend ha rechazado el acceso.";
   }
+  if (error?.status === 404 && String(error?.url || "").endsWith("/health")) {
+    return "404 en /health. La URL base apunta a un backend incorrecto o incompleto.";
+  }
   if (error?.status >= 500) {
     return "El backend ha devuelto un error interno.";
   }
   if (error?.name === "AbortError") return "Solicitud cancelada.";
   if (error?.code === "network_error" || error?.message === "Failed to fetch") {
-    return "No se pudo conectar con el backend. Revisa Backend base URL, CORS y que FastAPI este accesible.";
+    return "No se pudo conectar con el backend. Posible CORS, túnel caído o URL inaccesible.";
   }
   return error?.message || "Error inesperado llamando al backend.";
 }
@@ -337,8 +409,12 @@ function replaceTemperatureOptions(temperature) {
 }
 
 async function loadChatModels() {
+  if (!backendBaseUrl()) {
+    replaceModelOptions(fallbackModels);
+    return;
+  }
   try {
-    const { data } = await fetchJsonWithLatency(endpoint("/api/models/chat"));
+    const { data } = await fetchJsonWithLatency("/api/models/chat");
     replaceModelOptions(Array.isArray(data?.items) ? data.items : []);
   } catch (error) {
     replaceModelOptions(fallbackModels);
@@ -347,8 +423,12 @@ async function loadChatModels() {
 }
 
 async function loadChatOptions() {
+  if (!backendBaseUrl()) {
+    replaceTemperatureOptions({ default: 0.2 });
+    return;
+  }
   try {
-    const { data } = await fetchJsonWithLatency(endpoint("/api/chat/options"));
+    const { data } = await fetchJsonWithLatency("/api/chat/options");
     replaceTemperatureOptions(data?.temperature);
   } catch {
     replaceTemperatureOptions({ default: 0.2 });
@@ -538,7 +618,7 @@ async function sendChat(event) {
   try {
     console.info("[api] POST /chat url", endpoint("/chat"));
     console.info("[api] POST /chat payload", payload);
-    const { data, latencyMs } = await fetchJsonWithLatency(endpoint("/chat"), {
+    const { data, latencyMs } = await fetchJsonWithLatency("/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal: chatState.abortController.signal,
@@ -567,10 +647,39 @@ async function sendChat(event) {
 async function checkHealth() {
   updateBackendLinks();
   setStatus(elements.healthStatus, "Consultando /health...", "muted");
+  const baseUrlState = backendBaseUrlState();
+  if (!baseUrlState.ok) {
+    const error = createBackendBaseUrlError(baseUrlState);
+    console.error("[backend] health failed", error);
+    renderBackendStatusDetail({
+      baseUrl: baseUrlState.baseUrl || "-",
+      endpoint: "-",
+      technicalMessage: error.message,
+      warning: baseUrlState.code === "cloudflared_command_instead_of_public_url" ? baseUrlState.message : "",
+      extractedUrl: baseUrlState.extractedUrl || "",
+    });
+    setStatus(elements.healthStatus, visibleChatErrorMessage(error), "error");
+    return;
+  }
+
+  const healthUrl = `${baseUrlState.baseUrl}/health`;
   try {
-    const { data, latencyMs } = await fetchJsonWithLatency(endpoint("/health"));
+    const { data, latencyMs } = await fetchJsonWithLatency("/health");
+    renderBackendStatusDetail({
+      baseUrl: baseUrlState.baseUrl,
+      endpoint: healthUrl,
+      httpStatus: 200,
+      technicalMessage: valueOrDash(data.status || "ok"),
+    });
     setStatus(elements.healthStatus, `${valueOrDash(data.status || "ok")} (${latencyMs} ms)`, "ok");
   } catch (error) {
+    console.error("[backend] health failed", error);
+    renderBackendStatusDetail({
+      baseUrl: baseUrlState.baseUrl,
+      endpoint: healthUrl,
+      httpStatus: error?.status ?? "-",
+      technicalMessage: error?.data?.detail?.message || error?.message || "unknown_error",
+    });
     setStatus(elements.healthStatus, visibleChatErrorMessage(error), "error");
   }
 }
@@ -890,11 +999,21 @@ function applyRunsFilters() {
 }
 
 async function loadRunsDashboard() {
+  if (!backendBaseUrl()) {
+    runsState.stats = null;
+    runsState.runs = [];
+    runsState.filteredRuns = [];
+    renderRunsFilters();
+    applyRunsFilters();
+    setStatus(elements.runsStatus, "Backend base URL no configurada", "error");
+    return;
+  }
+
   setStatus(elements.runsStatus, "Cargando runs guardados...", "muted");
   try {
     const [{ data: statsData }, { data: runsData }] = await Promise.all([
-      fetchJsonWithLatency(endpoint("/api/chat-runs/stats")),
-      fetchJsonWithLatency(endpoint("/api/chat-runs?limit=1000")),
+      fetchJsonWithLatency("/api/chat-runs/stats"),
+      fetchJsonWithLatency("/api/chat-runs?limit=1000"),
     ]);
     runsState.stats = statsData;
     runsState.runs = Array.isArray(runsData?.items) ? runsData.items : [];
@@ -968,7 +1087,7 @@ async function openRunDetail(traceId) {
   elements.runDetailModal.hidden = false;
   setStatus(elements.runDetailStatus, "Cargando detalle...", "muted");
   try {
-    const { data } = await fetchJsonWithLatency(endpoint(`/api/chat-runs/${encodeURIComponent(traceId)}`));
+    const { data } = await fetchJsonWithLatency(`/api/chat-runs/${encodeURIComponent(traceId)}`);
     renderRunDetail(data);
     setStatus(elements.runDetailStatus, "Detalle cargado", "ok");
   } catch (error) {
@@ -988,15 +1107,17 @@ function init() {
   replaceModelOptions(fallbackModels);
   renderChatMessages();
   if (!backendBaseUrl()) {
-    setStatus(elements.healthStatus, "Configura Backend base URL o runtime-config.js", "error");
-    setStatus(elements.chatStatus, "Backend base URL no configurada", "error");
-    setStatus(elements.runsStatus, "Backend base URL no configurada", "error");
+    const backendError = createBackendBaseUrlError(backendBaseUrlState());
+    setStatus(elements.healthStatus, visibleChatErrorMessage(backendError), "error");
+    setStatus(elements.chatStatus, visibleChatErrorMessage(backendError), "error");
+    setStatus(elements.runsStatus, visibleChatErrorMessage(backendError), "error");
   }
   loadChatModels();
   loadChatOptions();
   loadRunsDashboard();
 
   elements.backendUrl.addEventListener("change", () => {
+    normalizeBackendUrlInputValue();
     updateBackendLinks();
     loadChatModels();
     loadChatOptions();

@@ -7,11 +7,90 @@
     return value && typeof value === "object" ? value : {};
   }
 
-  function normalizeBaseUrl(value) {
+  function normalizeUrlCandidate(value) {
     if (typeof value !== "string") {
       return "";
     }
-    return value.trim().replace(/\/+$/, "");
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return "";
+    }
+
+    const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    const withoutTrailingSlash = withProtocol.replace(/\/+$/, "");
+
+    try {
+      const parsed = new URL(withoutTrailingSlash);
+      if (!/^https?:$/i.test(parsed.protocol)) {
+        return "";
+      }
+      return parsed.toString().replace(/\/+$/, "");
+    } catch {
+      return "";
+    }
+  }
+
+  function normalizeBackendBaseUrl(value) {
+    const rawValue = typeof value === "string" ? value : "";
+    const trimmed = rawValue.trim();
+
+    if (!trimmed) {
+      return {
+        ok: false,
+        rawValue,
+        baseUrl: "",
+        code: "backend_base_url_missing",
+        message: "Backend base URL vacía. Pega la URL pública https://xxxxx.trycloudflare.com.",
+      };
+    }
+
+    if (/^cloudflared\s+tunnel\b/i.test(trimmed)) {
+      const extractedMatch = trimmed.match(/--url\s+([^\s]+)/i);
+      const extractedUrl = extractedMatch ? normalizeUrlCandidate(extractedMatch[1]) : "";
+      return {
+        ok: false,
+        rawValue,
+        baseUrl: "",
+        extractedUrl,
+        code: "cloudflared_command_instead_of_public_url",
+        message: "Ese comando se ejecuta en terminal. Aquí debes pegar la URL https://xxxxx.trycloudflare.com generada por Cloudflare.",
+      };
+    }
+
+    if (/\s/.test(trimmed)) {
+      return {
+        ok: false,
+        rawValue,
+        baseUrl: "",
+        code: "invalid_backend_base_url",
+        message: "Backend base URL inválida. Usa una URL HTTPS sin espacios ni comandos shell.",
+      };
+    }
+
+    const normalizedUrl = normalizeUrlCandidate(trimmed);
+    if (!normalizedUrl) {
+      return {
+        ok: false,
+        rawValue,
+        baseUrl: "",
+        code: "invalid_backend_base_url",
+        message: "Backend base URL inválida. Usa una URL HTTPS tipo https://xxxxx.trycloudflare.com.",
+      };
+    }
+
+    return {
+      ok: true,
+      rawValue,
+      baseUrl: normalizedUrl,
+      code: null,
+      message: "",
+    };
+  }
+
+  function normalizeBaseUrl(value) {
+    const normalized = normalizeBackendBaseUrl(value);
+    return normalized.ok ? normalized.baseUrl : "";
   }
 
   function resolveConfiguredBaseUrl(overrideValue) {
@@ -187,6 +266,7 @@
 
   window.LOCALES_API_CLIENT = {
     DEFAULT_TIMEOUT_MS,
+    normalizeBackendBaseUrl,
     normalizeBaseUrl,
     resolveConfiguredBaseUrl,
     resolveAuthToken,

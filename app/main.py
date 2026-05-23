@@ -26,7 +26,7 @@ from app.schemas import (
     TEMPERATURE_MAX,
     TEMPERATURE_MIN,
 )
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import ValidationError
@@ -44,6 +44,8 @@ LOCAL_FRONTEND_FALLBACK_ORIGINS = [
 def _resolve_cors_allowed_origins() -> list[str]:
     configured_origins = settings.frontend_allowed_origins()
     if configured_origins:
+        if configured_origins == ["*"]:
+            return ["*"]
         return configured_origins
 
     app_env = settings.app_env.strip().lower()
@@ -116,6 +118,21 @@ def _run_chat_request(
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/")
+def root() -> dict:
+    return {
+        "service": "nucleochat",
+        "status": "ok",
+        "docs": "/docs",
+        "health": "/health",
+    }
+
+
+@app.get("/favicon.ico", status_code=204)
+def favicon() -> Response:
+    return Response(status_code=204)
 
 
 @app.get("/api/models/chat", response_model=ChatModelListResponse)
