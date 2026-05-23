@@ -84,6 +84,7 @@ DB/conversations/telegram/runs/
 
 # Local chat runtime artifacts
 CHAT_RUNS/chat_run_*.json
+outputs/documents/
 
 archivo.txt
 .env
