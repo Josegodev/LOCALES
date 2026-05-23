@@ -134,6 +134,7 @@ def ask_chat(
     temperature: float | None = None,
     top_p: float | None = None,
     use_rag: bool | None = None,
+    system_prompt: str | None = None,
 ) -> dict:
     selected_provider, selected_model = resolve_provider_model(provider, model)
 
@@ -145,7 +146,7 @@ def ask_chat(
             temperature=temperature,
             top_p=top_p,
             use_rag=use_rag,
-            system_prompt=CHAT_SYSTEM_PROMPT,
+            system_prompt=system_prompt or CHAT_SYSTEM_PROMPT,
             settings_obj=settings,
         )
 
@@ -156,7 +157,7 @@ def ask_chat(
         top_p=top_p,
         use_rag=use_rag,
         num_predict=max_tokens,
-        system_prompt=CHAT_SYSTEM_PROMPT,
+        system_prompt=system_prompt or CHAT_SYSTEM_PROMPT,
         requests_module=requests,
         settings_obj=settings,
     )

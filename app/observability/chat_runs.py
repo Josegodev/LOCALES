@@ -240,6 +240,16 @@ class ChatRunRecord(BaseModel):
     fallback_used: bool | None = None
     fallback_reason: str | None = None
     answer_mode: str | None = None
+    command: str | None = None
+    tool_called: str | None = None
+    tool_result_status: str | None = None
+    document_path: str | None = None
+    document_filename: str | None = None
+    chars_written: int | None = None
+    overwrite_requested: bool | None = None
+    overwrite_applied: bool | None = None
+    overwrite_reason: str | None = None
+    error_type: str | None = None
 
 
 def normalize_chat_run_record(record: dict[str, Any]) -> ChatRunRecord:
@@ -313,6 +323,16 @@ def normalize_chat_run_record(record: dict[str, Any]) -> ChatRunRecord:
         "fallback_used": record.get("fallback_used") if isinstance(record.get("fallback_used"), bool) else None,
         "fallback_reason": _nullable_str(record.get("fallback_reason")),
         "answer_mode": _nullable_str(record.get("answer_mode")),
+        "command": _nullable_str(record.get("command")),
+        "tool_called": _nullable_str(record.get("tool_called")),
+        "tool_result_status": _nullable_str(record.get("tool_result_status")),
+        "document_path": _nullable_str(record.get("document_path")),
+        "document_filename": _nullable_str(record.get("document_filename")),
+        "chars_written": _nullable_int(record.get("chars_written")),
+        "overwrite_requested": record.get("overwrite_requested") if isinstance(record.get("overwrite_requested"), bool) else None,
+        "overwrite_applied": record.get("overwrite_applied") if isinstance(record.get("overwrite_applied"), bool) else None,
+        "overwrite_reason": _nullable_str(record.get("overwrite_reason")),
+        "error_type": _nullable_str(record.get("error_type")) or _nullable_str(record.get("error_code")),
     }
     return ChatRunRecord(**payload)
 

@@ -13,6 +13,11 @@ from app.observability.logging import log_event
 from app.observability.trace import new_trace_id
 from app.rag_client import query_remote_rag
 from app.schemas import ChatRequest, ChatResponse, TEMPERATURE_DEFAULT
+from app.tools.create_document import (
+    CREATE_DOCUMENT_SYSTEM_PROMPT,
+    build_create_document_request,
+    create_document_tool,
+)
 
 NO_EVIDENCE_MARKER = "NO_EVIDENCE_FOR_ANSWER"
 NO_EVIDENCE_EXPLANATION = "No hay evidencia documental suficiente para responder."
@@ -45,6 +50,8 @@ COMMON_QUERY_TERMS = {
     "thing",
     "what",
 }
+CREATE_DOCUMENT_COMMAND = "creardoc"
+CREATE_DOCUMENT_PREFIX = "/creardoc"
 
 
 def _no_evidence_answer() -> str:
@@ -56,6 +63,22 @@ def _message_preview(text: str, limit: int = 200) -> str:
     if len(normalized) <= limit:
         return normalized
     return normalized[:limit].rstrip() + "..."
+
+
+def parse_chat_command(message: str) -> dict | None:
+    if not isinstance(message, str):
+        return None
+    stripped_message = message.strip()
+    if not stripped_message:
+        return None
+    if not stripped_message.casefold().startswith(CREATE_DOCUMENT_PREFIX):
+        return None
+
+    instruction = stripped_message[len(CREATE_DOCUMENT_PREFIX):].strip()
+    return {
+        "command": CREATE_DOCUMENT_COMMAND,
+        "instruction": instruction,
+    }
 
 
 def _chat_trace_source(user_id: int | None, chat_id: int | None) -> str:
@@ -406,6 +429,16 @@ def _persist_chat_run(
     eval_duration: int | float | None,
     total_duration: int | float | None,
     load_duration: int | float | None,
+    trace_source: str,
+    command: str | None,
+    tool_called: str | None,
+    tool_result_status: str | None,
+    document_path: str | None,
+    document_filename: str | None,
+    chars_written: int | None,
+    overwrite_requested: bool | None,
+    overwrite_applied: bool | None,
+    overwrite_reason: str | None,
 ) -> None:
     created_at = datetime.now(timezone.utc).isoformat()
     save_chat_run(
@@ -413,7 +446,7 @@ def _persist_chat_run(
             "trace_id": trace_id,
             "created_at": created_at,
             "timestamp": created_at,
-            "source": _chat_trace_source(request.user_id, request.chat_id),
+            "source": trace_source,
             "endpoint": "/chat",
             "input": request.message,
             "response": final_answer or None,
@@ -458,8 +491,185 @@ def _persist_chat_run(
             "fallback_used": fallback_used,
             "fallback_reason": fallback_reason,
             "answer_mode": answer_mode,
+            "command": command,
+            "tool_called": tool_called,
+            "tool_result_status": tool_result_status,
+            "document_path": document_path,
+            "document_filename": document_filename,
+            "chars_written": chars_written,
+            "overwrite_requested": overwrite_requested,
+            "overwrite_applied": overwrite_applied,
+            "overwrite_reason": overwrite_reason,
+            "error_type": error_code,
         }
     )
+
+
+def _run_create_document_command(
+    *,
+    request: ChatRequest,
+    trace_id: str,
+    provider: str,
+    model: str,
+    temperature: float,
+    top_p: float | None,
+    effective_max_tokens: int | None,
+) -> tuple[ChatResponse, dict]:
+    parsed_command = parse_chat_command(request.message)
+    instruction = parsed_command.get("instruction", "") if isinstance(parsed_command, dict) else ""
+    if not instruction:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "trace_id": trace_id,
+                "status": "error",
+                "code": "missing_instruction",
+                "message": "El comando /creardoc requiere una instruccion despues del prefijo.",
+                "retrieval_status": "DISABLED",
+                "chunk_ids": [],
+                "document_ids": [],
+                "source_filenames": [],
+                "query_original": request.message,
+                "use_rag": False,
+                "warnings": [],
+                "command": CREATE_DOCUMENT_COMMAND,
+                "tool_called": "create_document",
+            },
+        )
+
+    llm_started_at = time.perf_counter()
+    generation_result = ask_chat(
+        message=instruction,
+        provider=provider,
+        model=model,
+        max_tokens=request.max_tokens,
+        temperature=temperature,
+        top_p=top_p,
+        use_rag=False,
+        system_prompt=CREATE_DOCUMENT_SYSTEM_PROMPT,
+    )
+    generation_latency_ms = int((time.perf_counter() - llm_started_at) * 1000)
+    generation_result["latency_ms"] = generation_latency_ms
+    generated_content = generation_result.get("answer")
+    if not isinstance(generated_content, str) or not generated_content.strip():
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "trace_id": trace_id,
+                "status": "error",
+                "code": "document_generation_failed",
+                "message": "El modelo no devolvio contenido Markdown para /creardoc.",
+                "retrieval_status": "DISABLED",
+                "chunk_ids": [],
+                "document_ids": [],
+                "source_filenames": [],
+                "query_original": request.message,
+                "use_rag": False,
+                "warnings": [],
+                "command": CREATE_DOCUMENT_COMMAND,
+                "tool_called": "create_document",
+            },
+        )
+
+    document_request = build_create_document_request(
+        request_id=trace_id,
+        instruction=instruction,
+        content=generated_content,
+        user_id=request.user_id,
+        chat_id=request.chat_id,
+        overwrite=False,
+    )
+
+    tool_started_at = time.perf_counter()
+    tool_result = _run_async_document_tool(request=document_request)
+    tool_latency_ms = int((time.perf_counter() - tool_started_at) * 1000)
+    if tool_result.get("status") != "ok":
+        error_type = tool_result.get("error_type") if isinstance(tool_result.get("error_type"), str) else "document_write_failed"
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "trace_id": trace_id,
+                "status": "error",
+                "code": "document_write_failed",
+                "message": tool_result.get("error_message") if isinstance(tool_result.get("error_message"), str) else "No se pudo escribir el documento Markdown.",
+                "retrieval_status": "DISABLED",
+                "chunk_ids": [],
+                "document_ids": [],
+                "source_filenames": [],
+                "query_original": request.message,
+                "use_rag": False,
+                "warnings": [],
+                "command": CREATE_DOCUMENT_COMMAND,
+                "tool_called": "create_document",
+                "tool_result_status": tool_result.get("status"),
+                "error_type": error_type,
+            },
+        )
+
+    provider_name = generation_result.get("provider")
+    if isinstance(provider_name, str) and provider_name.strip():
+        provider = provider_name.strip().lower()
+    model_name = generation_result.get("model")
+    if isinstance(model_name, str) and model_name.strip():
+        model = model_name.strip()
+    if isinstance(generation_result.get("temperature"), (int, float)):
+        temperature = float(generation_result["temperature"])
+    if isinstance(generation_result.get("max_tokens"), int):
+        effective_max_tokens = generation_result["max_tokens"]
+
+    response = ChatResponse(
+        trace_id=trace_id,
+        status="ok",
+        provider=provider,
+        model=model,
+        temperature=temperature,
+        temperature_ignored=bool(generation_result.get("temperature_ignored", False)),
+        use_rag=False,
+        answer=f"Documento creado: {tool_result.get('document_path')}",
+        latency_ms=generation_latency_ms + tool_latency_ms,
+        retrieval_status="DISABLED",
+        answer_mode="tool_result",
+        warnings=[],
+        tool_latency_ms=tool_latency_ms,
+        command=CREATE_DOCUMENT_COMMAND,
+        tool_called="create_document",
+        tool_result_status=tool_result.get("status") if isinstance(tool_result.get("status"), str) else None,
+        document_path=tool_result.get("document_path") if isinstance(tool_result.get("document_path"), str) else None,
+        document_filename=tool_result.get("document_filename") if isinstance(tool_result.get("document_filename"), str) else None,
+        chars_written=tool_result.get("chars_written") if isinstance(tool_result.get("chars_written"), int) else None,
+        overwrite_requested=tool_result.get("overwrite_requested") if isinstance(tool_result.get("overwrite_requested"), bool) else False,
+        overwrite_applied=tool_result.get("overwrite_applied") if isinstance(tool_result.get("overwrite_applied"), bool) else False,
+        overwrite_reason=tool_result.get("overwrite_reason") if isinstance(tool_result.get("overwrite_reason"), str) else None,
+        prompt_eval_count=generation_result.get("prompt_eval_count") if isinstance(generation_result.get("prompt_eval_count"), int) else None,
+        eval_count=generation_result.get("eval_count") if isinstance(generation_result.get("eval_count"), int) else None,
+        prompt_eval_duration=generation_result.get("prompt_eval_duration") if isinstance(generation_result.get("prompt_eval_duration"), int) else None,
+        eval_duration=generation_result.get("eval_duration") if isinstance(generation_result.get("eval_duration"), int) else None,
+        total_duration=generation_result.get("total_duration") if isinstance(generation_result.get("total_duration"), int) else None,
+        load_duration=generation_result.get("load_duration") if isinstance(generation_result.get("load_duration"), int) else None,
+    )
+    return response, {
+        "generation_latency_ms": generation_latency_ms,
+        "tool_latency_ms": tool_latency_ms,
+        "provider": provider,
+        "model": model,
+        "temperature": temperature,
+        "effective_max_tokens": effective_max_tokens,
+        "tokens_input": generation_result.get("prompt_eval_count"),
+        "tokens_output": generation_result.get("eval_count"),
+        "tokens_total": generation_result.get("tokens_total"),
+        "prompt_eval_count": generation_result.get("prompt_eval_count"),
+        "eval_count": generation_result.get("eval_count"),
+        "prompt_eval_duration": generation_result.get("prompt_eval_duration"),
+        "eval_duration": generation_result.get("eval_duration"),
+        "total_duration": generation_result.get("total_duration"),
+        "load_duration": generation_result.get("load_duration"),
+    }
+
+
+def _run_async_document_tool(*, request) -> dict:
+    import asyncio
+
+    return asyncio.run(create_document_tool(request=request))
 
 
 def run_chat_request(
@@ -485,6 +695,17 @@ def run_chat_request(
     answer_mode = "unknown"
     final_answer = ""
     error_message: str | None = None
+    trace_source = _chat_trace_source(request.user_id, request.chat_id)
+    command: str | None = None
+    tool_called: str | None = None
+    tool_result_status: str | None = None
+    document_path: str | None = None
+    document_filename: str | None = None
+    chars_written: int | None = None
+    overwrite_requested: bool | None = None
+    overwrite_applied: bool | None = None
+    overwrite_reason: str | None = None
+    tool_latency_ms: int | None = None
     response_chunk_ids: list[int] = []
     llm_metrics: dict[str, int | float | None] = {
         "tokens_input": None,
@@ -521,6 +742,7 @@ def run_chat_request(
         "scores": [],
         "warnings": [],
     }
+    parsed_command = parse_chat_command(request.message)
 
     log_event(
         component="fastapi.chat.request",
@@ -531,6 +753,7 @@ def run_chat_request(
         model=request.model,
         rag_enabled=use_rag,
         message_length=len(request.message),
+        command=parsed_command.get("command") if isinstance(parsed_command, dict) else None,
     )
 
     try:
@@ -552,6 +775,49 @@ def run_chat_request(
                 },
             )
         provider, model = resolve_provider_model(provider, request.model)
+        if parsed_command is not None:
+            trace_source = "frontend"
+            command = parsed_command["command"]
+            tool_called = "create_document"
+            use_rag = False
+            context["retrieval_status"] = "DISABLED"
+            command_response, command_metadata = _run_create_document_command(
+                request=request,
+                trace_id=trace_id,
+                provider=provider,
+                model=model,
+                temperature=temperature,
+                top_p=top_p,
+                effective_max_tokens=effective_max_tokens,
+            )
+            status = "ok"
+            retrieval_status = "DISABLED"
+            answer_mode = command_response.answer_mode or "tool_result"
+            final_answer = command_response.answer
+            generation_latency_ms = command_metadata["generation_latency_ms"]
+            tool_latency_ms = command_metadata["tool_latency_ms"]
+            provider = command_metadata["provider"]
+            model = command_metadata["model"]
+            temperature = command_metadata["temperature"]
+            effective_max_tokens = command_metadata["effective_max_tokens"]
+            llm_metrics["tokens_input"] = command_metadata["tokens_input"]
+            llm_metrics["tokens_output"] = command_metadata["tokens_output"]
+            llm_metrics["tokens_total"] = command_metadata["tokens_total"]
+            llm_metrics["prompt_eval_count"] = command_metadata["prompt_eval_count"]
+            llm_metrics["eval_count"] = command_metadata["eval_count"]
+            llm_metrics["prompt_eval_duration"] = command_metadata["prompt_eval_duration"]
+            llm_metrics["eval_duration"] = command_metadata["eval_duration"]
+            llm_metrics["total_duration"] = command_metadata["total_duration"]
+            llm_metrics["load_duration"] = command_metadata["load_duration"]
+            tool_called = command_response.tool_called
+            tool_result_status = command_response.tool_result_status
+            document_path = command_response.document_path
+            document_filename = command_response.document_filename
+            chars_written = command_response.chars_written
+            overwrite_requested = command_response.overwrite_requested
+            overwrite_applied = command_response.overwrite_applied
+            overwrite_reason = command_response.overwrite_reason
+            return command_response
         active_document_title = _normalize_active_document_title(request.active_document_title)
         use_active_context, active_context_reason = _should_use_active_context(
             query=request.message,
@@ -800,6 +1066,19 @@ def run_chat_request(
         if isinstance(detail, dict):
             error_code = detail.get("code") if isinstance(detail.get("code"), str) else error_code
             error_message = detail.get("message") if isinstance(detail.get("message"), str) else error_message
+            command = detail.get("command") if isinstance(detail.get("command"), str) else command
+            tool_called = detail.get("tool_called") if isinstance(detail.get("tool_called"), str) else tool_called
+            tool_result_status = (
+                detail.get("tool_result_status")
+                if isinstance(detail.get("tool_result_status"), str)
+                else tool_result_status
+            )
+            document_path = detail.get("document_path") if isinstance(detail.get("document_path"), str) else document_path
+            document_filename = (
+                detail.get("document_filename")
+                if isinstance(detail.get("document_filename"), str)
+                else document_filename
+            )
             detail_retrieval_status = detail.get("retrieval_status")
             if isinstance(detail_retrieval_status, str) and detail_retrieval_status.strip():
                 retrieval_status = detail_retrieval_status
@@ -864,7 +1143,7 @@ def run_chat_request(
                     latency_ms=trace_latency_ms,
                     generation_latency_ms=generation_latency_ms or None,
                     retrieval_latency_ms=retrieval_latency_ms,
-                    tool_latency_ms=None,
+                    tool_latency_ms=tool_latency_ms,
                     error_code=error_code,
                     error_message=error_message,
                     warnings=trace_warnings,
@@ -882,6 +1161,16 @@ def run_chat_request(
                     eval_duration=llm_metrics["eval_duration"],
                     total_duration=llm_metrics["total_duration"],
                     load_duration=llm_metrics["load_duration"],
+                    trace_source=trace_source,
+                    command=command,
+                    tool_called=tool_called,
+                    tool_result_status=tool_result_status,
+                    document_path=document_path,
+                    document_filename=document_filename,
+                    chars_written=chars_written,
+                    overwrite_requested=overwrite_requested,
+                    overwrite_applied=overwrite_applied,
+                    overwrite_reason=overwrite_reason,
                 )
             except Exception as exc:
                 log_event(
@@ -912,6 +1201,16 @@ def run_chat_request(
             error_type=error_code,
             retrieval_status=retrieval_status,
             rag_enabled=use_rag,
+            command=command,
+            tool_called=tool_called,
+            tool_result_status=tool_result_status,
+            document_path=document_path,
+            document_filename=document_filename,
+            chars_written=chars_written,
+            overwrite_requested=overwrite_requested,
+            overwrite_applied=overwrite_applied,
+            overwrite_reason=overwrite_reason,
+            tool_latency_ms=tool_latency_ms,
             message_length=len(request.message),
             chunks_found=len(context.get("chunks", [])),
             query_original=context.get("query_original"),

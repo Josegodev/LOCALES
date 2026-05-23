@@ -82,6 +82,9 @@ DB/chunks/markdown/
 # Telegram/runtime traces
 DB/conversations/telegram/runs/
 
+# Local chat runtime artifacts
+CHAT_RUNS/chat_run_*.json
+
 archivo.txt
 .env
 *.env

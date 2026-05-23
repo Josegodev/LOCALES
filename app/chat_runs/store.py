@@ -213,6 +213,16 @@ def normalize_run(payload: dict[str, Any]) -> dict[str, Any]:
         "source_filenames": _str_list(payload.get("source_filenames")),
         "error_code": _nullable_str(payload.get("error_code")) or _nullable_str(payload.get("code")),
         "error_message": _nullable_str(payload.get("error_message")) or _nullable_str(payload.get("message")),
+        "error_type": _nullable_str(payload.get("error_type")) or _nullable_str(payload.get("error_code")) or _nullable_str(payload.get("code")),
+        "command": _nullable_str(payload.get("command")),
+        "tool_called": _nullable_str(payload.get("tool_called")),
+        "tool_result_status": _nullable_str(payload.get("tool_result_status")),
+        "document_path": _nullable_str(payload.get("document_path")),
+        "document_filename": _nullable_str(payload.get("document_filename")),
+        "chars_written": _safe_number(payload.get("chars_written")),
+        "overwrite_requested": _nullable_bool(payload.get("overwrite_requested")),
+        "overwrite_applied": _nullable_bool(payload.get("overwrite_applied")),
+        "overwrite_reason": _nullable_str(payload.get("overwrite_reason")),
         "observability_level": _infer_observability_level(payload),
     }
     return normalized

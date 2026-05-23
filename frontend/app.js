@@ -13,6 +13,7 @@ const elements = {
   modelSelect: document.querySelector("#modelSelect"),
   temperatureSelect: document.querySelector("#temperatureSelect"),
   useRagInput: document.querySelector("#useRagInput"),
+  createDocumentButton: document.querySelector("#createDocumentButton"),
   chatButton: document.querySelector("#chatButton"),
   chatStatus: document.querySelector("#chatStatus"),
   chatMessages: document.querySelector("#chatMessages"),
@@ -77,6 +78,7 @@ const fallbackModels = [
   { provider: "openai", model: "gpt-5.4-mini", label: "OpenAI / gpt-5.4-mini" },
   { provider: "openai", model: "gpt-4o-mini", label: "OpenAI / gpt-4o-mini" },
 ];
+const CREATE_DOCUMENT_PREFIX = "/creardoc";
 
 const hiddenModelNames = new Set([
   "qwen2.5-coder:1.5b-base",
@@ -208,6 +210,10 @@ function summarizeChatPayload(data) {
     payload.answer = truncateText(payload.answer, 4000);
   }
   return payload;
+}
+
+function isCreateDocumentCommand(message) {
+  return typeof message === "string" && message.trim().toLowerCase().startsWith(CREATE_DOCUMENT_PREFIX);
 }
 
 async function fetchJsonWithLatency(url, options = {}) {
@@ -439,10 +445,13 @@ function renderEvidence(data, useRag) {
 }
 
 function renderChatResponse(data, latencyMs, useRag) {
-  const answer = data?.answer ?? data?.response ?? "";
+  const answer = data?.document_path
+    ? `Documento creado: ${data.document_path}${data?.document_filename ? ` (${data.document_filename})` : ""}`
+    : (data?.answer ?? data?.response ?? "");
   const traceId = data?.trace_id || data?.request_id;
   const chunks = Array.isArray(data?.chunks) ? data.chunks : [];
   const warnings = Array.isArray(data?.warnings) ? data.warnings : [];
+  const effectiveUseRag = typeof data?.use_rag === "boolean" ? data.use_rag : useRag;
 
   elements.retrievalStatus.textContent = valueOrDash(data?.retrieval_status);
   elements.evidenceUsed.textContent = valueOrDash(data?.evidence_used);
@@ -454,7 +463,7 @@ function renderChatResponse(data, latencyMs, useRag) {
   elements.chatLatency.textContent = String(data?.latency_ms ?? latencyMs);
   elements.warningsText.textContent = warnings.length ? warnings.map((warning) => typeof warning === "string" ? warning : prettyJson(warning)).join("\n") : "-";
   elements.chatRaw.textContent = prettyJson(summarizeChatPayload(data));
-  renderEvidence(data || {}, useRag);
+  renderEvidence(data || {}, effectiveUseRag);
 
   appendChatMessage({
     role: "assistant",
@@ -462,6 +471,8 @@ function renderChatResponse(data, latencyMs, useRag) {
     meta: [
       ["provider", data?.provider],
       ["model", data?.model],
+      ["command", data?.command],
+      ["tool", data?.tool_called],
       ["retrieval", data?.retrieval_status],
       ["latency_ms", data?.latency_ms ?? latencyMs],
       ["trace_id", traceId ? String(traceId).slice(0, 8) : "-"],
@@ -479,6 +490,19 @@ function buildChatPayload(message) {
     temperature: selectedTemperature === null ? DEFAULT_CHAT_TEMPERATURE : selectedTemperature,
     use_rag: elements.useRagInput.checked,
   };
+}
+
+function prefillCreateDocumentCommand() {
+  const currentMessage = elements.messageInput.value.trim();
+  if (!currentMessage) {
+    elements.messageInput.value = `${CREATE_DOCUMENT_PREFIX} `;
+  } else if (!isCreateDocumentCommand(currentMessage)) {
+    elements.messageInput.value = `${CREATE_DOCUMENT_PREFIX} ${currentMessage}`;
+  }
+  elements.useRagInput.checked = false;
+  elements.messageInput.focus();
+  elements.messageInput.style.height = "";
+  elements.messageInput.style.height = `${Math.min(elements.messageInput.scrollHeight, 180)}px`;
 }
 
 function setChatPending(isPending) {
@@ -987,6 +1011,7 @@ function init() {
   elements.temperatureSelect.addEventListener("change", () => localStorage.setItem("locales.chatTemperature", elements.temperatureSelect.value));
   elements.healthButton.addEventListener("click", checkHealth);
   elements.chatForm.addEventListener("submit", sendChat);
+  elements.createDocumentButton.addEventListener("click", prefillCreateDocumentCommand);
   elements.sideTabs.forEach((button) => {
     button.addEventListener("click", () => setActiveSidePanel(button.dataset.sideTab));
   });

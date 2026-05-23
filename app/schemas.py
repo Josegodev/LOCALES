@@ -1,7 +1,7 @@
 import math
 import uuid
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -48,7 +48,7 @@ class CreateDocumentRequest(BaseModel):
     request_id: str = Field(min_length=32, max_length=36)
     filename: str = Field(min_length=1, max_length=255)
     content: str = Field(min_length=1, max_length=100_000)
-    overwrite: Literal[False] = False
+    overwrite: bool = False
     user_id: int
     chat_id: int
 
@@ -188,6 +188,16 @@ class ChatResponse(BaseModel):
     eval_duration: int | None = None
     total_duration: int | None = None
     load_duration: int | None = None
+    tool_latency_ms: int | None = None
+    command: str | None = None
+    tool_called: str | None = None
+    tool_result_status: str | None = None
+    document_path: str | None = None
+    document_filename: str | None = None
+    chars_written: int | None = None
+    overwrite_requested: bool | None = None
+    overwrite_applied: bool | None = None
+    overwrite_reason: str | None = None
 
 
 class ChatModelOption(BaseModel):
@@ -267,6 +277,16 @@ class ChatRunResponse(BaseModel):
     fallback_used: bool | None = None
     fallback_reason: str | None = None
     answer_mode: str | None = None
+    command: str | None = None
+    tool_called: str | None = None
+    tool_result_status: str | None = None
+    document_path: str | None = None
+    document_filename: str | None = None
+    chars_written: int | None = None
+    overwrite_requested: bool | None = None
+    overwrite_applied: bool | None = None
+    overwrite_reason: str | None = None
+    error_type: str | None = None
 
 
 class ChatTraceResponse(ChatRunResponse):
