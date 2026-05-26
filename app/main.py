@@ -1,9 +1,8 @@
 from DB.chunks.document_context import build_document_prompt
 import app.chat_eval_runner as chat_eval_runner
-import app.chat_runtime as chat_runtime_module
+from app.chat import ChatDependencies, ChatService
 from app.auth import bearer_scheme, require_chat_access
 from app.chat_runs.router import router as chat_runs_router
-from app.chat_runtime import run_chat_request as _run_chat_request_impl
 from app.config import settings
 from app.evals.router import router as runs_router
 from app.llm_client import ask_chat, list_chat_models, resolve_provider_model
@@ -26,6 +25,7 @@ from app.schemas import (
     TEMPERATURE_MAX,
     TEMPERATURE_MIN,
 )
+from app.tools.create_document import create_document_tool
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials
@@ -88,14 +88,22 @@ async def log_rejected_cors_preflight(request: Request, call_next):
     return response
 
 
-def _sync_chat_runtime_dependencies() -> None:
-    chat_runtime_module.ask_chat = ask_chat
-    chat_runtime_module.build_document_prompt = build_document_prompt
-    chat_runtime_module.query_remote_rag = query_remote_rag
-    chat_runtime_module.resolve_provider_model = resolve_provider_model
-    chat_runtime_module.save_chat_run = save_chat_run
-    chat_runtime_module.new_trace_id = new_trace_id
-    chat_runtime_module.settings = settings
+def _build_chat_dependencies() -> ChatDependencies:
+    return ChatDependencies(
+        ask_chat=ask_chat,
+        build_document_prompt=build_document_prompt,
+        query_remote_rag=query_remote_rag,
+        resolve_provider_model=resolve_provider_model,
+        save_chat_run=save_chat_run,
+        log_event=log_event,
+        new_trace_id=new_trace_id,
+        settings=settings,
+        create_document_tool=create_document_tool,
+    )
+
+
+def _build_chat_service() -> ChatService:
+    return ChatService(_build_chat_dependencies())
 
 
 def run_chat_request(
@@ -103,8 +111,7 @@ def run_chat_request(
     *,
     persist_trace: bool = True,
 ) -> ChatResponse:
-    _sync_chat_runtime_dependencies()
-    return _run_chat_request_impl(request, persist_trace=persist_trace)
+    return _build_chat_service().run_chat_request(request, persist_trace=persist_trace)
 
 
 def _run_chat_request(
