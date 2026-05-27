@@ -6,7 +6,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from DB.chunks.document_context import detect_source_intent, normalize_terms
+from DB.chunks.document_context import (
+    detect_source_intent,
+    is_referential_query,
+    normalize_terms,
+    source_intent_from_corpus_hint,
+)
 from app.schemas import ChatRequest
 
 NO_EVIDENCE_MARKER = "NO_EVIDENCE_FOR_ANSWER"
@@ -73,6 +78,7 @@ def _build_default_context(message: str, *, use_rag: bool) -> dict[str, Any]:
         "document_ids": [],
         "source_filenames": [],
         "scores": [],
+        "ranking_scores": [],
         "warnings": [],
     }
 
@@ -137,17 +143,38 @@ def _should_use_active_context(
     query: str,
     active_document_id: int | None,
     active_document_title: str | None,
+    active_corpus: str | None = None,
+    last_source_intent: str | None = None,
 ) -> tuple[bool, str | None]:
     if active_document_id is None and not active_document_title:
         return False, None
 
-    source_intent = detect_source_intent(query)
-    if source_intent != "mixed":
-        return False, "overridden_by_explicit_intent"
-
+    source_intent = detect_source_intent(
+        query,
+        active_corpus=active_corpus,
+        last_source_intent=last_source_intent,
+    )
     query_terms = normalize_terms(query)
     query_word_count = len(query.strip().split())
-    is_short_or_ambiguous = len(query_terms) <= 2 or query_word_count <= 4
+    referential_query = is_referential_query(query)
+    is_short_or_ambiguous = referential_query or len(query_terms) <= 2 or query_word_count <= 4
+    if not is_short_or_ambiguous:
+        return False, "query_specific_enough"
+
+    active_document_intent = source_intent_from_corpus_hint(active_corpus)
+    if active_document_intent is None and isinstance(active_document_title, str):
+        normalized_title = active_document_title.strip().casefold()
+        if normalized_title.endswith(".pdf"):
+            active_document_intent = "official_docs"
+        elif normalized_title.endswith(".md"):
+            active_document_intent = "nucleo"
+
+    if source_intent != "mixed" and active_document_intent and source_intent != active_document_intent:
+        return False, "overridden_by_explicit_intent"
+
+    if referential_query:
+        return True, "referential_query"
+
     if is_short_or_ambiguous:
         return True, "short_or_ambiguous_query"
 
@@ -236,22 +263,35 @@ def retrieve_chat_context(
         query=request.message,
         active_document_id=request.active_document_id,
         active_document_title=active_document_title,
+        active_corpus=request.active_corpus,
+        last_source_intent=request.last_source_intent,
     )
 
     if use_rag:
         retrieval_started_at = time.perf_counter()
         top_k = request.top_k or 3
         if settings_obj.use_remote_rag:
-            context = query_remote_rag_fn(
-                query=request.message,
-                top_k=top_k,
-                trace_id=trace_id,
-                allowed_source_filenames=request.allowed_source_filenames,
-            )
+            remote_rag_kwargs = {
+                "query": request.message,
+                "top_k": top_k,
+                "trace_id": trace_id,
+                "allowed_source_filenames": request.allowed_source_filenames,
+            }
+            if use_active_context and request.active_document_id is not None:
+                remote_rag_kwargs["active_document_id"] = request.active_document_id
+            if use_active_context and active_document_title is not None:
+                remote_rag_kwargs["active_document_title"] = active_document_title
+            if isinstance(request.active_corpus, str) and request.active_corpus.strip():
+                remote_rag_kwargs["active_corpus"] = request.active_corpus
+            if isinstance(request.last_source_intent, str) and request.last_source_intent.strip():
+                remote_rag_kwargs["last_source_intent"] = request.last_source_intent
+            context = query_remote_rag_fn(**remote_rag_kwargs)
         else:
             rag_kwargs = {
                 "limit": top_k,
                 "allowed_source_filenames": request.allowed_source_filenames,
+                "active_corpus": request.active_corpus,
+                "last_source_intent": request.last_source_intent,
             }
             if request.active_document_id is not None or active_document_title is not None:
                 rag_kwargs.update(

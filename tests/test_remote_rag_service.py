@@ -338,6 +338,44 @@ class RemoteRagServiceTests(unittest.TestCase):
 
         self.assertEqual(captured["json"]["allowed_source_filenames"], ["NUCLEO_RUNTIME.md"])
 
+    def test_rag_client_sends_active_context_fields(self):
+        captured: dict = {}
+
+        class FakeResponse:
+            status_code = 200
+
+            @staticmethod
+            def json() -> dict:
+                return {
+                    "status": "NO_EVIDENCE_FOR_ANSWER",
+                    "retrieval_status": "NO_EVIDENCE_FOR_ANSWER",
+                    "chunks": [],
+                }
+
+            @staticmethod
+            def raise_for_status() -> None:
+                return None
+
+        def fake_post(url: str, json: dict, timeout: float):
+            captured["json"] = json
+            return FakeResponse()
+
+        with patch.object(rag_client.requests, "post", side_effect=fake_post):
+            rag_client.query_remote_rag(
+                query="como se mejora ese rendimiento con RAG?",
+                top_k=5,
+                trace_id=REQUEST_ID,
+                active_document_id=2,
+                active_document_title="patrick-lewis-rag.pdf",
+                active_corpus="documentos_oficiales",
+                last_source_intent="official_docs",
+            )
+
+        self.assertEqual(captured["json"]["active_document_id"], 2)
+        self.assertEqual(captured["json"]["active_document_title"], "patrick-lewis-rag.pdf")
+        self.assertEqual(captured["json"]["active_corpus"], "documentos_oficiales")
+        self.assertEqual(captured["json"]["last_source_intent"], "official_docs")
+
     def test_rag_client_timeout_returns_controlled_no_evidence(self):
         with patch.object(rag_client.requests, "post", side_effect=requests.Timeout):
             result = rag_client.query_remote_rag(

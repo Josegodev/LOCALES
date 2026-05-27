@@ -37,9 +37,13 @@ class ChatRunObservabilityTests(unittest.TestCase):
             "quoted_terms": [],
             "source_intent": "mixed",
             "selected_corpus": "mixed",
+            "active_document_id": 2,
+            "active_document_title": "doc.pdf",
+            "active_context_used": True,
             "candidate_filenames": ["doc.pdf"],
             "selected_filenames": ["doc.pdf"],
             "scores": [1],
+            "ranking_scores": [1],
         }
 
     def test_post_chat_persists_chat_run_line(self):
@@ -89,6 +93,12 @@ class ChatRunObservabilityTests(unittest.TestCase):
         self.assertEqual(payload["chunk_ids"], [1])
         self.assertEqual(payload["document_ids"], [2])
         self.assertEqual(payload["source_filenames"], ["doc.pdf"])
+        self.assertEqual(payload["source_intent"], "mixed")
+        self.assertEqual(payload["selected_corpus"], "mixed")
+        self.assertEqual(payload["active_document_id"], 2)
+        self.assertEqual(payload["active_document_title"], "doc.pdf")
+        self.assertTrue(payload["active_context_used"])
+        self.assertEqual(payload["ranking_scores"], [1])
         self.assertEqual(payload["tokens_total"], 32)
         self.assertIn("generation_latency_ms", payload)
         self.assertIn("retrieval_latency_ms", payload)

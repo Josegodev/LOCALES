@@ -26,6 +26,11 @@ OFFICIAL_TERMS = (
     "artículo",
     "articulo",
     "documento oficial",
+    "rag",
+    "retrieval augmented generation",
+    "retrieval-augmented generation",
+    "patrick lewis",
+    "lewis",
 )
 NUCLEO_TERMS = (
     "nucleo",
@@ -34,7 +39,34 @@ NUCLEO_TERMS = (
     "agentruntime",
     "telegram",
     "repo",
+    "frontend",
+    "proyecto",
+    "project",
 )
+REFERENTIAL_TERMS = {
+    "ese",
+    "esa",
+    "eso",
+    "esto",
+    "esta",
+    "este",
+    "anterior",
+    "anteriormente",
+    "previo",
+    "previa",
+    "misma",
+    "mismo",
+    "técnica",
+    "tecnica",
+    "método",
+    "metodo",
+    "enfoque",
+    "rendimiento",
+    "that",
+    "this",
+    "previous",
+    "prior",
+}
 DOMAIN_QUERY_EXPANSIONS = {
     "atencion": [
         "attention",
@@ -326,6 +358,38 @@ def normalize_source_filenames(values: list[str] | None) -> list[str]:
     return normalized
 
 
+def is_referential_query(query: str) -> bool:
+    normalized_query = normalize_query(query)
+    if not normalized_query:
+        return False
+
+    return any(term in REFERENTIAL_TERMS for term in normalized_query.split())
+
+
+def source_intent_from_corpus_hint(value: str | None) -> str | None:
+    if not isinstance(value, str):
+        return None
+
+    normalized_value = normalize_query(value)
+    if normalized_value in {
+        "official_docs",
+        OFFICIAL_CORPUS,
+        OFFICIAL_SOURCE_TYPE,
+        "paper",
+        "papers",
+    }:
+        return "official_docs"
+    if normalized_value in {
+        "nucleo",
+        NUCLEO_CORPUS,
+        NUCLEO_SOURCE_TYPE,
+        "project",
+        "proyecto",
+    }:
+        return "nucleo"
+    return None
+
+
 def classify_document_metadata(
     *,
     filename: str,
@@ -404,8 +468,13 @@ def ensure_documents_metadata_schema(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def detect_source_intent(query: str) -> str:
-    normalized_query = query.casefold()
+def detect_source_intent(
+    query: str,
+    *,
+    active_corpus: str | None = None,
+    last_source_intent: str | None = None,
+) -> str:
+    normalized_query = normalize_query(query)
     quoted_terms = extract_quoted_terms(query)
     official_match = any(term in normalized_query for term in OFFICIAL_TERMS)
     nucleo_match = any(term in normalized_query for term in NUCLEO_TERMS)
@@ -417,6 +486,16 @@ def detect_source_intent(query: str) -> str:
         return "official_docs"
     if nucleo_match and not official_match:
         return "nucleo"
+
+    if is_referential_query(query):
+        normalized_last_source_intent = normalize_query(last_source_intent or "")
+        if normalized_last_source_intent in {"official_docs", "nucleo"}:
+            return normalized_last_source_intent
+
+        hinted_intent = source_intent_from_corpus_hint(active_corpus)
+        if hinted_intent is not None:
+            return hinted_intent
+
     return "mixed"
 
 
@@ -499,6 +578,7 @@ def _collect_trace(
         "document_ids": document_ids,
         "source_filenames": selected_filenames,
         "scores": scores,
+        "ranking_scores": scores,
     }
 
 
@@ -524,23 +604,6 @@ def _filter_rows_for_active_document(
             filtered.append(row)
 
     return filtered
-
-
-def _active_document_context_chunks(
-    *,
-    rows: list[sqlite3.Row],
-    limit: int,
-) -> list[dict]:
-    ranked: list[dict] = []
-
-    for row in sorted(rows, key=lambda item: int(item["chunk_index"])):
-        item = dict(row)
-        item["quoted_matches"] = []
-        item["matched_terms"] = []
-        item["score"] = int(item.get("priority") or 0) + max(0, 200 - int(item["chunk_index"]))
-        ranked.append(item)
-
-    return ranked[:limit]
 
 
 def _rank_rows(
@@ -622,6 +685,8 @@ def search_chunks_with_trace(
     active_document_title: str | None = None,
     allow_active_document_fallback: bool = False,
     active_context_reason: str | None = None,
+    active_corpus: str | None = None,
+    last_source_intent: str | None = None,
 ) -> tuple[list[dict], dict]:
     query_original = query
     query_normalized = normalize_query(query)
@@ -630,7 +695,11 @@ def search_chunks_with_trace(
     expanded_query_terms = expand_query_terms(query_terms)
     query_expansion_used = bool(expanded_query_terms)
     query_expansion_reason = "domain_dictionary" if expanded_query_terms else None
-    source_intent = detect_source_intent(query)
+    source_intent = detect_source_intent(
+        query,
+        active_corpus=active_corpus,
+        last_source_intent=last_source_intent,
+    )
     selected_corpus = select_corpus_from_intent(source_intent)
 
     allowed_filenames = {
@@ -727,7 +796,6 @@ def search_chunks_with_trace(
             active_document_title=active_document_title,
         )
         if allow_active_document_fallback and active_rows:
-            active_context_used = True
             ranked_active = _rank_rows(
                 rows=active_rows,
                 query_terms=non_quoted_query_terms,
@@ -741,9 +809,13 @@ def search_chunks_with_trace(
                 top_chunks = ranked_active[:limit]
                 active_context_used = True
             else:
-                candidate_chunks = _active_document_context_chunks(
-                    rows=active_rows,
-                    limit=limit,
+                candidate_chunks = _rank_rows(
+                    rows=rows,
+                    query_terms=non_quoted_query_terms,
+                    expanded_query_terms=expanded_query_terms,
+                    quoted_terms=quoted_terms,
+                    allowed_filenames=allowed_filenames,
+                    source_intent=source_intent,
                 )
                 top_chunks = candidate_chunks[:limit]
         else:
@@ -795,6 +867,8 @@ def search_chunks(
     active_document_title: str | None = None,
     allow_active_document_fallback: bool = False,
     active_context_reason: str | None = None,
+    active_corpus: str | None = None,
+    last_source_intent: str | None = None,
 ) -> list[dict]:
     chunks, _ = search_chunks_with_trace(
         query=query,
@@ -804,6 +878,8 @@ def search_chunks(
         active_document_title=active_document_title,
         allow_active_document_fallback=allow_active_document_fallback,
         active_context_reason=active_context_reason,
+        active_corpus=active_corpus,
+        last_source_intent=last_source_intent,
     )
     return chunks
 
@@ -816,6 +892,8 @@ def build_document_prompt(
     active_document_title: str | None = None,
     allow_active_document_fallback: bool = False,
     active_context_reason: str | None = None,
+    active_corpus: str | None = None,
+    last_source_intent: str | None = None,
 ) -> dict:
     chunks, trace = search_chunks_with_trace(
         query=query,
@@ -825,6 +903,8 @@ def build_document_prompt(
         active_document_title=active_document_title,
         allow_active_document_fallback=allow_active_document_fallback,
         active_context_reason=active_context_reason,
+        active_corpus=active_corpus,
+        last_source_intent=last_source_intent,
     )
 
     if not chunks:

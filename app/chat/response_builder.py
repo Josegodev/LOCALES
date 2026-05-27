@@ -55,5 +55,6 @@ def build_chat_response(
         document_ids=document_ids,
         source_filenames=source_filenames,
         scores=context.get("scores", []),
+        ranking_scores=context.get("ranking_scores", context.get("scores", [])),
         warnings=normalized_warnings,
     )

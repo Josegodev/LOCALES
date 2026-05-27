@@ -218,6 +218,12 @@ class ChatRunRecord(BaseModel):
     chunk_ids: list[int] = Field(default_factory=list)
     document_ids: list[int] = Field(default_factory=list)
     source_filenames: list[str] = Field(default_factory=list)
+    source_intent: str | None = None
+    selected_corpus: str | None = None
+    active_document_id: int | None = None
+    active_document_title: str | None = None
+    active_context_used: bool | None = None
+    ranking_scores: list[int] = Field(default_factory=list)
     tokens_input: int | float | None = None
     tokens_output: int | float | None = None
     tokens_total: int | float | None = None
@@ -294,6 +300,16 @@ def normalize_chat_run_record(record: dict[str, Any]) -> ChatRunRecord:
         "chunk_ids": _int_list(record.get("chunk_ids")),
         "document_ids": _int_list(record.get("document_ids")),
         "source_filenames": _str_list(record.get("source_filenames")),
+        "source_intent": _nullable_str(record.get("source_intent")),
+        "selected_corpus": _nullable_str(record.get("selected_corpus")),
+        "active_document_id": _nullable_int(record.get("active_document_id")),
+        "active_document_title": _nullable_str(record.get("active_document_title")),
+        "active_context_used": (
+            record.get("active_context_used")
+            if isinstance(record.get("active_context_used"), bool)
+            else None
+        ),
+        "ranking_scores": _int_list(record.get("ranking_scores")),
         "tokens_input": tokens_input,
         "tokens_output": tokens_output,
         "tokens_total": _normalize_tokens_total(
@@ -481,6 +497,16 @@ def write_chat_run(**kwargs: Any) -> Path:
         chunk_ids=_int_list(kwargs.get("chunk_ids")),
         document_ids=_int_list(kwargs.get("document_ids")),
         source_filenames=_str_list(kwargs.get("source_filenames")),
+        source_intent=_nullable_str(kwargs.get("source_intent")),
+        selected_corpus=_nullable_str(kwargs.get("selected_corpus")),
+        active_document_id=_nullable_int(kwargs.get("active_document_id")),
+        active_document_title=_nullable_str(kwargs.get("active_document_title")),
+        active_context_used=(
+            kwargs.get("active_context_used")
+            if isinstance(kwargs.get("active_context_used"), bool)
+            else None
+        ),
+        ranking_scores=_int_list(kwargs.get("ranking_scores")),
         tokens_input=tokens_input,
         tokens_output=tokens_output,
         tokens_total=_normalize_tokens_total(

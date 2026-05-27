@@ -181,6 +181,7 @@ class ChatResponse(BaseModel):
     document_ids: list[int] = Field(default_factory=list)
     source_filenames: list[str] = Field(default_factory=list)
     scores: list[int] = Field(default_factory=list)
+    ranking_scores: list[int] = Field(default_factory=list)
     warnings: list[str | dict] = Field(default_factory=list)
     prompt_eval_count: int | None = None
     eval_count: int | None = None
@@ -255,6 +256,12 @@ class ChatRunResponse(BaseModel):
     chunk_ids: list[int] = Field(default_factory=list)
     document_ids: list[int] = Field(default_factory=list)
     source_filenames: list[str] = Field(default_factory=list)
+    source_intent: str | None = None
+    selected_corpus: str | None = None
+    active_document_id: int | None = None
+    active_document_title: str | None = None
+    active_context_used: bool | None = None
+    ranking_scores: list[int] = Field(default_factory=list)
     tokens_input: float | None = None
     tokens_output: float | None = None
     tokens_total: float | None = None

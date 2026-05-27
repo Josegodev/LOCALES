@@ -44,6 +44,12 @@ def _create_legacy_documents_sqlite(db_path: Path) -> None:
                 "The paper introduces the Transformer architecture based entirely on attention.",
             ),
             (
+                "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks - Patrick Lewis et al..pdf",
+                "/tmp/pdf/Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks - Patrick Lewis et al..pdf",
+                "sha-rag-pdf",
+                "RAG improves knowledge-intensive generation by conditioning the model on retrieved passages from a dense index.",
+            ),
+            (
                 "EVOLUTION_MAP.md",
                 "/home/jose-gonzalez-oliva/NUCLEO/docs_esp/EVOLUTION_MAP.md",
                 "sha-evolution",
@@ -60,6 +66,12 @@ def _create_legacy_documents_sqlite(db_path: Path) -> None:
                 "/home/jose-gonzalez-oliva/NUCLEO/docs_esp/internal_transformers.md",
                 "sha-internal-transformers",
                 "Nota interna que menciona transformers pero no es documentación oficial.",
+            ),
+            (
+                "session_20260501_frontend_unificado.md",
+                "/home/jose-gonzalez-oliva/NUCLEO/sessions/session_20260501_frontend_unificado.md",
+                "sha-session",
+                "La sesion interna habla del rendimiento del frontend unificado, no del paper de RAG.",
             ),
         ]
 
@@ -87,17 +99,27 @@ def _create_legacy_documents_sqlite(db_path: Path) -> None:
             (
                 2,
                 0,
-                "NUCLEO AgentRuntime acts as the orchestrator of execution.",
+                "RAG improves knowledge-intensive generation by conditioning the model on retrieved passages from a dense index.",
             ),
             (
                 3,
                 0,
-                "El orquestador coordina planner, policy y runtime de NUCLEO.",
+                "NUCLEO AgentRuntime acts as the orchestrator of execution.",
             ),
             (
                 4,
                 0,
+                "El orquestador coordina planner, policy y runtime de NUCLEO.",
+            ),
+            (
+                5,
+                0,
                 "Documento interno que menciona transformers en un contexto no oficial.",
+            ),
+            (
+                6,
+                0,
+                "La sesion interna habla del rendimiento del frontend unificado, no del paper de RAG.",
             ),
         ]
 
@@ -216,27 +238,77 @@ class DocumentContextTests(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["filename"], "EVOLUTION_MAP.md")
 
-    def test_active_document_context_can_keep_pdf_for_short_follow_up_query(self):
+    def test_active_document_context_can_keep_pdf_for_referential_follow_up_query(self):
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "documents.sqlite"
             _create_legacy_documents_sqlite(db_path)
 
             with patch.object(document_context, "DB_PATH", db_path):
                 context = document_context.build_document_prompt(
-                    query="que son modelos?",
+                    query="que dice esa arquitectura?",
                     limit=3,
                     active_document_id=1,
                     active_document_title="Attention is all yout need.pdf",
                     allow_active_document_fallback=True,
-                    active_context_reason="short_or_ambiguous_query",
+                    active_context_reason="referential_query",
                 )
 
         self.assertEqual(context["status"], "EVIDENCE_FOUND")
         self.assertTrue(context["active_context_used"])
-        self.assertEqual(context["active_context_reason"], "short_or_ambiguous_query")
+        self.assertEqual(context["active_context_reason"], "referential_query")
         self.assertEqual(context["active_document_id"], 1)
         self.assertEqual(context["selected_filenames"], ["Attention is all yout need.pdf"])
         self.assertEqual(context["selected_corpus"], "documentos_oficiales")
+
+    def test_rag_follow_up_with_active_pdf_avoids_session_markdown_contamination(self):
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "documents.sqlite"
+            _create_legacy_documents_sqlite(db_path)
+
+            with patch.object(document_context, "DB_PATH", db_path):
+                context = document_context.build_document_prompt(
+                    query="como se mejora ese rendimiento con RAG?",
+                    limit=3,
+                    active_document_id=2,
+                    active_document_title=(
+                        "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks - "
+                        "Patrick Lewis et al..pdf"
+                    ),
+                    allow_active_document_fallback=True,
+                    active_context_reason="referential_query",
+                    active_corpus="documentos_oficiales",
+                    last_source_intent="official_docs",
+                )
+
+        self.assertEqual(context["status"], "EVIDENCE_FOUND")
+        self.assertEqual(context["source_intent"], "official_docs")
+        self.assertEqual(context["selected_corpus"], "documentos_oficiales")
+        self.assertTrue(context["active_context_used"])
+        self.assertEqual(
+            context["selected_filenames"],
+            ["Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks - Patrick Lewis et al..pdf"],
+        )
+        self.assertNotIn("session_20260501_frontend_unificado.md", context["selected_filenames"])
+
+    def test_rag_query_without_active_document_prefers_pdf_corpus_over_internal_session(self):
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "documents.sqlite"
+            _create_legacy_documents_sqlite(db_path)
+
+            with patch.object(document_context, "DB_PATH", db_path):
+                context = document_context.build_document_prompt(
+                    query="como mejora RAG el rendimiento?",
+                    limit=3,
+                )
+
+        self.assertEqual(context["status"], "EVIDENCE_FOUND")
+        self.assertEqual(context["source_intent"], "official_docs")
+        self.assertEqual(context["selected_corpus"], "documentos_oficiales")
+        self.assertIn(
+            "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks - Patrick Lewis et al..pdf",
+            context["selected_filenames"],
+        )
+        self.assertNotIn("session_20260501_frontend_unificado.md", context["selected_filenames"])
 
     def test_documento_con_titulo_expresa_intent_de_documentos_oficiales(self):
         with TemporaryDirectory() as tmpdir:

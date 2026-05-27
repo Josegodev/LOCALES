@@ -32,6 +32,7 @@ def _controlled_no_evidence(
         "document_ids": [],
         "source_filenames": [],
         "scores": [],
+        "ranking_scores": [],
         "warnings": [
             {
                 "code": code,
@@ -54,6 +55,10 @@ def query_remote_rag(
     top_k: int,
     trace_id: str | None = None,
     allowed_source_filenames: list[str] | None = None,
+    active_document_id: int | None = None,
+    active_document_title: str | None = None,
+    active_corpus: str | None = None,
+    last_source_intent: str | None = None,
 ) -> dict:
     payload = {
         "query": query,
@@ -62,6 +67,14 @@ def query_remote_rag(
     }
     if allowed_source_filenames:
         payload["allowed_source_filenames"] = allowed_source_filenames
+    if active_document_id is not None:
+        payload["active_document_id"] = active_document_id
+    if active_document_title:
+        payload["active_document_title"] = active_document_title
+    if active_corpus:
+        payload["active_corpus"] = active_corpus
+    if last_source_intent:
+        payload["last_source_intent"] = last_source_intent
 
     try:
         response = requests.post(

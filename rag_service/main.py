@@ -21,6 +21,10 @@ class RagQueryRequest(BaseModel):
     top_k: int = Field(default=settings.rag_top_k, ge=1, le=10)
     trace_id: str | None = None
     allowed_source_filenames: list[str] | None = None
+    active_document_id: int | None = Field(default=None, ge=1)
+    active_document_title: str | None = Field(default=None, min_length=1, max_length=255)
+    active_corpus: str | None = Field(default=None, min_length=1, max_length=64)
+    last_source_intent: str | None = Field(default=None, min_length=1, max_length=64)
 
 
 def _sanitize_chunk(chunk: dict) -> dict:
@@ -115,6 +119,14 @@ def rag_query(request: RagQueryRequest) -> dict:
             request.query,
             limit=request.top_k,
             allowed_source_filenames=request.allowed_source_filenames,
+            active_document_id=request.active_document_id,
+            active_document_title=request.active_document_title,
+            allow_active_document_fallback=(
+                request.active_document_id is not None or bool(request.active_document_title)
+            ),
+            active_context_reason="remote_active_context",
+            active_corpus=request.active_corpus,
+            last_source_intent=request.last_source_intent,
         )
     except Exception as exc:
         return _no_evidence_response(

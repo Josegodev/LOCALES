@@ -149,6 +149,66 @@ class ChatRetrievalTests(unittest.TestCase):
             allowed_source_filenames=["uno.md", "dos.md"],
         )
 
+    def test_retrieve_chat_context_local_rag_prioritizes_active_document_for_referential_query(self):
+        request = self._request(
+            message="como se mejora ese rendimiento con RAG?",
+            active_document_id=7,
+            active_document_title="patrick-lewis-rag.pdf",
+            active_corpus="documentos_oficiales",
+            last_source_intent="official_docs",
+        )
+        build_document_prompt_mock = Mock(
+            return_value={
+                "status": "EVIDENCE_FOUND",
+                "retrieval_status": "EVIDENCE_FOUND",
+                "prompt": "context prompt",
+                "chunks": [
+                    {
+                        "id": 70,
+                        "document_id": 7,
+                        "filename": "patrick-lewis-rag.pdf",
+                        "text": "RAG improves generation with retrieved passages.",
+                    }
+                ],
+                "warnings": [],
+                "query_original": request.message,
+                "query_normalized": request.message.casefold(),
+                "query_terms": ["como", "mejora", "rendimiento"],
+                "quoted_terms": [],
+                "source_intent": "official_docs",
+                "selected_corpus": "documentos_oficiales",
+                "active_context_used": True,
+                "active_context_reason": "referential_query",
+                "candidate_filenames": ["patrick-lewis-rag.pdf"],
+                "selected_filenames": ["patrick-lewis-rag.pdf"],
+                "scores": [123],
+                "ranking_scores": [123],
+            }
+        )
+
+        result = retrieve_chat_context(
+            request=request,
+            trace_id="12345678123456781234567812345678",
+            use_rag=True,
+            settings_obj=SimpleNamespace(use_remote_rag=False),
+            build_document_prompt_fn=build_document_prompt_mock,
+            query_remote_rag_fn=lambda *args, **kwargs: {},
+        )
+
+        build_document_prompt_mock.assert_called_once_with(
+            request.message,
+            limit=3,
+            allowed_source_filenames=[],
+            active_corpus="documentos_oficiales",
+            last_source_intent="official_docs",
+            active_document_id=7,
+            active_document_title="patrick-lewis-rag.pdf",
+            allow_active_document_fallback=True,
+            active_context_reason="referential_query",
+        )
+        self.assertEqual(result.source_filenames, ["patrick-lewis-rag.pdf"])
+        self.assertEqual(result.context["source_intent"], "official_docs")
+
     def test_retrieve_chat_context_remote_rag_preserves_structured_warning(self):
         request = self._request()
         warning = {"code": "RAG_SERVICE_UNAVAILABLE", "message": "Remote RAG service is unavailable."}

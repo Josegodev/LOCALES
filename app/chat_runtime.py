@@ -1,27 +1,23 @@
+# Transitional compatibility path.
+# New code should pass dependencies explicitly.
+# Fallback imports must be removed once ChatService owns retrieval/generation/persistence.
+
+import re
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException
 
-from DB.chunks.document_context import build_document_prompt
-from app.chat.fallback import (
-    ANSWER_MODE_SAFE_REFUSAL,
-    build_safe_refusal_chat_response,
-    fallback_reason_from_state,
-    fallback_used_from_state,
-    finalize_rag_answer,
-    is_marker_only_no_evidence_answer,
-    no_evidence_answer,
+from DB.chunks.document_context import (
+    build_document_prompt,
+    detect_source_intent,
+    is_referential_query,
+    normalize_terms,
+    source_intent_from_corpus_hint,
 )
 from app.config import settings
-from app.chat.retrieval import (
-    MARKER_ONLY_RETRIEVAL_STATUSES,
-    NO_EVIDENCE_MARKER,
-    RetrievalResult,
-    retrieve_chat_context,
-)
-from app.chat.response_builder import build_chat_response
 from app.llm_client import LLMClientError, ask_chat, resolve_provider_model
 from app.observability.chat_runs import save_chat_run
 from app.observability.logging import log_event
@@ -37,8 +33,43 @@ from app.tools.create_document import (
 if TYPE_CHECKING:
     from app.chat.dependencies import ChatDependencies
 
+NO_EVIDENCE_MARKER = "NO_EVIDENCE_FOR_ANSWER"
+NO_EVIDENCE_EXPLANATION = "No hay evidencia documental suficiente para responder."
+ANSWER_MODE_DOCUMENTARY = "documentary_answer"
+ANSWER_MODE_SAFE_REFUSAL = "safe_refusal"
+ANSWER_MODE_STANDARD = "standard_answer"
+MARKER_ONLY_RETRIEVAL_STATUSES = {"NO_EVIDENCE", "NO_EVIDENCE_FOR_ANSWER"}
+ACTIVE_CONTEXT_NO_EVIDENCE_WARNING = (
+    "Contexto activo detectado, pero sin chunks documentales suficientes para responder."
+)
+NO_EVIDENCE_WARNING = "No hay evidencia documental local suficiente para responder."
+COMMON_QUERY_TERMS = {
+    "about",
+    "busca",
+    "cosa",
+    "dice",
+    "does",
+    "donde",
+    "dónde",
+    "evidencia",
+    "existe",
+    "mean",
+    "meaning",
+    "paper",
+    "que",
+    "qué",
+    "say",
+    "significa",
+    "sobre",
+    "thing",
+    "what",
+}
 CREATE_DOCUMENT_COMMAND = "creardoc"
 CREATE_DOCUMENT_PREFIX = "/creardoc"
+
+
+def _no_evidence_answer() -> str:
+    return f"{NO_EVIDENCE_MARKER}\n{NO_EVIDENCE_EXPLANATION}"
 
 
 def _message_preview(text: str, limit: int = 200) -> str:
@@ -68,6 +99,47 @@ def _chat_trace_source(user_id: int | None, chat_id: int | None) -> str:
     return "chat"
 
 
+def _strip_no_evidence_markers(answer: str) -> str:
+    normalized = answer.replace("\r\n", "\n").replace("\r", "\n")
+    for token in (NO_EVIDENCE_MARKER, NO_EVIDENCE_EXPLANATION):
+        normalized = normalized.replace(token, "")
+    lines = [line.strip() for line in normalized.split("\n") if line.strip()]
+    return "\n".join(lines).strip()
+
+
+def _is_marker_only_no_evidence_answer(answer: str | None) -> bool:
+    if not isinstance(answer, str):
+        return False
+
+    normalized = answer.replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not normalized:
+        return False
+
+    if NO_EVIDENCE_MARKER not in normalized and NO_EVIDENCE_EXPLANATION not in normalized:
+        return False
+
+    return not _strip_no_evidence_markers(normalized)
+
+
+def _normalize_no_evidence_retrieval_status(value: str) -> str:
+    if value in MARKER_ONLY_RETRIEVAL_STATUSES:
+        return NO_EVIDENCE_MARKER
+    return value
+
+
+def _clear_evidence_trace(context: dict) -> None:
+    for key in (
+        "chunks",
+        "chunk_ids",
+        "document_ids",
+        "source_filenames",
+        "selected_filenames",
+        "scores",
+        "ranking_scores",
+    ):
+        context[key] = []
+
+
 def _evidence_used_from_payload(
     *,
     chunk_ids: list[int] | None,
@@ -75,6 +147,286 @@ def _evidence_used_from_payload(
     source_filenames: list[str] | None,
 ) -> bool:
     return bool(chunk_ids or document_ids or source_filenames)
+
+
+def _fallback_used_from_state(
+    *,
+    retrieval_status: str | None,
+    answer_mode: str | None,
+    evidence_used: bool,
+) -> bool:
+    if retrieval_status in MARKER_ONLY_RETRIEVAL_STATUSES:
+        return True
+    return not evidence_used and answer_mode == ANSWER_MODE_SAFE_REFUSAL
+
+
+def _fallback_reason_from_state(
+    *,
+    retrieval_status: str | None,
+    answer_mode: str | None,
+    evidence_used: bool,
+) -> str | None:
+    if not _fallback_used_from_state(
+        retrieval_status=retrieval_status,
+        answer_mode=answer_mode,
+        evidence_used=evidence_used,
+    ):
+        return None
+    if answer_mode == ANSWER_MODE_SAFE_REFUSAL:
+        return "safe_refusal_no_evidence"
+    if retrieval_status in MARKER_ONLY_RETRIEVAL_STATUSES:
+        return "no_evidence"
+    return "fallback_used"
+
+
+def _no_evidence_warning_for_context(context: dict) -> str:
+    if bool(context.get("active_context_used")):
+        return ACTIVE_CONTEXT_NO_EVIDENCE_WARNING
+    return NO_EVIDENCE_WARNING
+
+
+def _build_safe_refusal_chat_response(
+    *,
+    trace_id: str,
+    context: dict,
+    provider: str,
+    model: str,
+    temperature: float,
+    temperature_ignored: bool,
+    use_rag: bool,
+    latency_ms: int,
+) -> ChatResponse:
+    response_warnings = list(context.get("warnings", []))
+    no_evidence_warning = _no_evidence_warning_for_context(context)
+    if no_evidence_warning not in response_warnings:
+        response_warnings.append(no_evidence_warning)
+    context["warnings"] = response_warnings
+    _clear_evidence_trace(context)
+
+    return ChatResponse(
+        trace_id=trace_id,
+        status="ok",
+        provider=provider,
+        model=model,
+        temperature=temperature,
+        temperature_ignored=temperature_ignored,
+        use_rag=use_rag,
+        answer=_no_evidence_answer(),
+        latency_ms=latency_ms,
+        retrieval_status=NO_EVIDENCE_MARKER,
+        answer_mode=ANSWER_MODE_SAFE_REFUSAL,
+        query_original=context.get("query_original"),
+        query_normalized=context.get("query_normalized"),
+        query_terms=context.get("query_terms", []),
+        quoted_terms=context.get("quoted_terms", []),
+        source_intent=context.get("source_intent"),
+        selected_corpus=context.get("selected_corpus"),
+        active_document_id=context.get("active_document_id"),
+        active_document_title=context.get("active_document_title"),
+        active_context_used=bool(context.get("active_context_used")),
+        active_context_reason=context.get("active_context_reason"),
+        evidence_used=False,
+        fallback_used=True,
+        query_expansion_used=bool(context.get("query_expansion_used")),
+        query_expansion_reason=context.get("query_expansion_reason"),
+        expanded_query_terms=context.get("expanded_query_terms", []),
+        candidate_filenames=context.get("candidate_filenames", []),
+        selected_filenames=[],
+        chunks=[],
+        chunk_ids=[],
+        document_ids=[],
+        source_filenames=[],
+        scores=[],
+        ranking_scores=[],
+        warnings=response_warnings,
+    )
+
+
+def _finalize_rag_answer(
+    *,
+    retrieval_status: str,
+    raw_answer: str | None,
+) -> tuple[str, str]:
+    if retrieval_status in MARKER_ONLY_RETRIEVAL_STATUSES:
+        return _no_evidence_answer(), ANSWER_MODE_SAFE_REFUSAL
+
+    candidate = raw_answer if isinstance(raw_answer, str) else ""
+
+    if retrieval_status != "EVIDENCE_FOUND":
+        cleaned = candidate.strip()
+        if not cleaned:
+            raise LLMClientError(
+                "rag_answer_contract_invalid",
+                "standard_answer_empty",
+            )
+        return cleaned, ANSWER_MODE_STANDARD
+
+    cleaned = _strip_no_evidence_markers(candidate)
+
+    if not cleaned:
+        raise LLMClientError(
+            "rag_answer_contract_invalid",
+            "documentary_answer_empty_after_sanitization",
+        )
+
+    return cleaned, ANSWER_MODE_DOCUMENTARY
+
+
+def _extract_anchor_terms(query: str) -> list[str]:
+    terms = re.findall(r"[\w:-]+", query.casefold())
+    anchor_terms: list[str] = []
+
+    for term in terms:
+        if term in COMMON_QUERY_TERMS:
+            continue
+
+        has_explicit_anchor_shape = (
+            len(term) >= 8
+            and (any(character.isdigit() for character in term) or "_" in term or "-" in term)
+        )
+        has_rare_alpha_shape = (
+            len(term) >= 6
+            and term.isalpha()
+            and sum(1 for character in term if character in {"j", "k", "q", "w", "x", "y", "z"}) >= 2
+        )
+
+        if (has_explicit_anchor_shape or has_rare_alpha_shape) and term not in anchor_terms:
+            anchor_terms.append(term)
+
+    return anchor_terms
+
+
+def _should_force_no_evidence(query: str, chunks: list[dict]) -> bool:
+    anchor_terms = _extract_anchor_terms(query)
+    if not anchor_terms:
+        return False
+
+    chunk_texts = [
+        str(chunk.get("text", "")).lower()
+        for chunk in chunks
+        if isinstance(chunk, dict)
+    ]
+
+    return not all(
+        any(anchor_term in chunk_text for chunk_text in chunk_texts)
+        for anchor_term in anchor_terms
+    )
+
+
+def _normalize_active_document_title(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+
+    candidate = Path(value.strip()).name
+    return candidate or None
+
+
+def _should_use_active_context(
+    *,
+    query: str,
+    active_document_id: int | None,
+    active_document_title: str | None,
+    active_corpus: str | None = None,
+    last_source_intent: str | None = None,
+) -> tuple[bool, str | None]:
+    if active_document_id is None and not active_document_title:
+        return False, None
+
+    source_intent = detect_source_intent(
+        query,
+        active_corpus=active_corpus,
+        last_source_intent=last_source_intent,
+    )
+    query_terms = normalize_terms(query)
+    query_word_count = len(query.strip().split())
+    referential_query = is_referential_query(query)
+    is_short_or_ambiguous = referential_query or len(query_terms) <= 2 or query_word_count <= 4
+    if not is_short_or_ambiguous:
+        return False, "query_specific_enough"
+
+    active_document_intent = source_intent_from_corpus_hint(active_corpus)
+    if active_document_intent is None and isinstance(active_document_title, str):
+        normalized_title = active_document_title.strip().casefold()
+        if normalized_title.endswith(".pdf"):
+            active_document_intent = "official_docs"
+        elif normalized_title.endswith(".md"):
+            active_document_intent = "nucleo"
+
+    if source_intent != "mixed" and active_document_intent and source_intent != active_document_intent:
+        return False, "overridden_by_explicit_intent"
+
+    if referential_query:
+        return True, "referential_query"
+
+    if is_short_or_ambiguous:
+        return True, "short_or_ambiguous_query"
+
+    return False, "query_specific_enough"
+
+
+def _normalize_source_filename(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+
+    candidate = value.strip()
+    if not candidate:
+        return None
+
+    return Path(candidate).name
+
+
+def _extract_chunk_source_filename(chunk: dict) -> str | None:
+    for key in ("filename", "source_filename", "document_name", "source_path"):
+        filename = _normalize_source_filename(chunk.get(key))
+        if filename:
+            return filename
+
+    metadata = chunk.get("metadata")
+    if isinstance(metadata, dict):
+        for key in ("filename", "source_filename", "document_name", "source_path"):
+            filename = _normalize_source_filename(metadata.get(key))
+            if filename:
+                return filename
+
+    return None
+
+
+def _extract_chunk_response_data(chunks: list[dict]) -> tuple[list[str], list[int], list[int], list[str]]:
+    chunk_texts: list[str] = []
+    chunk_ids: list[int] = []
+    document_ids: list[int] = []
+    seen_document_ids: set[int] = set()
+    source_filenames: set[str] = set()
+
+    for chunk in chunks:
+        if not isinstance(chunk, dict):
+            continue
+
+        chunk_text = chunk.get("text")
+        if isinstance(chunk_text, str) and chunk_text.strip():
+            chunk_texts.append(chunk_text)
+
+        chunk_id = chunk.get("id")
+        if isinstance(chunk_id, int):
+            chunk_ids.append(chunk_id)
+        elif isinstance(chunk_id, str) and chunk_id.isdigit():
+            chunk_ids.append(int(chunk_id))
+
+        document_id = chunk.get("document_id")
+        if isinstance(document_id, int) and document_id not in seen_document_ids:
+            document_ids.append(document_id)
+            seen_document_ids.add(document_id)
+        elif isinstance(document_id, str) and document_id.isdigit():
+            normalized_document_id = int(document_id)
+            if normalized_document_id not in seen_document_ids:
+                document_ids.append(normalized_document_id)
+                seen_document_ids.add(normalized_document_id)
+
+        source_filename = _extract_chunk_source_filename(chunk)
+        if source_filename:
+            source_filenames.add(source_filename)
+
+    return chunk_texts, chunk_ids, document_ids, sorted(source_filenames)
 
 
 def _dependency_or_default(
@@ -138,6 +490,12 @@ def _persist_chat_run(
     overwrite_requested: bool | None,
     overwrite_applied: bool | None,
     overwrite_reason: str | None,
+    source_intent: str | None,
+    selected_corpus: str | None,
+    active_document_id: int | None,
+    active_document_title: str | None,
+    active_context_used: bool,
+    ranking_scores: list[int],
 ) -> None:
     created_at = datetime.now(timezone.utc).isoformat()
     save_chat_run_fn(
@@ -169,6 +527,12 @@ def _persist_chat_run(
             "chunk_ids": chunk_ids,
             "document_ids": document_ids,
             "source_filenames": source_filenames,
+            "source_intent": source_intent,
+            "selected_corpus": selected_corpus,
+            "active_document_id": active_document_id,
+            "active_document_title": active_document_title,
+            "active_context_used": active_context_used,
+            "ranking_scores": ranking_scores,
             "latency_ms": latency_ms,
             "generation_latency_ms": generation_latency_ms,
             "retrieval_latency_ms": retrieval_latency_ms,
@@ -468,9 +832,9 @@ def run_chat_request(
         "document_ids": [],
         "source_filenames": [],
         "scores": [],
+        "ranking_scores": [],
         "warnings": [],
     }
-    retrieval_result: RetrievalResult | None = None
     parsed_command = parse_chat_command(request.message)
 
     log_event_fn(
@@ -549,23 +913,77 @@ def run_chat_request(
             overwrite_applied = command_response.overwrite_applied
             overwrite_reason = command_response.overwrite_reason
             return command_response
-        retrieval_result = retrieve_chat_context(
-            request=request,
-            trace_id=trace_id,
-            use_rag=use_rag,
-            settings_obj=settings_obj,
-            build_document_prompt_fn=build_document_prompt_fn,
-            query_remote_rag_fn=query_remote_rag_fn,
+        active_document_title = _normalize_active_document_title(request.active_document_title)
+        use_active_context, active_context_reason = _should_use_active_context(
+            query=request.message,
+            active_document_id=request.active_document_id,
+            active_document_title=active_document_title,
+            active_corpus=request.active_corpus,
+            last_source_intent=request.last_source_intent,
         )
-        context = retrieval_result.context
-        retrieval_status = retrieval_result.retrieval_status
-        retrieval_latency_ms = retrieval_result.retrieval_latency_ms
+        if use_rag:
+            retrieval_started_at = time.perf_counter()
+            top_k = request.top_k or 3
+            if settings_obj.use_remote_rag:
+                remote_rag_kwargs = {
+                    "query": request.message,
+                    "top_k": top_k,
+                    "trace_id": trace_id,
+                    "allowed_source_filenames": request.allowed_source_filenames,
+                }
+                if use_active_context and request.active_document_id is not None:
+                    remote_rag_kwargs["active_document_id"] = request.active_document_id
+                if use_active_context and active_document_title is not None:
+                    remote_rag_kwargs["active_document_title"] = active_document_title
+                if isinstance(request.active_corpus, str) and request.active_corpus.strip():
+                    remote_rag_kwargs["active_corpus"] = request.active_corpus
+                if isinstance(request.last_source_intent, str) and request.last_source_intent.strip():
+                    remote_rag_kwargs["last_source_intent"] = request.last_source_intent
+                context = query_remote_rag_fn(**remote_rag_kwargs)
+            else:
+                rag_kwargs = {
+                    "limit": top_k,
+                    "allowed_source_filenames": request.allowed_source_filenames,
+                    "active_corpus": request.active_corpus,
+                    "last_source_intent": request.last_source_intent,
+                }
+                if request.active_document_id is not None or active_document_title is not None:
+                    rag_kwargs.update(
+                        active_document_id=request.active_document_id if use_active_context else None,
+                        active_document_title=active_document_title if use_active_context else None,
+                        allow_active_document_fallback=use_active_context,
+                        active_context_reason=active_context_reason,
+                    )
+                context = build_document_prompt_fn(
+                    request.message,
+                    **rag_kwargs,
+                )
+            context.setdefault("status", context.get("retrieval_status", "unknown"))
+            context.setdefault("prompt", request.message)
+            context.setdefault("chunks", [])
+            context.setdefault("warnings", [])
+            context["active_document_id"] = request.active_document_id
+            context["active_document_title"] = active_document_title
+            context["active_context_used"] = bool(context.get("active_context_used"))
+            context["active_context_reason"] = active_context_reason
+            retrieval_status = _normalize_no_evidence_retrieval_status(str(context["status"]))
+            context["retrieval_status"] = retrieval_status
+            if context["status"] == "EVIDENCE_FOUND" and _should_force_no_evidence(
+                request.message,
+                context.get("chunks", []),
+            ):
+                retrieval_status = NO_EVIDENCE_MARKER
+                context["retrieval_status"] = retrieval_status
+            retrieval_latency_ms = int((time.perf_counter() - retrieval_started_at) * 1000)
+        else:
+            retrieval_status = "DISABLED"
+            context["retrieval_status"] = retrieval_status
 
         if use_rag and retrieval_status in MARKER_ONLY_RETRIEVAL_STATUSES:
             status = "ok"
-            final_answer = no_evidence_answer()
+            final_answer = _no_evidence_answer()
             answer_mode = ANSWER_MODE_SAFE_REFUSAL
-            safe_refusal_response = build_safe_refusal_chat_response(
+            safe_refusal_response = _build_safe_refusal_chat_response(
                 trace_id=trace_id,
                 context=context,
                 provider=provider,
@@ -630,10 +1048,10 @@ def run_chat_request(
             warnings.append("temperature_ignored_by_provider")
         status = "ok"
 
-        chunk_texts = retrieval_result.chunk_texts if retrieval_result is not None else []
-        chunk_ids = retrieval_result.chunk_ids if retrieval_result is not None else []
-        document_ids = retrieval_result.document_ids if retrieval_result is not None else []
-        source_filenames = retrieval_result.source_filenames if retrieval_result is not None else []
+        chunk_texts, chunk_ids, document_ids, source_filenames = _extract_chunk_response_data(context.get("chunks", [])) if use_rag else ([], [], [], [])
+        context["chunk_ids"] = list(chunk_ids)
+        context["document_ids"] = list(document_ids)
+        context["source_filenames"] = list(source_filenames)
         response_payload = dict(result)
         response_payload.pop("retrieval_status", None)
         response_payload.pop("chunks", None)
@@ -648,14 +1066,14 @@ def run_chat_request(
             response_payload["temperature_ignored"] = temperature_ignored
         if not isinstance(response_payload.get("use_rag"), bool):
             response_payload["use_rag"] = use_rag
-        if use_rag and retrieval_status == "EVIDENCE_FOUND" and is_marker_only_no_evidence_answer(
+        if use_rag and retrieval_status == "EVIDENCE_FOUND" and _is_marker_only_no_evidence_answer(
             response_payload.get("answer"),
         ):
             retrieval_status = NO_EVIDENCE_MARKER
             context["retrieval_status"] = retrieval_status
-            final_answer = no_evidence_answer()
+            final_answer = _no_evidence_answer()
             answer_mode = ANSWER_MODE_SAFE_REFUSAL
-            safe_refusal_response = build_safe_refusal_chat_response(
+            safe_refusal_response = _build_safe_refusal_chat_response(
                 trace_id=trace_id,
                 context=context,
                 provider=provider,
@@ -669,7 +1087,7 @@ def run_chat_request(
             warnings = [item for item in safe_refusal_response.warnings if isinstance(item, str)]
             return safe_refusal_response
 
-        final_answer, answer_mode = finalize_rag_answer(
+        final_answer, answer_mode = _finalize_rag_answer(
             retrieval_status=retrieval_status,
             raw_answer=response_payload.get("answer"),
         )
@@ -679,24 +1097,41 @@ def run_chat_request(
             document_ids=document_ids,
             source_filenames=source_filenames,
         )
-        fallback_used = fallback_used_from_state(
+        fallback_used = _fallback_used_from_state(
             retrieval_status=retrieval_status,
             answer_mode=answer_mode,
             evidence_used=evidence_used,
         )
 
-        chat_response = build_chat_response(
+        chat_response = ChatResponse(
             trace_id=trace_id,
-            response_payload=response_payload,
-            context=context,
+            **response_payload,
             retrieval_status=retrieval_status,
             answer_mode=answer_mode,
+            query_original=context.get("query_original"),
+            query_normalized=context.get("query_normalized"),
+            query_terms=context.get("query_terms", []),
+            quoted_terms=context.get("quoted_terms", []),
+            source_intent=context.get("source_intent"),
+            selected_corpus=context.get("selected_corpus"),
+            active_document_id=context.get("active_document_id"),
+            active_document_title=context.get("active_document_title"),
+            active_context_used=bool(context.get("active_context_used")),
+            active_context_reason=context.get("active_context_reason"),
             evidence_used=evidence_used,
             fallback_used=fallback_used,
-            chunk_texts=chunk_texts,
+            query_expansion_used=bool(context.get("query_expansion_used")),
+            query_expansion_reason=context.get("query_expansion_reason"),
+            expanded_query_terms=context.get("expanded_query_terms", []),
+            candidate_filenames=context.get("candidate_filenames", []),
+            selected_filenames=context.get("selected_filenames", []),
+            chunks=chunk_texts,
             chunk_ids=chunk_ids,
             document_ids=document_ids,
             source_filenames=source_filenames,
+            scores=context.get("scores", []),
+            ranking_scores=context.get("ranking_scores", context.get("scores", [])),
+            warnings=context.get("warnings", []),
         )
         final_answer = chat_response.answer
         warnings = [item for item in chat_response.warnings if isinstance(item, str)]
@@ -783,12 +1218,12 @@ def run_chat_request(
             document_ids=context.get("document_ids", []),
             source_filenames=context.get("source_filenames", []),
         )
-        fallback_used = fallback_used_from_state(
+        fallback_used = _fallback_used_from_state(
             retrieval_status=retrieval_status,
             answer_mode=answer_mode,
             evidence_used=evidence_used,
         )
-        fallback_reason = fallback_reason_from_state(
+        fallback_reason = _fallback_reason_from_state(
             retrieval_status=retrieval_status,
             answer_mode=answer_mode,
             evidence_used=evidence_used,
@@ -846,6 +1281,12 @@ def run_chat_request(
                     overwrite_requested=overwrite_requested,
                     overwrite_applied=overwrite_applied,
                     overwrite_reason=overwrite_reason,
+                    source_intent=context.get("source_intent"),
+                    selected_corpus=context.get("selected_corpus"),
+                    active_document_id=context.get("active_document_id"),
+                    active_document_title=context.get("active_document_title"),
+                    active_context_used=bool(context.get("active_context_used")),
+                    ranking_scores=context.get("ranking_scores", context.get("scores", [])),
                 )
             except Exception as exc:
                 log_event_fn(
