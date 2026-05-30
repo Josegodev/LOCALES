@@ -25,11 +25,14 @@ from app.schemas import (
     TEMPERATURE_MAX,
     TEMPERATURE_MIN,
 )
+from app.testclient_compat import apply_blocking_portal_compat_patch
 from app.tools.create_document import create_document_tool
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import ValidationError
+
+apply_blocking_portal_compat_patch()
 
 app = FastAPI(title="Local LLM Gateway")
 

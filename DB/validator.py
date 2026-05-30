@@ -9,20 +9,21 @@ class ModelOutput(BaseModel):
     action: str
     confidence: float
 
+    @staticmethod
     def validate_or_fallback(raw_text: str) -> dict:
-    try:
-        parsed = ModelOutput.model_validate_json(raw_text)
-        return {
-            "status": "valid",
-            "data": parsed.model_dump()
-        }
-    except ValidationError:
-        return {
-            "status": "invalid",
-            "data": {
-                "action": "none",
-                "confidence": 0.0
+        try:
+            parsed = ModelOutput.model_validate_json(raw_text)
+            return {
+                "status": "valid",
+                "data": parsed.model_dump(),
             }
-        }
+        except ValidationError:
+            return {
+                "status": "invalid",
+                "data": {
+                    "action": "none",
+                    "confidence": 0.0,
+                },
+            }
     
     
