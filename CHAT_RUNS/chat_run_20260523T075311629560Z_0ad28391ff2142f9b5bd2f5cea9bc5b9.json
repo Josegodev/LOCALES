@@ -1,0 +1,59 @@
+{
+  "version": "chat_run.v1",
+  "trace_id": "0ad28391ff2142f9b5bd2f5cea9bc5b9",
+  "created_at": "2026-05-23T07:53:11.629560+00:00",
+  "timestamp": "2026-05-23T07:53:11.629560+00:00",
+  "source": "chat",
+  "endpoint": "/chat",
+  "input": "\u00bfQu\u00e9 funci\u00f3n tiene el orquestador?",
+  "response": "El orquestador, espec\u00edficamente `AgentRuntime`, act\u00faa como el componente central responsable de la ejecuci\u00f3n del runtime en producci\u00f3n. Su funci\u00f3n principal incluye:\n1. **Iniciar una traza interna**: Al recibir una solicitud y contexto, inicia un seguimiento interno para rastrear el progreso de la ejecuci\u00f3n.\n2. **Planificaci\u00f3n**: Solicita al `Planner` que genere una acci\u00f3n planificada (`PlannedAction`).\n3. **Validaci\u00f3n del plan**: Asegura que el plan retornado est\u00e9 versionado correctamente y maneja casos donde no hay un plan (`no_plan`) devolviendo una respuesta rechazada.\n4. **Autorizaci\u00f3n**: Pasa la decisi\u00f3n al `PolicyEngine` para verificar si se permite la ejecuci\u00f3n seg\u00fan las pol\u00edticas establecidas.\n5. **Resoluci\u00f3n de herramientas**: Utiliza el `ToolRegistry` para obtener la herramienta adecuada bas\u00e1ndose en el nombre extra\u00eddo del plan.\n6. **Ejecuci\u00f3n controlada**: Si `dry_run=True`, simula la ejecuci\u00f3n sin invocar realmente la herramienta; de lo contrario, ejecuta la herramienta con el payload validado.\n7. **Validaci\u00f3n y respuesta final**: Valida la salida de la herramienta contra los contratos esperados y devuelve una respuesta estructurada como `AgentResponse`.\nEn resumen, el orquestador coordina todas las etapas desde la planificaci\u00f3n hasta la ejecuci\u00f3n de herramientas, asegurando que cada paso cumpla con las pol\u00edticas y contratos definidos.",
+  "model": "granite4.1:8b",
+  "provider": "ollama",
+  "requested_model": "granite4.1:8b",
+  "temperature": 0.2,
+  "max_tokens": 512,
+  "top_p": null,
+  "generation_config": {
+    "temperature": 0.2,
+    "max_tokens": 512
+  },
+  "status": "ok",
+  "retrieval_status": "EVIDENCE_FOUND",
+  "chunk_ids": [
+    202,
+    245,
+    295
+  ],
+  "document_ids": [
+    4,
+    18,
+    37
+  ],
+  "source_filenames": [
+    "EVOLUTION_MAP.md",
+    "REFACTOR_AUDIT.md",
+    "orchestrator.md"
+  ],
+  "tokens_input": 1524,
+  "tokens_output": 333,
+  "tokens_total": 1857,
+  "prompt_eval_count": 1524,
+  "eval_count": 333,
+  "prompt_eval_duration": 473951385,
+  "eval_duration": 4923903080,
+  "total_duration": 5540918956,
+  "load_duration": 40516154,
+  "output_tokens_per_second": 67.6293,
+  "latency_ms": 5568,
+  "generation_latency_ms": 5548,
+  "retrieval_latency_ms": 13,
+  "tool_latency_ms": null,
+  "error_code": null,
+  "error_message": null,
+  "warnings": [],
+  "use_rag": true,
+  "evidence_used": true,
+  "fallback_used": false,
+  "fallback_reason": null,
+  "answer_mode": "documentary_answer"
+}
