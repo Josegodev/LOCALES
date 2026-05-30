@@ -17,6 +17,31 @@ from DB.chunks.document_context import (
     normalize_terms,
     source_intent_from_corpus_hint,
 )
+from app.chat.commands import (
+    CREATE_DOCUMENT_COMMAND,
+    CREATE_DOCUMENT_PREFIX,
+    parse_chat_command as parse_chat_command_impl,
+)
+from app.chat.evidence import (
+    evidence_used_from_payload as evidence_used_from_payload_impl,
+    extract_chunk_response_data as extract_chunk_response_data_impl,
+    extract_chunk_source_filename as extract_chunk_source_filename_impl,
+    normalize_source_filename as normalize_source_filename_impl,
+)
+from app.chat.fallback import (
+    ACTIVE_CONTEXT_NO_EVIDENCE_WARNING,
+    ANSWER_MODE_DOCUMENTARY,
+    ANSWER_MODE_SAFE_REFUSAL,
+    ANSWER_MODE_STANDARD,
+    NO_EVIDENCE_EXPLANATION,
+    NO_EVIDENCE_WARNING,
+    clear_evidence_trace as clear_evidence_trace_impl,
+    finalize_rag_answer as finalize_rag_answer_impl,
+    is_marker_only_no_evidence_answer as is_marker_only_no_evidence_answer_impl,
+    no_evidence_answer as no_evidence_answer_impl,
+    normalize_no_evidence_retrieval_status as normalize_no_evidence_retrieval_status_impl,
+    strip_no_evidence_markers as strip_no_evidence_markers_impl,
+)
 from app.config import settings
 from app.llm_client import LLMClientError, ask_chat, resolve_provider_model
 from app.observability.chat_runs import save_chat_run
@@ -34,15 +59,7 @@ if TYPE_CHECKING:
     from app.chat.dependencies import ChatDependencies
 
 NO_EVIDENCE_MARKER = "NO_EVIDENCE_FOR_ANSWER"
-NO_EVIDENCE_EXPLANATION = "No hay evidencia documental suficiente para responder."
-ANSWER_MODE_DOCUMENTARY = "documentary_answer"
-ANSWER_MODE_SAFE_REFUSAL = "safe_refusal"
-ANSWER_MODE_STANDARD = "standard_answer"
 MARKER_ONLY_RETRIEVAL_STATUSES = {"NO_EVIDENCE", "NO_EVIDENCE_FOR_ANSWER"}
-ACTIVE_CONTEXT_NO_EVIDENCE_WARNING = (
-    "Contexto activo detectado, pero sin chunks documentales suficientes para responder."
-)
-NO_EVIDENCE_WARNING = "No hay evidencia documental local suficiente para responder."
 COMMON_QUERY_TERMS = {
     "about",
     "busca",
@@ -64,12 +81,10 @@ COMMON_QUERY_TERMS = {
     "thing",
     "what",
 }
-CREATE_DOCUMENT_COMMAND = "creardoc"
-CREATE_DOCUMENT_PREFIX = "/creardoc"
 
 
 def _no_evidence_answer() -> str:
-    return f"{NO_EVIDENCE_MARKER}\n{NO_EVIDENCE_EXPLANATION}"
+    return no_evidence_answer_impl()
 
 
 def _message_preview(text: str, limit: int = 200) -> str:
@@ -80,19 +95,7 @@ def _message_preview(text: str, limit: int = 200) -> str:
 
 
 def parse_chat_command(message: str) -> dict | None:
-    if not isinstance(message, str):
-        return None
-    stripped_message = message.strip()
-    if not stripped_message:
-        return None
-    if not stripped_message.casefold().startswith(CREATE_DOCUMENT_PREFIX):
-        return None
-
-    instruction = stripped_message[len(CREATE_DOCUMENT_PREFIX):].strip()
-    return {
-        "command": CREATE_DOCUMENT_COMMAND,
-        "instruction": instruction,
-    }
+    return parse_chat_command_impl(message)
 
 
 def _chat_trace_source(user_id: int | None, chat_id: int | None) -> str:
@@ -100,44 +103,20 @@ def _chat_trace_source(user_id: int | None, chat_id: int | None) -> str:
 
 
 def _strip_no_evidence_markers(answer: str) -> str:
-    normalized = answer.replace("\r\n", "\n").replace("\r", "\n")
-    for token in (NO_EVIDENCE_MARKER, NO_EVIDENCE_EXPLANATION):
-        normalized = normalized.replace(token, "")
-    lines = [line.strip() for line in normalized.split("\n") if line.strip()]
-    return "\n".join(lines).strip()
+    return strip_no_evidence_markers_impl(answer)
 
 
 def _is_marker_only_no_evidence_answer(answer: str | None) -> bool:
-    if not isinstance(answer, str):
-        return False
-
-    normalized = answer.replace("\r\n", "\n").replace("\r", "\n").strip()
-    if not normalized:
-        return False
-
-    if NO_EVIDENCE_MARKER not in normalized and NO_EVIDENCE_EXPLANATION not in normalized:
-        return False
-
-    return not _strip_no_evidence_markers(normalized)
+    return is_marker_only_no_evidence_answer_impl(answer)
 
 
 def _normalize_no_evidence_retrieval_status(value: str) -> str:
-    if value in MARKER_ONLY_RETRIEVAL_STATUSES:
-        return NO_EVIDENCE_MARKER
-    return value
+    return normalize_no_evidence_retrieval_status_impl(value)
 
 
 def _clear_evidence_trace(context: dict) -> None:
-    for key in (
-        "chunks",
-        "chunk_ids",
-        "document_ids",
-        "source_filenames",
-        "selected_filenames",
-        "scores",
-        "ranking_scores",
-    ):
-        context[key] = []
+    clear_evidence_trace_impl(context)
+    context["ranking_scores"] = []
 
 
 def _evidence_used_from_payload(
@@ -146,7 +125,11 @@ def _evidence_used_from_payload(
     document_ids: list[int] | None,
     source_filenames: list[str] | None,
 ) -> bool:
-    return bool(chunk_ids or document_ids or source_filenames)
+    return evidence_used_from_payload_impl(
+        chunk_ids=chunk_ids,
+        document_ids=document_ids,
+        source_filenames=source_filenames,
+    )
 
 
 def _fallback_used_from_state(
@@ -247,29 +230,10 @@ def _finalize_rag_answer(
     retrieval_status: str,
     raw_answer: str | None,
 ) -> tuple[str, str]:
-    if retrieval_status in MARKER_ONLY_RETRIEVAL_STATUSES:
-        return _no_evidence_answer(), ANSWER_MODE_SAFE_REFUSAL
-
-    candidate = raw_answer if isinstance(raw_answer, str) else ""
-
-    if retrieval_status != "EVIDENCE_FOUND":
-        cleaned = candidate.strip()
-        if not cleaned:
-            raise LLMClientError(
-                "rag_answer_contract_invalid",
-                "standard_answer_empty",
-            )
-        return cleaned, ANSWER_MODE_STANDARD
-
-    cleaned = _strip_no_evidence_markers(candidate)
-
-    if not cleaned:
-        raise LLMClientError(
-            "rag_answer_contract_invalid",
-            "documentary_answer_empty_after_sanitization",
-        )
-
-    return cleaned, ANSWER_MODE_DOCUMENTARY
+    return finalize_rag_answer_impl(
+        retrieval_status=retrieval_status,
+        raw_answer=raw_answer,
+    )
 
 
 def _extract_anchor_terms(query: str) -> list[str]:
@@ -365,68 +329,15 @@ def _should_use_active_context(
 
 
 def _normalize_source_filename(value: object) -> str | None:
-    if not isinstance(value, str):
-        return None
-
-    candidate = value.strip()
-    if not candidate:
-        return None
-
-    return Path(candidate).name
+    return normalize_source_filename_impl(value)
 
 
 def _extract_chunk_source_filename(chunk: dict) -> str | None:
-    for key in ("filename", "source_filename", "document_name", "source_path"):
-        filename = _normalize_source_filename(chunk.get(key))
-        if filename:
-            return filename
-
-    metadata = chunk.get("metadata")
-    if isinstance(metadata, dict):
-        for key in ("filename", "source_filename", "document_name", "source_path"):
-            filename = _normalize_source_filename(metadata.get(key))
-            if filename:
-                return filename
-
-    return None
+    return extract_chunk_source_filename_impl(chunk)
 
 
 def _extract_chunk_response_data(chunks: list[dict]) -> tuple[list[str], list[int], list[int], list[str]]:
-    chunk_texts: list[str] = []
-    chunk_ids: list[int] = []
-    document_ids: list[int] = []
-    seen_document_ids: set[int] = set()
-    source_filenames: set[str] = set()
-
-    for chunk in chunks:
-        if not isinstance(chunk, dict):
-            continue
-
-        chunk_text = chunk.get("text")
-        if isinstance(chunk_text, str) and chunk_text.strip():
-            chunk_texts.append(chunk_text)
-
-        chunk_id = chunk.get("id")
-        if isinstance(chunk_id, int):
-            chunk_ids.append(chunk_id)
-        elif isinstance(chunk_id, str) and chunk_id.isdigit():
-            chunk_ids.append(int(chunk_id))
-
-        document_id = chunk.get("document_id")
-        if isinstance(document_id, int) and document_id not in seen_document_ids:
-            document_ids.append(document_id)
-            seen_document_ids.add(document_id)
-        elif isinstance(document_id, str) and document_id.isdigit():
-            normalized_document_id = int(document_id)
-            if normalized_document_id not in seen_document_ids:
-                document_ids.append(normalized_document_id)
-                seen_document_ids.add(normalized_document_id)
-
-        source_filename = _extract_chunk_source_filename(chunk)
-        if source_filename:
-            source_filenames.add(source_filename)
-
-    return chunk_texts, chunk_ids, document_ids, sorted(source_filenames)
+    return extract_chunk_response_data_impl(chunks)
 
 
 def _dependency_or_default(

@@ -124,6 +124,10 @@ def _clear_evidence_trace(context: dict) -> None:
         context[key] = []
 
 
+def clear_evidence_trace(context: dict) -> None:
+    _clear_evidence_trace(context)
+
+
 def build_safe_refusal_chat_response(
     *,
     trace_id: str,
