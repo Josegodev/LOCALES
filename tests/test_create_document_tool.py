@@ -24,6 +24,7 @@ class CreateDocumentToolTests(unittest.TestCase):
             documents_dir = Path(tmpdir) / "documents"
             with patch.object(document_writer, "DOCUMENTS_DIR", documents_dir):
                 result = asyncio.run(create_document_tool(request=request))
+                self.assertTrue(Path(result["document_path"]).exists())
 
         self.assertEqual(result["status"], "ok")
         self.assertEqual(result["tool_called"], "create_document")
@@ -35,7 +36,6 @@ class CreateDocumentToolTests(unittest.TestCase):
         self.assertEqual(result["overwrite_reason"], "unique_trace_filename_policy")
         self.assertTrue(result["document_filename"].endswith(".md"))
         self.assertEqual(Path(result["document_path"]).parent, documents_dir)
-        self.assertTrue(Path(result["document_path"]).exists())
 
     def test_create_document_tool_reports_overwrite_requested_but_not_applied(self):
         request = CreateDocumentRequest(

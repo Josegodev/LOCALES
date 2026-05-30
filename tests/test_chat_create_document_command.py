@@ -105,8 +105,9 @@ class ChatCreateDocumentCommandTests(unittest.TestCase):
                         "eval_count": 40,
                     },
                 ) as ask_chat_mock:
-                    with patch("app.chat_runtime.create_document_tool", create_document_tool_mock):
-                        response = TestClient(app).post("/chat", json=self.CREATE_DOCUMENT_PAYLOAD)
+                    with patch("app.main.create_document_tool", create_document_tool_mock):
+                        with patch("app.chat_runtime.create_document_tool", create_document_tool_mock):
+                            response = TestClient(app).post("/chat", json=self.CREATE_DOCUMENT_PAYLOAD)
 
         self.assertEqual(response.status_code, 200)
         body = response.json()
@@ -156,8 +157,9 @@ class ChatCreateDocumentCommandTests(unittest.TestCase):
                                 "eval_count": 20,
                             },
                         ):
-                            with patch("app.chat_runtime.create_document_tool", create_document_tool_mock):
-                                response = TestClient(app).post("/chat", json=self.CREATE_DOCUMENT_PAYLOAD)
+                            with patch("app.main.create_document_tool", create_document_tool_mock):
+                                with patch("app.chat_runtime.create_document_tool", create_document_tool_mock):
+                                    response = TestClient(app).post("/chat", json=self.CREATE_DOCUMENT_PAYLOAD)
 
             self.assertEqual(response.status_code, 200)
             payload = json.loads(next(runs_dir.glob("*.json")).read_text(encoding="utf-8"))

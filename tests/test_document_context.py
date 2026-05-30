@@ -171,8 +171,15 @@ class DocumentContextTests(unittest.TestCase):
         self.assertIn("corpus", columns)
         self.assertIn("source_type", columns)
         self.assertIn("priority", columns)
-        self.assertEqual(rows[0], ("Attention is all yout need.pdf", "documentos_oficiales", "pdf", 100))
-        self.assertEqual(rows[1], ("EVOLUTION_MAP.md", "nucleo", "markdown", 50))
+        rows_by_filename = {row[0]: row[1:] for row in rows}
+        self.assertEqual(
+            rows_by_filename["Attention is all yout need.pdf"],
+            ("documentos_oficiales", "pdf", 100),
+        )
+        self.assertEqual(
+            rows_by_filename["EVOLUTION_MAP.md"],
+            ("nucleo", "markdown", 50),
+        )
 
     def test_official_docs_query_prefers_pdf_corpus_for_spanish_paper_query(self):
         with TemporaryDirectory() as tmpdir:

@@ -15,6 +15,8 @@ class ChatRunObservabilityTests(unittest.TestCase):
         "provider": "ollama",
         "model": "granite4.1:8b",
         "use_rag": True,
+        "active_document_id": 2,
+        "active_document_title": "doc.pdf",
     }
 
     def _successful_rag_context(self) -> dict:

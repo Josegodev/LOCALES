@@ -321,7 +321,9 @@ class DevTokenAuthTests(unittest.TestCase):
 
         self.assertIn("normalizeBackendBaseUrl", api_client_js)
         self.assertIn("https://", api_client_js)
-        self.assertIn('cloudflared tunnel --url', api_client_js)
+        self.assertIn("cloudflared_command_instead_of_public_url", api_client_js)
+        self.assertIn("/^cloudflared\\s+tunnel\\b/i.test(trimmed)", api_client_js)
+        self.assertIn("/--url\\s+([^\\s]+)/i", api_client_js)
         self.assertIn('fetchJsonWithLatency("/health")', frontend_js)
         self.assertIn('`${baseUrl}/docs`', frontend_js)
 

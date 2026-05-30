@@ -68,6 +68,9 @@ REFERENTIAL_TERMS = {
     "prior",
 }
 DOMAIN_QUERY_EXPANSIONS = {
+    "arquitectura": [
+        "architecture",
+    ],
     "atencion": [
         "attention",
         "self-attention",
@@ -84,6 +87,11 @@ DOMAIN_QUERY_EXPANSIONS = {
         "mechanism",
         "attention mechanism",
         "function",
+    ],
+    "mejora": [
+        "improves",
+        "improve",
+        "improvement",
     ],
     "transformer": [
         "transformer",
@@ -317,7 +325,7 @@ def normalize_terms(query: str) -> list[str]:
     return [
         term.strip()
         for term in cleaned.split()
-        if len(term.strip()) >= 4
+        if len(term.strip()) >= 4 or term.strip() == "rag"
     ]
 
 
