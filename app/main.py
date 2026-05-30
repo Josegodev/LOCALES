@@ -41,7 +41,18 @@ LOCAL_FRONTEND_FALLBACK_ORIGINS = [
     "http://127.0.0.1:5173",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
 ]
+
+
+def _merge_origins(*origin_lists: list[str]) -> list[str]:
+    merged: list[str] = []
+    for origin_list in origin_lists:
+        for origin in origin_list:
+            if origin not in merged:
+                merged.append(origin)
+    return merged
 
 
 def _resolve_cors_allowed_origins() -> list[str]:
@@ -49,6 +60,9 @@ def _resolve_cors_allowed_origins() -> list[str]:
     if configured_origins:
         if configured_origins == ["*"]:
             return ["*"]
+        app_env = settings.app_env.strip().lower()
+        if app_env in {"local", "dev"}:
+            return _merge_origins(configured_origins, LOCAL_FRONTEND_FALLBACK_ORIGINS)
         return configured_origins
 
     app_env = settings.app_env.strip().lower()

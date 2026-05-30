@@ -255,6 +255,25 @@ class DevTokenAuthTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["access-control-allow-origin"], "http://localhost:5173")
 
+    def test_chat_cors_local_env_keeps_configured_origins_and_allows_local_static_server(self):
+        with patch("app.main.settings.app_env", "local"):
+            with patch.object(
+                type(app_main.settings),
+                "frontend_allowed_origins",
+                return_value=["https://example-frontend.com"],
+            ):
+                response = TestClient(self._build_cors_test_app()).options(
+                    "/chat",
+                    headers={
+                        "Origin": "http://127.0.0.1:5500",
+                        "Access-Control-Request-Method": "POST",
+                        "Access-Control-Request-Headers": "content-type",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["access-control-allow-origin"], "http://127.0.0.1:5500")
+
     def test_chat_cors_allows_wildcard_origin_when_configured(self):
         with patch("app.main.settings.app_env", "prod"):
             with patch.object(
