@@ -25,6 +25,15 @@ class SchemasContractTests(unittest.TestCase):
                 trace_id="trace-invalido",
             )
 
+    def test_chat_request_requires_explicit_conversation_id_when_window_is_enabled(self):
+        with self.assertRaises(ValidationError):
+            ChatRequest(
+                message="hola",
+                provider="ollama",
+                model="granite4.1:8b",
+                conversation_window=2,
+            )
+
     def test_chat_response_preserves_critical_public_fields(self):
         response = ChatResponse(
             trace_id="12345678-1234-5678-1234-567812345678",

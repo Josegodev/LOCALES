@@ -3,7 +3,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 TEMPERATURE_DEFAULT = 0.2
@@ -11,6 +11,9 @@ TEMPERATURE_MIN = 0.0
 TEMPERATURE_MAX = 1.5
 TOP_P_MIN = 0.0
 TOP_P_MAX = 1.0
+CONVERSATION_WINDOW_DEFAULT = 0
+CONVERSATION_WINDOW_MIN = 0
+CONVERSATION_WINDOW_MAX = 20
 
 
 def normalize_temperature(value: Any, default: float = TEMPERATURE_DEFAULT) -> float:
@@ -103,6 +106,12 @@ class ChatRequest(BaseModel):
     active_document_title: str | None = Field(default=None, min_length=1, max_length=255)
     active_corpus: str | None = Field(default=None, min_length=1, max_length=64)
     last_source_intent: str | None = Field(default=None, min_length=1, max_length=64)
+    conversation_id: str | None = Field(default=None, min_length=32, max_length=36)
+    conversation_window: int = Field(
+        default=CONVERSATION_WINDOW_DEFAULT,
+        ge=CONVERSATION_WINDOW_MIN,
+        le=CONVERSATION_WINDOW_MAX,
+    )
 
     @field_validator("trace_id")
     @classmethod
@@ -120,6 +129,23 @@ class ChatRequest(BaseModel):
             raise ValueError("trace_id_invalid")
 
         return trace_id
+
+    @field_validator("conversation_id")
+    @classmethod
+    def validate_conversation_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+
+        conversation_id = value.strip()
+        try:
+            parsed = uuid.UUID(conversation_id)
+        except ValueError as exc:
+            raise ValueError("conversation_id_invalid") from exc
+
+        if conversation_id not in {parsed.hex, str(parsed)}:
+            raise ValueError("conversation_id_invalid")
+
+        return conversation_id
 
     @field_validator("temperature")
     @classmethod
@@ -146,6 +172,19 @@ class ChatRequest(BaseModel):
                 normalized_filenames.append(filename)
 
         return normalized_filenames
+
+    @field_validator("conversation_window")
+    @classmethod
+    def validate_conversation_window(cls, value: int) -> int:
+        if isinstance(value, bool):
+            raise ValueError("conversation_window_invalid")
+        return value
+
+    @model_validator(mode="after")
+    def validate_conversation_contract(self) -> "ChatRequest":
+        if self.conversation_window > 0 and self.conversation_id is None:
+            raise ValueError("conversation_id_required")
+        return self
 
 class ChatResponse(BaseModel):
     trace_id: str | None = None
@@ -199,6 +238,9 @@ class ChatResponse(BaseModel):
     overwrite_requested: bool | None = None
     overwrite_applied: bool | None = None
     overwrite_reason: str | None = None
+    conversation_id: str | None = None
+    conversation_window: int = CONVERSATION_WINDOW_DEFAULT
+    conversation_messages_used: int = 0
 
 
 class ChatModelOption(BaseModel):
@@ -225,9 +267,22 @@ class ChatTemperatureOptions(BaseModel):
     presets: list[ChatTemperaturePreset] = Field(default_factory=list)
 
 
+class ChatConversationWindowPreset(BaseModel):
+    value: int
+    label: str
+
+
+class ChatConversationWindowOptions(BaseModel):
+    default: int
+    min: int
+    max: int
+    presets: list[ChatConversationWindowPreset] = Field(default_factory=list)
+
+
 class ChatOptionsResponse(BaseModel):
     status: str
     temperature: ChatTemperatureOptions
+    conversation: ChatConversationWindowOptions
 
 
 class ErrorResponse(BaseModel):

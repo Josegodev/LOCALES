@@ -13,6 +13,7 @@ const elements = {
   messageInput: document.querySelector("#messageInput"),
   modelSelect: document.querySelector("#modelSelect"),
   temperatureSelect: document.querySelector("#temperatureSelect"),
+  conversationWindowSelect: document.querySelector("#conversationWindowSelect"),
   useRagInput: document.querySelector("#useRagInput"),
   createDocumentButton: document.querySelector("#createDocumentButton"),
   chatButton: document.querySelector("#chatButton"),
@@ -87,10 +88,12 @@ const hiddenModelNames = new Set([
 const DEFAULT_CHAT_PROVIDER = "ollama";
 const DEFAULT_CHAT_MODEL = "granite4.1:8b";
 const DEFAULT_CHAT_TEMPERATURE = 0.2;
+const DEFAULT_CONVERSATION_WINDOW = 0;
 
 const chatState = {
   messages: [],
   abortController: null,
+  conversationId: "",
 };
 
 const runsState = {
@@ -264,6 +267,32 @@ function prettyJson(value) {
   return JSON.stringify(value, null, 2);
 }
 
+function createConversationId() {
+  if (window.crypto?.randomUUID) {
+    return window.crypto.randomUUID();
+  }
+
+  const timestamp = Date.now().toString(16).padStart(12, "0");
+  const randomPart = Math.random().toString(16).slice(2).padEnd(20, "0");
+  return `${timestamp.slice(0, 8)}-${timestamp.slice(8, 12)}-4000-8000-${randomPart.slice(0, 12)}`;
+}
+
+function ensureConversationId() {
+  if (chatState.conversationId) {
+    return chatState.conversationId;
+  }
+
+  const savedConversationId = sessionStorage.getItem("locales.chatConversationId");
+  if (savedConversationId) {
+    chatState.conversationId = savedConversationId;
+    return chatState.conversationId;
+  }
+
+  chatState.conversationId = createConversationId();
+  sessionStorage.setItem("locales.chatConversationId", chatState.conversationId);
+  return chatState.conversationId;
+}
+
 function summarizeChatPayload(data) {
   const payload = { ...(data || {}) };
   if (Array.isArray(payload.chunks)) {
@@ -408,6 +437,26 @@ function replaceTemperatureOptions(temperature) {
   }
 }
 
+function replaceConversationOptions(conversation) {
+  const currentValue = localStorage.getItem("locales.chatConversationWindow");
+  const presets = Array.isArray(conversation?.presets) && conversation.presets.length
+    ? conversation.presets
+    : [{ value: conversation?.default ?? DEFAULT_CONVERSATION_WINDOW, label: "Sin memoria" }];
+
+  elements.conversationWindowSelect.innerHTML = "";
+  for (const preset of presets) {
+    const option = document.createElement("option");
+    option.value = String(Number(preset.value));
+    option.textContent = `${Number(preset.value)} - ${preset.label}`;
+    elements.conversationWindowSelect.appendChild(option);
+  }
+
+  const preferred = currentValue || String(Number(conversation?.default ?? DEFAULT_CONVERSATION_WINDOW));
+  if (Array.from(elements.conversationWindowSelect.options).some((option) => option.value === preferred)) {
+    elements.conversationWindowSelect.value = preferred;
+  }
+}
+
 async function loadChatModels() {
   if (!backendBaseUrl()) {
     replaceModelOptions(fallbackModels);
@@ -425,13 +474,16 @@ async function loadChatModels() {
 async function loadChatOptions() {
   if (!backendBaseUrl()) {
     replaceTemperatureOptions({ default: 0.2 });
+    replaceConversationOptions({ default: DEFAULT_CONVERSATION_WINDOW });
     return;
   }
   try {
     const { data } = await fetchJsonWithLatency("/api/chat/options");
     replaceTemperatureOptions(data?.temperature);
+    replaceConversationOptions(data?.conversation);
   } catch {
     replaceTemperatureOptions({ default: 0.2 });
+    replaceConversationOptions({ default: DEFAULT_CONVERSATION_WINDOW });
   }
 }
 
@@ -563,12 +615,15 @@ function renderChatResponse(data, latencyMs, useRag) {
 function buildChatPayload(message) {
   const selected = selectedProviderModel();
   const selectedTemperature = numberOrNull(elements.temperatureSelect.value);
+  const selectedConversationWindow = Number.parseInt(elements.conversationWindowSelect.value || "0", 10);
   return {
     message,
     provider: selected.provider || DEFAULT_CHAT_PROVIDER,
     model: selected.model || DEFAULT_CHAT_MODEL,
     temperature: selectedTemperature === null ? DEFAULT_CHAT_TEMPERATURE : selectedTemperature,
     use_rag: elements.useRagInput.checked,
+    conversation_id: ensureConversationId(),
+    conversation_window: Number.isFinite(selectedConversationWindow) ? selectedConversationWindow : DEFAULT_CONVERSATION_WINDOW,
   };
 }
 
@@ -1099,6 +1154,7 @@ async function openRunDetail(traceId) {
 }
 
 function init() {
+  ensureConversationId();
   const savedBackendUrl = localStorage.getItem("locales.backendUrl");
   if (savedBackendUrl) elements.backendUrl.value = savedBackendUrl;
   if (!elements.backendUrl.value && DEFAULT_BACKEND_URL) elements.backendUrl.value = DEFAULT_BACKEND_URL;
@@ -1130,6 +1186,9 @@ function init() {
     localStorage.setItem("locales.chatModelKey", modelOptionKey(selected.provider, selected.model));
   });
   elements.temperatureSelect.addEventListener("change", () => localStorage.setItem("locales.chatTemperature", elements.temperatureSelect.value));
+  elements.conversationWindowSelect.addEventListener("change", () => {
+    localStorage.setItem("locales.chatConversationWindow", elements.conversationWindowSelect.value);
+  });
   elements.healthButton.addEventListener("click", checkHealth);
   elements.chatForm.addEventListener("submit", sendChat);
   elements.createDocumentButton.addEventListener("click", prefillCreateDocumentCommand);

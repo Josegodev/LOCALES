@@ -178,6 +178,17 @@
   },
   "active": "36c554845d3274e4",
   "lastOpenFiles": [
+    "CHAT_RUNS/chat_run_20260531T195057148301Z_c1f274c3397e47e9a7ece5c2df5eae4f.json",
+    "CHAT_RUNS/chat_run_20260531T195014822218Z_38d52e9b4675445aa5eb5f61f52ae96d.json",
+    "CHAT_RUNS/chat_run_20260531T194940339919Z_74f80efe8b6b4c44a7659b14c0c06b8c.json",
+    "CHAT_RUNS/chat_run_20260531T194300377171Z_1cae44da52b84e7d9288486f187c6e74.json",
+    "CHAT_RUNS/chat_run_20260531T194226689706Z_f375dd4757db4fb0b5a8394a9d8c977e.json",
+    "CHAT_RUNS/chat_run_20260531T194212824686Z_8845317f44f74aa6af8e2fbc1279d599.json",
+    "CHAT_RUNS/chat_run_20260531T194144029516Z_ba954b0cf1bc4bc2ac466d7f8532fa3c.json",
+    "CHAT_RUNS/chat_run_20260531T194130415640Z_cf3e6000e03e483ba5101eeec56155d0.json",
+    "CHAT_RUNS/chat_run_20260531T194057775993Z_3254ae96b1b04337b6d733badee36a34.json",
+    "CHAT_RUNS/chat_run_20260531T194045306054Z_de159c6475534922bc62df1b73c49fbf.json",
+    "tests/__pycache__/test_chat_conversation_memory.cpython-312.pyc",
     "obsidian_runtime/03_BACKEND_FILES/DOCUMENT_WRITER_FILE.md",
     "obsidian_runtime/03_BACKEND_FILES/AUTH_FILE.md",
     "obsidian_runtime/03_BACKEND_FILES/SCHEMAS_FILE.md",
@@ -202,17 +213,6 @@
     "obsidian_runtime/06_RUNBOOK/DEBUG_PROVIDER_FAILURE.md",
     "obsidian_runtime/06_RUNBOOK/DEBUG_RAG_FAILURE.md",
     "obsidian_runtime/06_RUNBOOK/DEBUG_CHAT_FAILURE.md",
-    "obsidian_runtime/05_GRAPHS/MERMAID_DIAGRAMS.md",
-    "obsidian_runtime/05_GRAPHS/OBSERVED_TRACE_GRAPH.md",
-    "obsidian_runtime/06_RUNBOOK",
-    "obsidian_runtime/05_GRAPHS",
-    "obsidian_runtime/04_CONTRACTS",
-    "obsidian_runtime/03_BACKEND_FILES",
-    "obsidian_runtime/02_ACTORS",
-    "obsidian_runtime/01_RUNTIME_FLOW",
-    "obsidian_runtime",
-    "docs/runtime_graph.json",
-    "tools",
-    "docs/python/tests"
+    "obsidian_runtime/05_GRAPHS/MERMAID_DIAGRAMS.md"
   ]
 }

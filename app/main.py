@@ -109,6 +109,7 @@ def _build_chat_dependencies() -> ChatDependencies:
         build_document_prompt=build_document_prompt,
         query_remote_rag=query_remote_rag,
         resolve_provider_model=resolve_provider_model,
+        list_chat_runs=list_chat_runs,
         save_chat_run=save_chat_run,
         log_event=log_event,
         new_trace_id=new_trace_id,

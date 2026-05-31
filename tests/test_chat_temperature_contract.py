@@ -169,6 +169,9 @@ class ChatTemperatureContractTests(unittest.TestCase):
         self.assertEqual(body["temperature"]["default"], 0.2)
         self.assertEqual(body["temperature"]["min"], 0.0)
         self.assertEqual(body["temperature"]["max"], 1.5)
+        self.assertEqual(body["conversation"]["default"], 0)
+        self.assertEqual(body["conversation"]["min"], 0)
+        self.assertEqual(body["conversation"]["max"], 20)
 
 
 if __name__ == "__main__":

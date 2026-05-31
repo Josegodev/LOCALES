@@ -16,6 +16,7 @@ class ChatServiceTests(unittest.TestCase):
             build_document_prompt=lambda *args, **kwargs: {"status": "DISABLED", "prompt": "hola", "chunks": []},
             query_remote_rag=lambda *args, **kwargs: {"status": "DISABLED", "prompt": "hola", "chunks": []},
             resolve_provider_model=lambda provider, model: (provider or "ollama", model or "granite4.1:8b"),
+            list_chat_runs=lambda *args, **kwargs: [],
             save_chat_run=lambda payload: None,
             log_event=lambda **kwargs: None,
             new_trace_id=lambda: "12345678123456781234567812345678",

@@ -10,7 +10,10 @@ class FrontendCreateDocumentStaticTests(unittest.TestCase):
         frontend_js = (self.REPO_ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
 
         self.assertIn('id="createDocumentButton"', frontend_html)
+        self.assertIn('id="conversationWindowSelect"', frontend_html)
         self.assertIn('const CREATE_DOCUMENT_PREFIX = "/creardoc"', frontend_js)
+        self.assertIn("conversationWindowSelect", frontend_js)
+        self.assertIn("conversation_window", frontend_js)
         self.assertIn("elements.useRagInput.checked = false;", frontend_js)
 
 

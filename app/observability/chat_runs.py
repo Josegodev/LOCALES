@@ -256,6 +256,9 @@ class ChatRunRecord(BaseModel):
     overwrite_applied: bool | None = None
     overwrite_reason: str | None = None
     error_type: str | None = None
+    conversation_id: str | None = None
+    conversation_window: int | None = None
+    conversation_messages_used: int | None = None
 
 
 def normalize_chat_run_record(record: dict[str, Any]) -> ChatRunRecord:
@@ -349,6 +352,9 @@ def normalize_chat_run_record(record: dict[str, Any]) -> ChatRunRecord:
         "overwrite_applied": record.get("overwrite_applied") if isinstance(record.get("overwrite_applied"), bool) else None,
         "overwrite_reason": _nullable_str(record.get("overwrite_reason")),
         "error_type": _nullable_str(record.get("error_type")) or _nullable_str(record.get("error_code")),
+        "conversation_id": _nullable_str(record.get("conversation_id")),
+        "conversation_window": _nullable_int(record.get("conversation_window")),
+        "conversation_messages_used": _nullable_int(record.get("conversation_messages_used")),
     }
     return ChatRunRecord(**payload)
 
@@ -536,5 +542,8 @@ def write_chat_run(**kwargs: Any) -> Path:
         fallback_used=kwargs.get("fallback_used") if isinstance(kwargs.get("fallback_used"), bool) else None,
         fallback_reason=_nullable_str(kwargs.get("fallback_reason")),
         answer_mode=_nullable_str(kwargs.get("answer_mode")),
+        conversation_id=_nullable_str(kwargs.get("conversation_id")),
+        conversation_window=_nullable_int(kwargs.get("conversation_window")),
+        conversation_messages_used=_nullable_int(kwargs.get("conversation_messages_used")),
     )
     return record_chat_run(run, path=kwargs.get("path"))

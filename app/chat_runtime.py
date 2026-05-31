@@ -44,7 +44,7 @@ from app.chat.fallback import (
 )
 from app.config import settings
 from app.llm_client import LLMClientError, ask_chat, resolve_provider_model
-from app.observability.chat_runs import save_chat_run
+from app.observability.chat_runs import list_chat_runs, save_chat_run
 from app.observability.logging import log_event
 from app.observability.trace import new_trace_id
 from app.rag_client import query_remote_rag
@@ -92,6 +92,67 @@ def _message_preview(text: str, limit: int = 200) -> str:
     if len(normalized) <= limit:
         return normalized
     return normalized[:limit].rstrip() + "..."
+
+
+def _conversation_runs_for_context(
+    *,
+    list_chat_runs_fn,
+    conversation_id: str | None,
+) -> list:
+    if not isinstance(conversation_id, str) or not conversation_id.strip():
+        return []
+
+    matching_runs: list = []
+    for run in list_chat_runs_fn(limit=None):
+        if getattr(run, "conversation_id", None) != conversation_id:
+            continue
+        if getattr(run, "status", None) != "ok":
+            continue
+        if getattr(run, "command", None):
+            continue
+        matching_runs.append(run)
+
+    matching_runs.sort(
+        key=lambda item: (
+            getattr(item, "created_at", "") or "",
+            getattr(item, "trace_id", "") or "",
+        )
+    )
+    return matching_runs
+
+
+def _conversation_messages_from_runs(runs: list, *, window: int) -> list[dict[str, str]]:
+    if window <= 0:
+        return []
+
+    messages: list[dict[str, str]] = []
+    for run in runs:
+        user_message = getattr(run, "input", None)
+        if isinstance(user_message, str) and user_message.strip():
+            messages.append({"role": "user", "content": user_message.strip()})
+
+        assistant_message = getattr(run, "response", None)
+        if isinstance(assistant_message, str) and assistant_message.strip():
+            messages.append({"role": "assistant", "content": assistant_message.strip()})
+
+    return messages[-window:]
+
+
+def _inject_conversation_history(prompt: str, history: list[dict[str, str]]) -> str:
+    if not history:
+        return prompt
+
+    history_lines = [
+        "Contexto conversacional previo.",
+        "Usa este historial solo como continuidad; prioriza el mensaje actual y la evidencia recuperada si hay conflicto.",
+    ]
+
+    for index, message in enumerate(history, start=1):
+        role_label = "Usuario" if message["role"] == "user" else "Asistente"
+        history_lines.append(f"{index}. {role_label}: {message['content']}")
+
+    history_block = "\n".join(history_lines)
+    return f"{history_block}\n\nMensaje actual:\n{prompt}"
 
 
 def parse_chat_command(message: str) -> dict | None:
@@ -178,6 +239,9 @@ def _build_safe_refusal_chat_response(
     temperature_ignored: bool,
     use_rag: bool,
     latency_ms: int,
+    conversation_id: str | None,
+    conversation_window: int,
+    conversation_messages_used: int,
 ) -> ChatResponse:
     response_warnings = list(context.get("warnings", []))
     no_evidence_warning = _no_evidence_warning_for_context(context)
@@ -222,6 +286,9 @@ def _build_safe_refusal_chat_response(
         scores=[],
         ranking_scores=[],
         warnings=response_warnings,
+        conversation_id=conversation_id,
+        conversation_window=conversation_window,
+        conversation_messages_used=conversation_messages_used,
     )
 
 
@@ -407,6 +474,9 @@ def _persist_chat_run(
     active_document_title: str | None,
     active_context_used: bool,
     ranking_scores: list[int],
+    conversation_id: str | None,
+    conversation_window: int,
+    conversation_messages_used: int,
 ) -> None:
     created_at = datetime.now(timezone.utc).isoformat()
     save_chat_run_fn(
@@ -475,6 +545,9 @@ def _persist_chat_run(
             "overwrite_applied": overwrite_applied,
             "overwrite_reason": overwrite_reason,
             "error_type": error_code,
+            "conversation_id": conversation_id,
+            "conversation_window": conversation_window,
+            "conversation_messages_used": conversation_messages_used,
         }
     )
 
@@ -670,6 +743,7 @@ def run_chat_request(
         "resolve_provider_model",
         resolve_provider_model,
     )
+    list_chat_runs_fn = _dependency_or_default(dependencies, "list_chat_runs", list_chat_runs)
     save_chat_run_fn = _dependency_or_default(dependencies, "save_chat_run", save_chat_run)
     log_event_fn = _dependency_or_default(dependencies, "log_event", log_event)
     new_trace_id_fn = _dependency_or_default(dependencies, "new_trace_id", new_trace_id)
@@ -699,6 +773,9 @@ def run_chat_request(
     final_answer = ""
     error_message: str | None = None
     trace_source = _chat_trace_source(request.user_id, request.chat_id)
+    conversation_id = request.conversation_id
+    conversation_window = request.conversation_window
+    conversation_messages_used = 0
     command: str | None = None
     tool_called: str | None = None
     tool_result_status: str | None = None
@@ -756,6 +833,8 @@ def run_chat_request(
         provider=provider,
         model=request.model,
         rag_enabled=use_rag,
+        conversation_id=conversation_id,
+        conversation_window=conversation_window,
         message_length=len(request.message),
         command=parsed_command.get("command") if isinstance(parsed_command, dict) else None,
     )
@@ -823,7 +902,13 @@ def run_chat_request(
             overwrite_requested = command_response.overwrite_requested
             overwrite_applied = command_response.overwrite_applied
             overwrite_reason = command_response.overwrite_reason
-            return command_response
+            return command_response.model_copy(
+                update={
+                    "conversation_id": conversation_id,
+                    "conversation_window": conversation_window,
+                    "conversation_messages_used": 0,
+                }
+            )
         active_document_title = _normalize_active_document_title(request.active_document_title)
         use_active_context, active_context_reason = _should_use_active_context(
             query=request.message,
@@ -903,12 +988,25 @@ def run_chat_request(
                 temperature_ignored=temperature_ignored,
                 use_rag=True,
                 latency_ms=int((time.perf_counter() - started_at) * 1000),
+                conversation_id=conversation_id,
+                conversation_window=conversation_window,
+                conversation_messages_used=conversation_messages_used,
             )
             warnings = [item for item in safe_refusal_response.warnings if isinstance(item, str)]
             return safe_refusal_response
 
         llm_started_at = time.perf_counter()
         llm_message = context["prompt"]
+        if conversation_id and conversation_window > 0:
+            conversation_history = _conversation_messages_from_runs(
+                _conversation_runs_for_context(
+                    list_chat_runs_fn=list_chat_runs_fn,
+                    conversation_id=conversation_id,
+                ),
+                window=conversation_window,
+            )
+            conversation_messages_used = len(conversation_history)
+            llm_message = _inject_conversation_history(llm_message, conversation_history)
         llm_use_rag = use_rag
         result = ask_chat_fn(
             message=llm_message,
@@ -993,6 +1091,9 @@ def run_chat_request(
                 temperature_ignored=temperature_ignored,
                 use_rag=True,
                 latency_ms=result["latency_ms"],
+                conversation_id=conversation_id,
+                conversation_window=conversation_window,
+                conversation_messages_used=conversation_messages_used,
             )
             response_chunk_ids = list(safe_refusal_response.chunk_ids)
             warnings = [item for item in safe_refusal_response.warnings if isinstance(item, str)]
@@ -1043,6 +1144,9 @@ def run_chat_request(
             scores=context.get("scores", []),
             ranking_scores=context.get("ranking_scores", context.get("scores", [])),
             warnings=context.get("warnings", []),
+            conversation_id=conversation_id,
+            conversation_window=conversation_window,
+            conversation_messages_used=conversation_messages_used,
         )
         final_answer = chat_response.answer
         warnings = [item for item in chat_response.warnings if isinstance(item, str)]
@@ -1198,6 +1302,9 @@ def run_chat_request(
                     active_document_title=context.get("active_document_title"),
                     active_context_used=bool(context.get("active_context_used")),
                     ranking_scores=context.get("ranking_scores", context.get("scores", [])),
+                    conversation_id=conversation_id,
+                    conversation_window=conversation_window,
+                    conversation_messages_used=conversation_messages_used,
                 )
             except Exception as exc:
                 log_event_fn(
@@ -1228,6 +1335,9 @@ def run_chat_request(
             error_type=error_code,
             retrieval_status=retrieval_status,
             rag_enabled=use_rag,
+            conversation_id=conversation_id,
+            conversation_window=conversation_window,
+            conversation_messages_used=conversation_messages_used,
             command=command,
             tool_called=tool_called,
             tool_result_status=tool_result_status,

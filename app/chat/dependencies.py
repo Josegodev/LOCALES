@@ -14,6 +14,7 @@ class ChatDependencies:
     build_document_prompt: Callable[..., dict[str, Any]]
     query_remote_rag: Callable[..., dict[str, Any]]
     resolve_provider_model: Callable[..., tuple[str, str]]
+    list_chat_runs: Callable[..., list[Any]]
     save_chat_run: Callable[[dict[str, Any]], None]
     log_event: Callable[..., None]
     new_trace_id: Callable[[], str]

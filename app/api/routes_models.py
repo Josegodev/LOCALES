@@ -2,6 +2,9 @@ from fastapi import APIRouter
 
 from app.api.runtime_bridge import main_module
 from app.schemas import (
+    CONVERSATION_WINDOW_DEFAULT,
+    CONVERSATION_WINDOW_MAX,
+    CONVERSATION_WINDOW_MIN,
     ChatModelListResponse,
     ChatOptionsResponse,
     TEMPERATURE_DEFAULT,
@@ -30,6 +33,17 @@ def chat_options() -> dict:
                 {"value": TEMPERATURE_DEFAULT, "label": "Technical default"},
                 {"value": 0.7, "label": "Balanced"},
                 {"value": 1.0, "label": "Exploratory"},
+            ],
+        },
+        "conversation": {
+            "default": CONVERSATION_WINDOW_DEFAULT,
+            "min": CONVERSATION_WINDOW_MIN,
+            "max": CONVERSATION_WINDOW_MAX,
+            "presets": [
+                {"value": 0, "label": "Sin memoria"},
+                {"value": 2, "label": "1 turno"},
+                {"value": 4, "label": "2 turnos"},
+                {"value": 8, "label": "4 turnos"},
             ],
         },
     }
