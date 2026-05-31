@@ -111,3 +111,9 @@ FRONTEND_ALLOWED_ORIGINS=*
 ```
 
 Eso es útil para pruebas rápidas, pero conviene cerrar la lista de orígenes en entornos más estables.
+
+## Relacionado
+
+- [[LOCAL_DEPLOYMENT]]
+- [[OBSERVABILITY]]
+- [[GLOSSARY]]

@@ -149,3 +149,9 @@ Confirmar que apunta a:
 - o al repo correcto confirmado manualmente
 
 Si Vercel sigue enlazado al owner antiguo, aunque Git local este bien, el despliegue seguira yendo al repo equivocado.
+
+## Relacionado
+
+- [[README]]
+- [[LOCAL_DEPLOYMENT]]
+- [[GLOSSARY]]

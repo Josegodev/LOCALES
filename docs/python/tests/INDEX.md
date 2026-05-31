@@ -1,0 +1,41 @@
+# tests/
+
+## Archivos Python documentados
+
+- [[python/tests/__init__|__init__.py]]
+- [[python/tests/test_api_health|test_api_health.py]]
+- [[python/tests/test_chat_contract|test_chat_contract.py]]
+- [[python/tests/test_chat_create_document_command|test_chat_create_document_command.py]]
+- [[python/tests/test_chat_eval_foundation|test_chat_eval_foundation.py]]
+- [[python/tests/test_chat_eval_runner|test_chat_eval_runner.py]]
+- [[python/tests/test_chat_fallback|test_chat_fallback.py]]
+- [[python/tests/test_chat_only_runtime|test_chat_only_runtime.py]]
+- [[python/tests/test_chat_response_builder|test_chat_response_builder.py]]
+- [[python/tests/test_chat_retrieval|test_chat_retrieval.py]]
+- [[python/tests/test_chat_run_observability|test_chat_run_observability.py]]
+- [[python/tests/test_chat_runs_contract|test_chat_runs_contract.py]]
+- [[python/tests/test_chat_runs_metrics|test_chat_runs_metrics.py]]
+- [[python/tests/test_chat_runs_store|test_chat_runs_store.py]]
+- [[python/tests/test_chat_service|test_chat_service.py]]
+- [[python/tests/test_chat_temperature_contract|test_chat_temperature_contract.py]]
+- [[python/tests/test_create_document_tool|test_create_document_tool.py]]
+- [[python/tests/test_dev_token_auth|test_dev_token_auth.py]]
+- [[python/tests/test_document_context|test_document_context.py]]
+- [[python/tests/test_document_writer|test_document_writer.py]]
+- [[python/tests/test_frontend_api_client_static|test_frontend_api_client_static.py]]
+- [[python/tests/test_frontend_create_document_static|test_frontend_create_document_static.py]]
+- [[python/tests/test_provider_model_resolution|test_provider_model_resolution.py]]
+- [[python/tests/test_rag_no_evidence_contract|test_rag_no_evidence_contract.py]]
+- [[python/tests/test_remote_rag_service|test_remote_rag_service.py]]
+- [[python/tests/test_retrieval_path_consistency|test_retrieval_path_consistency.py]]
+- [[python/tests/test_runs_loader|test_runs_loader.py]]
+- [[python/tests/test_runs_metrics|test_runs_metrics.py]]
+- [[python/tests/test_runs_operational_stats|test_runs_operational_stats.py]]
+- [[python/tests/test_runs_router|test_runs_router.py]]
+- [[python/tests/test_schemas_contract|test_schemas_contract.py]]
+
+## Relacionado
+
+- [[python/INDEX]]
+- [[TECH_DEBT_AND_RISKS]]
+- [[GLOSSARY]]

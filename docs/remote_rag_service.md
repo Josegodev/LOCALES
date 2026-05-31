@@ -61,3 +61,10 @@ Si `allowed_source_filenames` es `null` o una lista vacia, el servicio busca en 
 ## Limitaciones conocidas
 
 El cliente remoto envia `query`, `top_k`, `trace_id` y `allowed_source_filenames`. El contexto activo de documento se conserva en modo local, pero todavia no se envia al servicio remoto.
+
+## Relacionado
+
+- [[RAG_AND_EVIDENCE]]
+- [[LOCAL_DEPLOYMENT]]
+- [[RUNTIME_FLOW]]
+- [[GLOSSARY]]

@@ -1,3 +1,0 @@
-# RAG
-
-Contenido en Markdown.

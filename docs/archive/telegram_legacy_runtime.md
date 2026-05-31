@@ -15,3 +15,9 @@ Motivo de este archivo:
 - dejar constancia breve de que Telegram existió
 - explicar que la retirada fue intencional
 - evitar que futuras refactorizaciones intenten reactivarlo por accidente
+
+## Relacionado
+
+- [[README]]
+- [[ARCHITECTURE]]
+- [[GLOSSARY]]

@@ -1,0 +1,586 @@
+{
+  "nodes": [
+    {
+      "id": "frontend/",
+      "type": "frontend",
+      "label": "Frontend estático",
+      "path": "frontend/",
+      "responsibility": "Consume el backend por HTTP y actúa como entrada operativa habitual."
+    },
+    {
+      "id": "endpoint:POST /chat",
+      "type": "endpoint",
+      "label": "POST /chat",
+      "path": "/chat",
+      "responsibility": "Contrato HTTP principal del sistema de chat."
+    },
+    {
+      "id": "app/api/routes_chat.py",
+      "type": "module",
+      "label": "Router de chat",
+      "path": "app/api/routes_chat.py",
+      "responsibility": "Expone el endpoint de chat y valida su contrato HTTP."
+    },
+    {
+      "id": "app/api/runtime_bridge.py",
+      "type": "module",
+      "label": "Runtime bridge",
+      "path": "app/api/runtime_bridge.py",
+      "responsibility": "Resuelve dinámicamente el módulo principal del backend."
+    },
+    {
+      "id": "app/main.py",
+      "type": "module",
+      "label": "ASGI main",
+      "path": "app/main.py",
+      "responsibility": "Ensamblador FastAPI y punto de entrada ASGI del backend."
+    },
+    {
+      "id": "app/chat/service.py",
+      "type": "module",
+      "label": "ChatService",
+      "path": "app/chat/service.py",
+      "responsibility": "Fachada del runtime con dependencias explícitas."
+    },
+    {
+      "id": "app/chat/dependencies.py",
+      "type": "module",
+      "label": "ChatDependencies",
+      "path": "app/chat/dependencies.py",
+      "responsibility": "Agrupa dependencias inyectables del runtime."
+    },
+    {
+      "id": "app/schemas.py",
+      "type": "module",
+      "label": "Schemas de chat",
+      "path": "app/schemas.py",
+      "responsibility": "Define ChatRequest, ChatResponse y tipos de contrato."
+    },
+    {
+      "id": "app/config.py",
+      "type": "config",
+      "label": "Settings",
+      "path": "app/config.py",
+      "responsibility": "Centraliza configuración operativa del backend y del RAG."
+    },
+    {
+      "id": "app/chat_runtime.py",
+      "type": "runtime",
+      "label": "Runtime de chat",
+      "path": "app/chat_runtime.py",
+      "responsibility": "Orquesta validación, retrieval, generación, fallback y persistencia."
+    },
+    {
+      "id": "app/llm_client.py",
+      "type": "module",
+      "label": "LLM client",
+      "path": "app/llm_client.py",
+      "responsibility": "Resuelve provider/model y delega al adaptador correcto."
+    },
+    {
+      "id": "app/adapters/ollama_client.py",
+      "type": "module",
+      "label": "Adaptador Ollama",
+      "path": "app/adapters/ollama_client.py",
+      "responsibility": "Normaliza llamadas a Ollama y extrae métricas nativas."
+    },
+    {
+      "id": "provider:ollama",
+      "type": "provider",
+      "label": "Ollama",
+      "path": null,
+      "responsibility": "Proveedor local de modelos compatible con el contrato de chat."
+    },
+    {
+      "id": "app/adapters/openai_client.py",
+      "type": "module",
+      "label": "Adaptador OpenAI",
+      "path": "app/adapters/openai_client.py",
+      "responsibility": "Normaliza llamadas a OpenAI con menor riqueza métrica."
+    },
+    {
+      "id": "provider:openai",
+      "type": "provider",
+      "label": "OpenAI",
+      "path": null,
+      "responsibility": "Proveedor remoto gestionado para modelos compatibles."
+    },
+    {
+      "id": "app/rag_client.py",
+      "type": "rag",
+      "label": "Cliente RAG remoto",
+      "path": "app/rag_client.py",
+      "responsibility": "Consume el servicio HTTP de retrieval remoto con degradación controlada."
+    },
+    {
+      "id": "endpoint:POST /rag/query",
+      "type": "endpoint",
+      "label": "POST /rag/query",
+      "path": "/rag/query",
+      "responsibility": "Contrato HTTP del servicio RAG remoto."
+    },
+    {
+      "id": "rag_service/main.py",
+      "type": "rag",
+      "label": "Servicio RAG remoto",
+      "path": "rag_service/main.py",
+      "responsibility": "Expone retrieval remoto reutilizando el motor documental local."
+    },
+    {
+      "id": "DB/chunks/document_context.py",
+      "type": "rag",
+      "label": "Motor RAG local",
+      "path": "DB/chunks/document_context.py",
+      "responsibility": "Consulta SQLite, rankea chunks y construye prompts documentales."
+    },
+    {
+      "id": "database:DB/chunks/documents.sqlite",
+      "type": "database",
+      "label": "documents.sqlite",
+      "path": "DB/chunks/documents.sqlite",
+      "responsibility": "Base documental principal para el RAG local y remoto."
+    },
+    {
+      "id": "app/observability/trace.py",
+      "type": "module",
+      "label": "Trace ID generator",
+      "path": "app/observability/trace.py",
+      "responsibility": "Genera trace_id para correlación local."
+    },
+    {
+      "id": "app/observability/logging.py",
+      "type": "module",
+      "label": "JSON logging",
+      "path": "app/observability/logging.py",
+      "responsibility": "Emite logs JSON estructurados del backend."
+    },
+    {
+      "id": "app/observability/chat_runs.py",
+      "type": "module",
+      "label": "Persistencia de chat runs",
+      "path": "app/observability/chat_runs.py",
+      "responsibility": "Normaliza y persiste runs operativos del chat."
+    },
+    {
+      "id": "database:CHAT_RUNS/",
+      "type": "database",
+      "label": "CHAT_RUNS",
+      "path": "CHAT_RUNS/",
+      "responsibility": "Almacén operativo actual de runs persistidos en JSON por archivo."
+    },
+    {
+      "id": "app/chat_runs/store.py",
+      "type": "module",
+      "label": "Chat runs store",
+      "path": "app/chat_runs/store.py",
+      "responsibility": "Recarga runs persistidos para listados y métricas."
+    },
+    {
+      "id": "app/tools/create_document.py",
+      "type": "module",
+      "label": "Tool create_document",
+      "path": "app/tools/create_document.py",
+      "responsibility": "Genera y escribe documentos Markdown desde el flujo /creardoc."
+    },
+    {
+      "id": "app/services/document_writer.py",
+      "type": "module",
+      "label": "Document writer",
+      "path": "app/services/document_writer.py",
+      "responsibility": "Escribe el documento final en disco."
+    },
+    {
+      "id": "storage:outputs/documents/",
+      "type": "unknown",
+      "label": "outputs/documents",
+      "path": "outputs/documents/",
+      "responsibility": "Destino observado para los documentos generados por la tool."
+    }
+  ],
+  "edges": [
+    {
+      "source": "frontend/",
+      "relation": "calls",
+      "target": "endpoint:POST /chat",
+      "confidence": "medium",
+      "evidence_type": "inferred_from_docs",
+      "evidence": "docs/README.md: el frontend estático consume el backend por HTTP."
+    },
+    {
+      "source": "app/api/routes_chat.py",
+      "relation": "serves",
+      "target": "endpoint:POST /chat",
+      "confidence": "high",
+      "evidence_type": "inferred_from_docs",
+      "evidence": "app/api/routes_chat.py: @router.post(\"/chat\", response_model=ChatResponse)."
+    },
+    {
+      "source": "app/api/routes_chat.py",
+      "relation": "imports",
+      "target": "app/api/runtime_bridge.py",
+      "confidence": "high",
+      "evidence_type": "import",
+      "evidence": "docs/python/app/api/routes_chat.md: importa app.api.runtime_bridge.main_module."
+    },
+    {
+      "source": "app/api/routes_chat.py",
+      "relation": "imports",
+      "target": "app/schemas.py",
+      "confidence": "high",
+      "evidence_type": "import",
+      "evidence": "docs/python/app/api/routes_chat.md: importa app.schemas.ChatRequest y ChatResponse."
+    },
+    {
+      "source": "app/api/runtime_bridge.py",
+      "relation": "delegates_to",
+      "target": "app/main.py",
+      "confidence": "high",
+      "evidence_type": "call",
+      "evidence": "app/api/runtime_bridge.py: return import_module(\"app.main\")."
+    },
+    {
+      "source": "app/main.py",
+      "relation": "calls",
+      "target": "app/chat/service.py",
+      "confidence": "high",
+      "evidence_type": "call",
+      "evidence": "app/main.py: return _build_chat_service().run_chat_request(request, persist_trace=persist_trace)."
+    },
+    {
+      "source": "app/main.py",
+      "relation": "imports",
+      "target": "app/config.py",
+      "confidence": "high",
+      "evidence_type": "import",
+      "evidence": "docs/python/app/main.md: importa app.config.settings."
+    },
+    {
+      "source": "app/main.py",
+      "relation": "imports",
+      "target": "app/schemas.py",
+      "confidence": "high",
+      "evidence_type": "import",
+      "evidence": "docs/python/app/main.md: importa app.schemas.ChatRequest y ChatResponse."
+    },
+    {
+      "source": "app/chat/service.py",
+      "relation": "imports",
+      "target": "app/chat/dependencies.py",
+      "confidence": "high",
+      "evidence_type": "import",
+      "evidence": "docs/python/app/chat/service.md: importa app.chat.dependencies.ChatDependencies."
+    },
+    {
+      "source": "app/chat/service.py",
+      "relation": "imports",
+      "target": "app/schemas.py",
+      "confidence": "high",
+      "evidence_type": "import",
+      "evidence": "docs/python/app/chat/service.md: importa app.schemas.ChatRequest y ChatResponse."
+    },
+    {
+      "source": "app/chat/service.py",
+      "relation": "delegates_to",
+      "target": "app/chat_runtime.py",
+      "confidence": "high",
+      "evidence_type": "call",
+      "evidence": "app/chat/service.py: return chat_runtime_module.run_chat_request(...)."
+    },
+    {
+      "source": "app/chat/dependencies.py",
+      "relation": "imports",
+      "target": "app/config.py",
+      "confidence": "high",
+      "evidence_type": "import",
+      "evidence": "docs/python/app/chat/dependencies.md: importa app.config.Settings."
+    },
+    {
+      "source": "app/chat_runtime.py",
+      "relation": "imports",
+      "target": "app/chat/dependencies.py",
+      "confidence": "high",
+      "evidence_type": "import",
+      "evidence": "docs/python/app/chat_runtime.md: importa app.chat.dependencies.ChatDependencies."
+    },
+    {
+      "source": "app/chat_runtime.py",
+      "relation": "imports",
+      "target": "app/schemas.py",
+      "confidence": "high",
+      "evidence_type": "import",
+      "evidence": "docs/python/app/chat_runtime.md: importa app.schemas.ChatRequest, ChatResponse y TEMPERATURE_DEFAULT."
+    },
+    {
+      "source": "app/chat_runtime.py",
+      "relation": "imports",
+      "target": "app/config.py",
+      "confidence": "high",
+      "evidence_type": "import",
+      "evidence": "docs/python/app/chat_runtime.md: importa app.config.settings."
+    },
+    {
+      "source": "app/chat_runtime.py",
+      "relation": "calls",
+      "target": "app/observability/trace.py",
+      "confidence": "high",
+      "evidence_type": "call",
+      "evidence": "app/chat_runtime.py: trace_id = request.trace_id or new_trace_id_fn()."
+    },
+    {
+      "source": "app/chat_runtime.py",
+      "relation": "logs_to",
+      "target": "app/observability/logging.py",
+      "confidence": "high",
+      "evidence_type": "call",
+      "evidence": "app/chat_runtime.py: log_event_fn(component=\"fastapi.chat.request\", event=\"main_chat_request_received\", ...)."
+    },
+    {
+      "source": "app/chat_runtime.py",
+      "relation": "calls",
+      "target": "app/llm_client.py",
+      "confidence": "high",
+      "evidence_type": "call",
+      "evidence": "app/chat_runtime.py: usa resolve_provider_model_fn(...) y ask_chat_fn(...)."
+    },
+    {
+      "source": "app/chat_runtime.py",
+      "relation": "calls",
+      "target": "app/rag_client.py",
+      "confidence": "high",
+      "evidence_type": "call",
+      "evidence": "app/chat_runtime.py: context = query_remote_rag_fn(**remote_rag_kwargs)."
+    },
+    {
+      "source": "app/chat_runtime.py",
+      "relation": "calls",
+      "target": "DB/chunks/document_context.py",
+      "confidence": "high",
+      "evidence_type": "call",
+      "evidence": "app/chat_runtime.py: context = build_document_prompt_fn(request.message, **rag_kwargs)."
+    },
+    {
+      "source": "app/chat_runtime.py",
+      "relation": "calls",
+      "target": "app/observability/chat_runs.py",
+      "confidence": "high",
+      "evidence_type": "call",
+      "evidence": "app/chat_runtime.py: save_chat_run_fn({ ... })."
+    },
+    {
+      "source": "app/chat_runtime.py",
+      "relation": "calls",
+      "target": "app/tools/create_document.py",
+      "confidence": "high",
+      "evidence_type": "call",
+      "evidence": "app/chat_runtime.py: tool_fn = create_document_tool_fn or create_document_tool; return asyncio.run(tool_fn(...))."
+    },
+    {
+      "source": "app/llm_client.py",
+      "relation": "imports",
+      "target": "app/config.py",
+      "confidence": "high",
+      "evidence_type": "import",
+      "evidence": "docs/python/app/llm_client.md: importa app.config.settings."
+    },
+    {
+      "source": "app/llm_client.py",
+      "relation": "calls",
+      "target": "app/adapters/ollama_client.py",
+      "confidence": "high",
+      "evidence_type": "call",
+      "evidence": "app/llm_client.py: return _ask_chat(...); la documentación del módulo refleja dispatch a app.adapters.ollama_client.ask_chat."
+    },
+    {
+      "source": "app/llm_client.py",
+      "relation": "calls",
+      "target": "app/adapters/openai_client.py",
+      "confidence": "high",
+      "evidence_type": "call",
+      "evidence": "app/llm_client.py: if selected_provider == \"openai\": return _ask_openai_chat(...)."
+    },
+    {
+      "source": "app/adapters/ollama_client.py",
+      "relation": "imports",
+      "target": "app/config.py",
+      "confidence": "high",
+      "evidence_type": "import",
+      "evidence": "docs/python/app/adapters/ollama_client.md: importa app.config.settings."
+    },
+    {
+      "source": "app/adapters/ollama_client.py",
+      "relation": "delegates_to",
+      "target": "provider:ollama",
+      "confidence": "high",
+      "evidence_type": "inferred_from_docs",
+      "evidence": "docs/ARCHITECTURE.md: el adaptador Ollama llama a Ollama y extrae métricas nativas."
+    },
+    {
+      "source": "app/adapters/openai_client.py",
+      "relation": "imports",
+      "target": "app/config.py",
+      "confidence": "high",
+      "evidence_type": "import",
+      "evidence": "docs/python/app/adapters/openai_client.md: importa app.config.settings."
+    },
+    {
+      "source": "app/adapters/openai_client.py",
+      "relation": "delegates_to",
+      "target": "provider:openai",
+      "confidence": "high",
+      "evidence_type": "inferred_from_docs",
+      "evidence": "docs/ARCHITECTURE.md: el adaptador OpenAI llama a OpenAI y devuelve métricas más limitadas."
+    },
+    {
+      "source": "app/rag_client.py",
+      "relation": "imports",
+      "target": "app/config.py",
+      "confidence": "high",
+      "evidence_type": "import",
+      "evidence": "docs/python/app/rag_client.md: importa app.config.settings."
+    },
+    {
+      "source": "app/rag_client.py",
+      "relation": "imports",
+      "target": "DB/chunks/document_context.py",
+      "confidence": "high",
+      "evidence_type": "import",
+      "evidence": "docs/python/app/rag_client.md: importa DB.chunks.document_context.normalize_query y normalize_terms."
+    },
+    {
+      "source": "app/rag_client.py",
+      "relation": "retrieves_from",
+      "target": "endpoint:POST /rag/query",
+      "confidence": "high",
+      "evidence_type": "call",
+      "evidence": "app/rag_client.py: requests.post(f\"{settings.rag_service_base_url()}/rag/query\", json=payload, ...)."
+    },
+    {
+      "source": "rag_service/main.py",
+      "relation": "serves",
+      "target": "endpoint:POST /rag/query",
+      "confidence": "high",
+      "evidence_type": "inferred_from_docs",
+      "evidence": "app/rag_service/main.py: @app.post(\"/rag/query\"); docs/RAG_AND_EVIDENCE.md describe ese contrato."
+    },
+    {
+      "source": "rag_service/main.py",
+      "relation": "imports",
+      "target": "app/config.py",
+      "confidence": "high",
+      "evidence_type": "import",
+      "evidence": "docs/python/rag_service/main.md: importa app.config.settings."
+    },
+    {
+      "source": "rag_service/main.py",
+      "relation": "calls",
+      "target": "DB/chunks/document_context.py",
+      "confidence": "high",
+      "evidence_type": "call",
+      "evidence": "rag_service/main.py: context = document_context.build_document_prompt(...)."
+    },
+    {
+      "source": "DB/chunks/document_context.py",
+      "relation": "imports",
+      "target": "app/config.py",
+      "confidence": "high",
+      "evidence_type": "import",
+      "evidence": "docs/python/DB/chunks/document_context.md: importa app.config.settings."
+    },
+    {
+      "source": "DB/chunks/document_context.py",
+      "relation": "logs_to",
+      "target": "app/observability/logging.py",
+      "confidence": "high",
+      "evidence_type": "import",
+      "evidence": "docs/python/DB/chunks/document_context.md: importa app.observability.logging.log_event."
+    },
+    {
+      "source": "DB/chunks/document_context.py",
+      "relation": "reads_from",
+      "target": "database:DB/chunks/documents.sqlite",
+      "confidence": "medium",
+      "evidence_type": "inferred_from_docs",
+      "evidence": "docs/RAG_AND_EVIDENCE.md: base documental principal detectada en DB/chunks/documents.sqlite."
+    },
+    {
+      "source": "rag_service/main.py",
+      "relation": "reads_from",
+      "target": "database:DB/chunks/documents.sqlite",
+      "confidence": "medium",
+      "evidence_type": "inferred_from_docs",
+      "evidence": "docs/RAG_AND_EVIDENCE.md: el RAG remoto reutiliza el mismo motor documental y la misma base SQLite."
+    },
+    {
+      "source": "app/observability/chat_runs.py",
+      "relation": "imports",
+      "target": "app/config.py",
+      "confidence": "high",
+      "evidence_type": "import",
+      "evidence": "docs/python/app/observability/chat_runs.md: importa app.config.settings."
+    },
+    {
+      "source": "app/observability/chat_runs.py",
+      "relation": "imports",
+      "target": "app/schemas.py",
+      "confidence": "high",
+      "evidence_type": "import",
+      "evidence": "docs/python/app/observability/chat_runs.md: importa app.schemas.normalize_temperature y normalize_top_p."
+    },
+    {
+      "source": "app/observability/chat_runs.py",
+      "relation": "logs_to",
+      "target": "app/observability/logging.py",
+      "confidence": "high",
+      "evidence_type": "import",
+      "evidence": "docs/python/app/observability/chat_runs.md: importa app.observability.logging.log_event."
+    },
+    {
+      "source": "app/observability/chat_runs.py",
+      "relation": "writes_to",
+      "target": "database:CHAT_RUNS/",
+      "confidence": "high",
+      "evidence_type": "inferred_from_docs",
+      "evidence": "docs/OBSERVABILITY.md: implementación app/observability/chat_runs.py y ubicación principal observada CHAT_RUNS/."
+    },
+    {
+      "source": "app/chat_runs/store.py",
+      "relation": "imports",
+      "target": "app/observability/chat_runs.py",
+      "confidence": "high",
+      "evidence_type": "import",
+      "evidence": "docs/python/app/chat_runs/store.md: importa app.observability.chat_runs.resolve_chat_runs_path."
+    },
+    {
+      "source": "app/chat_runs/store.py",
+      "relation": "reads_from",
+      "target": "database:CHAT_RUNS/",
+      "confidence": "high",
+      "evidence_type": "inferred_from_docs",
+      "evidence": "docs/OBSERVABILITY.md: app/chat_runs/store.py recarga runs desde el almacén principal CHAT_RUNS/."
+    },
+    {
+      "source": "app/tools/create_document.py",
+      "relation": "imports",
+      "target": "app/schemas.py",
+      "confidence": "high",
+      "evidence_type": "import",
+      "evidence": "docs/python/app/tools/create_document.md: importa app.schemas.CreateDocumentRequest."
+    },
+    {
+      "source": "app/tools/create_document.py",
+      "relation": "calls",
+      "target": "app/services/document_writer.py",
+      "confidence": "high",
+      "evidence_type": "call",
+      "evidence": "app/tools/create_document.py: write_result = write_document(...)."
+    },
+    {
+      "source": "app/services/document_writer.py",
+      "relation": "writes_to",
+      "target": "storage:outputs/documents/",
+      "confidence": "medium",
+      "evidence_type": "inferred_from_docs",
+      "evidence": "docs/RUNTIME_FLOW.md: el flujo /creardoc escribe un archivo en outputs/documents/."
+    }
+  ]
+}

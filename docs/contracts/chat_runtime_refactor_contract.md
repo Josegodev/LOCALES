@@ -178,3 +178,10 @@ Variables que ya no son necesarias para arrancar el backend principal:
 - `TELEGRAM_CHAT_ID`
 - `TELEGRAM_ENABLED`
 - cualquier variable de eval ligada a Telegram
+
+## Relacionado
+
+- [[ARCHITECTURE]]
+- [[RUNTIME_FLOW]]
+- [[TECH_DEBT_AND_RISKS]]
+- [[GLOSSARY]]
