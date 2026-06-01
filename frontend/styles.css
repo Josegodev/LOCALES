@@ -455,7 +455,7 @@ button,
   min-width: 0;
 }
 
-.generation-control span {
+.generation-control label span {
   display: block;
   margin-bottom: 4px;
   color: var(--text);
@@ -469,20 +469,18 @@ button,
   width: 100%;
 }
 
-.range-row {
+.generation-control-label {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 10px;
-}
-
-.range-row input[type="range"] {
-  flex: 1;
+  gap: 8px;
 }
 
 .range-value {
   min-width: 42px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+  color: var(--text);
 }
 
 .generation-control small {

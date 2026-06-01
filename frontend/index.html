@@ -63,45 +63,47 @@ technical: -</pre>
                 <p>Estos ajustes afectan al modelo. No cambian cuantos documentos recupera el RAG.</p>
               </div>
               <div class="generation-controls-grid">
-                <label class="generation-control">
-                  <span>Temperature</span>
+                <div class="generation-control">
+                  <label for="temperatureSelect">
+                    <span>Temperature</span>
+                  </label>
                   <select id="temperatureSelect" aria-label="Temperatura">
                     <option value="0.2">0,2</option>
                   </select>
                   <small>Aleatoriedad de la respuesta.</small>
-                </label>
-                <label class="generation-control">
-                  <span>Top P</span>
-                  <div class="range-row">
-                    <input
-                      id="topPInput"
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.05"
-                      value="0.9"
-                      aria-describedby="topPHelp"
-                    >
+                </div>
+                <div class="generation-control">
+                  <label class="generation-control-label" for="topPInput">
+                    <span>Top P</span>
                     <span id="topPValue" class="range-value">0.90</span>
-                  </div>
+                  </label>
+                  <input
+                    id="topPInput"
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value="0.9"
+                    aria-describedby="topPHelp"
+                  >
                   <small id="topPHelp">Probabilidad acumulada considerada.</small>
-                </label>
-                <label class="generation-control">
-                  <span>Top K generacion</span>
-                  <div class="range-row">
-                    <input
-                      id="topKInput"
-                      type="range"
-                      min="1"
-                      max="200"
-                      step="1"
-                      value="40"
-                      aria-describedby="topKHelp"
-                    >
+                </div>
+                <div class="generation-control">
+                  <label class="generation-control-label" for="topKInput">
+                    <span>Top K generacion</span>
                     <span id="topKValue" class="range-value">40</span>
-                  </div>
+                  </label>
+                  <input
+                    id="topKInput"
+                    type="range"
+                    min="1"
+                    max="200"
+                    step="1"
+                    value="40"
+                    aria-describedby="topKHelp"
+                  >
                   <small id="topKHelp">Candidatos del modelo. No afecta al RAG.</small>
-                </label>
+                </div>
               </div>
             </section>
             <div class="composer-controls">

@@ -298,12 +298,14 @@ function generationOptionOrFallback(optionName, candidate) {
   };
 }
 
-function renderTopPValue(value) {
-  elements.topPValue.textContent = formatFloat(value, 2);
-}
+function renderGenerationControlValues() {
+  if (elements.topPInput && elements.topPValue) {
+    elements.topPValue.textContent = Number(elements.topPInput.value).toFixed(2);
+  }
 
-function renderTopKValue(value) {
-  elements.topKValue.textContent = Number(value).toFixed(0);
+  if (elements.topKInput && elements.topKValue) {
+    elements.topKValue.textContent = String(Number.parseInt(elements.topKInput.value, 10));
+  }
 }
 
 function normalizeTopPInputValue(options = null) {
@@ -313,7 +315,7 @@ function normalizeTopPInputValue(options = null) {
     ? topPOptions.default
     : clampNumber(rawValue, topPOptions.min, topPOptions.max);
   elements.topPInput.value = String(Number(normalized.toFixed(2)));
-  renderTopPValue(normalized);
+  renderGenerationControlValues();
   return normalized;
 }
 
@@ -324,7 +326,7 @@ function normalizeTopKInputValue(options = null) {
     ? clampNumber(rawValue, topKOptions.min, topKOptions.max)
     : topKOptions.default;
   elements.topKInput.value = String(normalized);
-  renderTopKValue(normalized);
+  renderGenerationControlValues();
   return normalized;
 }
 
@@ -1302,6 +1304,7 @@ function init() {
   if (savedTopP) elements.topPInput.value = savedTopP;
   if (savedTopK) elements.topKInput.value = savedTopK;
   if (!elements.backendUrl.value && DEFAULT_BACKEND_URL) elements.backendUrl.value = DEFAULT_BACKEND_URL;
+  renderGenerationControlValues();
   normalizeTopPInputValue();
   normalizeTopKInputValue();
 
@@ -1333,13 +1336,13 @@ function init() {
   });
   elements.temperatureSelect.addEventListener("change", () => localStorage.setItem("locales.chatTemperature", elements.temperatureSelect.value));
   elements.topPInput.addEventListener("input", () => {
-    normalizeTopPInputValue();
+    renderGenerationControlValues();
   });
   elements.topPInput.addEventListener("change", () => {
     localStorage.setItem("locales.chatTopP", String(normalizeTopPInputValue()));
   });
   elements.topKInput.addEventListener("input", () => {
-    normalizeTopKInputValue();
+    renderGenerationControlValues();
   });
   elements.topKInput.addEventListener("change", () => {
     localStorage.setItem("locales.chatTopK", String(normalizeTopKInputValue()));
