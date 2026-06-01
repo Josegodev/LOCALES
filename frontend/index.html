@@ -62,14 +62,15 @@ technical: -</pre>
                 <h2>Parametros de generacion</h2>
                 <p>Estos ajustes afectan al modelo. No cambian cuantos documentos recupera el RAG.</p>
               </div>
-              <div class="generation-grid">
-                <label class="generation-field">
+              <div class="generation-controls-grid">
+                <label class="generation-control">
                   <span>Temperature</span>
                   <select id="temperatureSelect" aria-label="Temperatura">
                     <option value="0.2">0,2</option>
                   </select>
+                  <small>Aleatoriedad de la respuesta.</small>
                 </label>
-                <label class="generation-field">
+                <label class="generation-control">
                   <span>Top P</span>
                   <input
                     id="topPInput"
@@ -81,9 +82,9 @@ technical: -</pre>
                     inputmode="decimal"
                     aria-describedby="topPHelp"
                   >
-                  <small id="topPHelp">Controla el porcentaje acumulado de opciones consideradas por el modelo.</small>
+                  <small id="topPHelp">Probabilidad acumulada considerada.</small>
                 </label>
-                <label class="generation-field">
+                <label class="generation-control">
                   <span>Top K generacion</span>
                   <input
                     id="topKInput"
@@ -95,7 +96,7 @@ technical: -</pre>
                     inputmode="numeric"
                     aria-describedby="topKHelp"
                   >
-                  <small id="topKHelp">Limita cuantas opciones considera el modelo al generar texto. No controla cuantos documentos recupera el RAG.</small>
+                  <small id="topKHelp">Candidatos del modelo. No afecta al RAG.</small>
                 </label>
               </div>
             </section>

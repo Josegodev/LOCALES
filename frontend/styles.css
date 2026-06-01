@@ -437,29 +437,43 @@ button,
 }
 
 .generation-panel-header p,
-.generation-field small {
+.generation-control small {
   margin: 0;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.45;
 }
 
-.generation-grid {
+.generation-controls-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+  align-items: end;
 }
 
-.generation-field {
-  display: grid;
-  gap: 6px;
+.generation-control {
+  min-width: 0;
 }
 
-.generation-field span {
+.generation-control span {
+  display: block;
+  margin-bottom: 4px;
   color: var(--text);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
+}
+
+.generation-control select,
+.generation-control input {
+  width: 100%;
+}
+
+.generation-control small {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  line-height: 1.2;
 }
 
 .composer-controls {
@@ -780,6 +794,12 @@ dd {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+@media (max-width: 760px) {
+  .generation-controls-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 1080px) {
   .metric-card-grid,
   .filter-grid,
@@ -815,7 +835,7 @@ dd {
     width: min(100%, calc(100vw - 24px));
   }
 
-  .generation-grid,
+  .generation-controls-grid,
   .composer-controls,
   .composer-input,
   .filter-grid,
