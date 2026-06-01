@@ -3,5 +3,12 @@ __pycache__
 *.pyc
 .git
 .env
+.env.dev
+.pytest_cache
+.obsidian
+.agents
 logs
 evals/runs
+CHAT_RUNS
+outputs
+data/chat_traces.jsonl

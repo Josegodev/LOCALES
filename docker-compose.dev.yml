@@ -1,0 +1,120 @@
+services:
+  rag:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    working_dir: /app
+    env_file:
+      - .env.dev.example
+    environment:
+      APP_ENV: dev
+      DOCUMENTS_DB_PATH: /app/DB/chunks/documents.sqlite
+    command:
+      - uvicorn
+      - rag_service.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8001"
+      - --reload
+      - --reload-dir
+      - /app/rag_service
+      - --reload-dir
+      - /app/DB/chunks
+      - --reload-dir
+      - /app/scripts
+      - --reload-exclude
+      - DB/chunks/documents.sqlite
+    ports:
+      - "8001:8001"
+    volumes:
+      - .:/app
+      - ./DB:/app/DB
+      - ./evals:/app/evals
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8001/health", timeout=3)
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    working_dir: /app
+    env_file:
+      - .env.dev.example
+    environment:
+      APP_ENV: dev
+      BACKEND_BASE_URL: http://localhost:8000
+      FRONTEND_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      CHAT_AUTH_MODE: local_open
+      CHAT_RUNS_PATH: CHAT_RUNS
+      DOCUMENTS_DB_PATH: /app/DB/chunks/documents.sqlite
+      USE_REMOTE_RAG: "true"
+      RAG_SERVICE_URL: http://rag:8001
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload
+      - --reload-dir
+      - /app/app
+      - --reload-dir
+      - /app/DB/chunks
+      - --reload-dir
+      - /app/scripts
+      - --reload-exclude
+      - DB/chunks/documents.sqlite
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - ./DB:/app/DB
+      - ./outputs:/app/outputs
+      - ./evals:/app/evals
+      - ./CHAT_RUNS:/app/CHAT_RUNS
+    depends_on:
+      rag:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=3)
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    working_dir: /app
+    command:
+      - python
+      - -m
+      - http.server
+      - "3000"
+      - --directory
+      - /app/frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+    depends_on:
+      backend:
+        condition: service_healthy
