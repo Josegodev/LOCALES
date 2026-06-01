@@ -72,30 +72,34 @@ technical: -</pre>
                 </label>
                 <label class="generation-control">
                   <span>Top P</span>
-                  <input
-                    id="topPInput"
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value="0.9"
-                    inputmode="decimal"
-                    aria-describedby="topPHelp"
-                  >
+                  <div class="range-row">
+                    <input
+                      id="topPInput"
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value="0.9"
+                      aria-describedby="topPHelp"
+                    >
+                    <span id="topPValue" class="range-value">0.90</span>
+                  </div>
                   <small id="topPHelp">Probabilidad acumulada considerada.</small>
                 </label>
                 <label class="generation-control">
                   <span>Top K generacion</span>
-                  <input
-                    id="topKInput"
-                    type="number"
-                    min="1"
-                    max="200"
-                    step="1"
-                    value="40"
-                    inputmode="numeric"
-                    aria-describedby="topKHelp"
-                  >
+                  <div class="range-row">
+                    <input
+                      id="topKInput"
+                      type="range"
+                      min="1"
+                      max="200"
+                      step="1"
+                      value="40"
+                      aria-describedby="topKHelp"
+                    >
+                    <span id="topKValue" class="range-value">40</span>
+                  </div>
                   <small id="topKHelp">Candidatos del modelo. No afecta al RAG.</small>
                 </label>
               </div>

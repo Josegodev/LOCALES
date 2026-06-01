@@ -14,7 +14,9 @@ const elements = {
   modelSelect: document.querySelector("#modelSelect"),
   temperatureSelect: document.querySelector("#temperatureSelect"),
   topPInput: document.querySelector("#topPInput"),
+  topPValue: document.querySelector("#topPValue"),
   topKInput: document.querySelector("#topKInput"),
+  topKValue: document.querySelector("#topKValue"),
   conversationWindowSelect: document.querySelector("#conversationWindowSelect"),
   useRagInput: document.querySelector("#useRagInput"),
   createDocumentButton: document.querySelector("#createDocumentButton"),
@@ -296,6 +298,14 @@ function generationOptionOrFallback(optionName, candidate) {
   };
 }
 
+function renderTopPValue(value) {
+  elements.topPValue.textContent = formatFloat(value, 2);
+}
+
+function renderTopKValue(value) {
+  elements.topKValue.textContent = Number(value).toFixed(0);
+}
+
 function normalizeTopPInputValue(options = null) {
   const topPOptions = generationOptionOrFallback("top_p", options);
   const rawValue = numberOrNull(elements.topPInput?.value);
@@ -303,6 +313,7 @@ function normalizeTopPInputValue(options = null) {
     ? topPOptions.default
     : clampNumber(rawValue, topPOptions.min, topPOptions.max);
   elements.topPInput.value = String(Number(normalized.toFixed(2)));
+  renderTopPValue(normalized);
   return normalized;
 }
 
@@ -313,6 +324,7 @@ function normalizeTopKInputValue(options = null) {
     ? clampNumber(rawValue, topKOptions.min, topKOptions.max)
     : topKOptions.default;
   elements.topKInput.value = String(normalized);
+  renderTopKValue(normalized);
   return normalized;
 }
 
@@ -1320,8 +1332,14 @@ function init() {
     localStorage.setItem("locales.chatModelKey", modelOptionKey(selected.provider, selected.model));
   });
   elements.temperatureSelect.addEventListener("change", () => localStorage.setItem("locales.chatTemperature", elements.temperatureSelect.value));
+  elements.topPInput.addEventListener("input", () => {
+    normalizeTopPInputValue();
+  });
   elements.topPInput.addEventListener("change", () => {
     localStorage.setItem("locales.chatTopP", String(normalizeTopPInputValue()));
+  });
+  elements.topKInput.addEventListener("input", () => {
+    normalizeTopKInputValue();
   });
   elements.topKInput.addEventListener("change", () => {
     localStorage.setItem("locales.chatTopK", String(normalizeTopKInputValue()));

@@ -469,6 +469,22 @@ button,
   width: 100%;
 }
 
+.range-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.range-row input[type="range"] {
+  flex: 1;
+}
+
+.range-value {
+  min-width: 42px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .generation-control small {
   display: block;
   margin-top: 4px;
