@@ -421,6 +421,47 @@ button,
   padding: 14px;
 }
 
+.generation-panel {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel-deep);
+}
+
+.generation-panel-header {
+  margin-bottom: 10px;
+}
+
+.generation-panel-header h2 {
+  margin: 0 0 6px;
+}
+
+.generation-panel-header p,
+.generation-field small {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.generation-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.generation-field {
+  display: grid;
+  gap: 6px;
+}
+
+.generation-field span {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 .composer-controls {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) 150px auto;
@@ -774,6 +815,7 @@ dd {
     width: min(100%, calc(100vw - 24px));
   }
 
+  .generation-grid,
   .composer-controls,
   .composer-input,
   .filter-grid,

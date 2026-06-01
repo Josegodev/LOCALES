@@ -10,7 +10,7 @@ from typing import Any
 
 from app.observability.chat_runs import resolve_chat_runs_path
 from app.observability.logging import log_event
-from app.schemas import normalize_temperature
+from app.schemas import normalize_temperature, normalize_top_k, normalize_top_p
 
 
 PROVIDER_NATIVE_METRIC_FIELDS = (
@@ -86,6 +86,50 @@ def _nullable_temperature(payload: dict[str, Any]) -> float | None:
 
     try:
         return normalize_temperature(configured_temperature)
+    except (TypeError, ValueError):
+        return None
+
+
+def _nullable_top_p(payload: dict[str, Any]) -> float | None:
+    direct_value = payload.get("top_p")
+    if direct_value is not None:
+        try:
+            return normalize_top_p(direct_value)
+        except (TypeError, ValueError):
+            return None
+
+    generation_config = payload.get("generation_config")
+    if not isinstance(generation_config, dict):
+        return None
+
+    configured_top_p = generation_config.get("top_p")
+    if configured_top_p is None:
+        return None
+
+    try:
+        return normalize_top_p(configured_top_p)
+    except (TypeError, ValueError):
+        return None
+
+
+def _nullable_top_k(payload: dict[str, Any]) -> int | None:
+    direct_value = payload.get("top_k")
+    if direct_value is not None:
+        try:
+            return normalize_top_k(direct_value)
+        except (TypeError, ValueError):
+            return None
+
+    generation_config = payload.get("generation_config")
+    if not isinstance(generation_config, dict):
+        return None
+
+    configured_top_k = generation_config.get("top_k")
+    if configured_top_k is None:
+        return None
+
+    try:
+        return normalize_top_k(configured_top_k)
     except (TypeError, ValueError):
         return None
 
@@ -186,6 +230,8 @@ def normalize_run(payload: dict[str, Any]) -> dict[str, Any]:
         "provider": _nullable_str(payload.get("provider")),
         "model": _nullable_str(payload.get("model")),
         "temperature": _nullable_temperature(payload),
+        "top_p": _nullable_top_p(payload),
+        "top_k": _nullable_top_k(payload),
         "use_rag": _nullable_bool(payload.get("use_rag")),
         "retrieval_status": _normalized_retrieval_status(payload.get("retrieval_status")),
         "status": _nullable_str(payload.get("status")) or "error",

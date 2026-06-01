@@ -87,8 +87,11 @@ class ChatRunObservabilityTests(unittest.TestCase):
         self.assertEqual(payload["provider"], "ollama")
         self.assertEqual(payload["temperature"], 0.2)
         self.assertEqual(payload["max_tokens"], 512)
-        self.assertIsNone(payload["top_p"])
+        self.assertEqual(payload["top_p"], 0.9)
+        self.assertEqual(payload["top_k"], 40)
         self.assertEqual(payload["generation_config"]["temperature"], 0.2)
+        self.assertEqual(payload["generation_config"]["top_p"], 0.9)
+        self.assertEqual(payload["generation_config"]["top_k"], 40)
         self.assertEqual(payload["generation_config"]["max_tokens"], 512)
         self.assertEqual(payload["input"], self.CHAT_PAYLOAD["message"])
         self.assertEqual(payload["response"], "Transformer basado en attention.")
@@ -151,6 +154,7 @@ class ChatRunObservabilityTests(unittest.TestCase):
                                     "temperature": 0.2,
                                     "max_tokens": 256,
                                     "top_p": 0.9,
+                                    "top_k": 40,
                                     "use_rag": True,
                                     "answer": "Respuesta OpenAI.",
                                 },
@@ -163,6 +167,7 @@ class ChatRunObservabilityTests(unittest.TestCase):
                                         "model": "granite",
                                         "max_tokens": 256,
                                         "top_p": 0.9,
+                                        "top_k": 40,
                                         "use_rag": True,
                                     },
                                 )
@@ -175,6 +180,7 @@ class ChatRunObservabilityTests(unittest.TestCase):
         self.assertEqual(payload["model"], "granite4.1:8b")
         self.assertEqual(payload["max_tokens"], 256)
         self.assertEqual(payload["top_p"], 0.9)
+        self.assertEqual(payload["top_k"], 40)
 
     def test_controlled_error_also_persists_chat_run(self):
         with TemporaryDirectory() as tmpdir:

@@ -1,0 +1,42 @@
+import unittest
+from pathlib import Path
+
+
+class FrontendGenerationControlsStaticTests(unittest.TestCase):
+    REPO_ROOT = Path(__file__).resolve().parents[1]
+
+    def test_frontend_exposes_generation_controls_and_payload_fields(self):
+        frontend_html = (self.REPO_ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+        frontend_js = (self.REPO_ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
+
+        self.assertIn("Parametros de generacion", frontend_html)
+        self.assertIn('id="topPInput"', frontend_html)
+        self.assertIn('id="topKInput"', frontend_html)
+        self.assertIn("Top P", frontend_html)
+        self.assertIn("Top K generacion", frontend_html)
+        self.assertIn("No controla cuantos documentos recupera el RAG.", frontend_html)
+        self.assertIn('id="responseTopP"', frontend_html)
+        self.assertIn('id="responseTopK"', frontend_html)
+        self.assertIn('id="runDetailTopP"', frontend_html)
+        self.assertIn('id="runDetailTopK"', frontend_html)
+
+        self.assertIn("const DEFAULT_TOP_P = 0.9;", frontend_js)
+        self.assertIn("const DEFAULT_TOP_K = 40;", frontend_js)
+        self.assertIn("const fallbackGenerationOptions = {", frontend_js)
+        self.assertIn("data?.generation", frontend_js)
+        self.assertIn("locales.chatTopP", frontend_js)
+        self.assertIn("locales.chatTopK", frontend_js)
+        self.assertIn("top_p: selectedTopP", frontend_js)
+        self.assertIn("top_k: selectedTopK", frontend_js)
+        self.assertIn("applyTopPOptions(fallbackGenerationOptions.top_p)", frontend_js)
+        self.assertIn("applyTopKOptions(fallbackGenerationOptions.top_k)", frontend_js)
+        self.assertIn('responseTopP: document.querySelector("#responseTopP")', frontend_js)
+        self.assertIn('responseTopK: document.querySelector("#responseTopK")', frontend_js)
+        self.assertIn('runDetailTopP: document.querySelector("#runDetailTopP")', frontend_js)
+        self.assertIn('runDetailTopK: document.querySelector("#runDetailTopK")', frontend_js)
+        self.assertIn("elements.responseTopP.textContent = formatFloat(data?.top_p, 2);", frontend_js)
+        self.assertIn("elements.responseTopK.textContent = metricOrNA(data?.top_k, (value) => Number(value).toFixed(0));", frontend_js)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -12,7 +12,7 @@ from DB.chunks.document_context import (
     normalize_terms,
     source_intent_from_corpus_hint,
 )
-from app.schemas import ChatRequest
+from app.schemas import ChatRequest, RETRIEVAL_TOP_K_DEFAULT, RETRIEVAL_TOP_K_MAX
 
 NO_EVIDENCE_MARKER = "NO_EVIDENCE_FOR_ANSWER"
 MARKER_ONLY_RETRIEVAL_STATUSES = {"NO_EVIDENCE", "NO_EVIDENCE_FOR_ANSWER"}
@@ -111,6 +111,12 @@ def _extract_anchor_terms(query: str) -> list[str]:
             anchor_terms.append(term)
 
     return anchor_terms
+
+
+def _resolve_retrieval_top_k(value: int | None) -> int:
+    if not isinstance(value, int):
+        return RETRIEVAL_TOP_K_DEFAULT
+    return min(value, RETRIEVAL_TOP_K_MAX)
 
 
 def _should_force_no_evidence(query: str, chunks: list[dict]) -> bool:
@@ -269,7 +275,7 @@ def retrieve_chat_context(
 
     if use_rag:
         retrieval_started_at = time.perf_counter()
-        top_k = request.top_k or 3
+        top_k = _resolve_retrieval_top_k(request.top_k)
         if settings_obj.use_remote_rag:
             remote_rag_kwargs = {
                 "query": request.message,

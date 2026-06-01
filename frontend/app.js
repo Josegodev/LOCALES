@@ -13,6 +13,8 @@ const elements = {
   messageInput: document.querySelector("#messageInput"),
   modelSelect: document.querySelector("#modelSelect"),
   temperatureSelect: document.querySelector("#temperatureSelect"),
+  topPInput: document.querySelector("#topPInput"),
+  topKInput: document.querySelector("#topKInput"),
   conversationWindowSelect: document.querySelector("#conversationWindowSelect"),
   useRagInput: document.querySelector("#useRagInput"),
   createDocumentButton: document.querySelector("#createDocumentButton"),
@@ -25,6 +27,8 @@ const elements = {
   chunksFound: document.querySelector("#chunksFound"),
   providerModel: document.querySelector("#providerModel"),
   responseTemperature: document.querySelector("#responseTemperature"),
+  responseTopP: document.querySelector("#responseTopP"),
+  responseTopK: document.querySelector("#responseTopK"),
   traceId: document.querySelector("#traceId"),
   chatLatency: document.querySelector("#chatLatency"),
   warningsText: document.querySelector("#warningsText"),
@@ -57,6 +61,8 @@ const elements = {
   runDetailTraceId: document.querySelector("#runDetailTraceId"),
   runDetailProviderModel: document.querySelector("#runDetailProviderModel"),
   runDetailTemperature: document.querySelector("#runDetailTemperature"),
+  runDetailTopP: document.querySelector("#runDetailTopP"),
+  runDetailTopK: document.querySelector("#runDetailTopK"),
   runDetailUseRag: document.querySelector("#runDetailUseRag"),
   runDetailLatency: document.querySelector("#runDetailLatency"),
   runDetailTokensTotal: document.querySelector("#runDetailTokensTotal"),
@@ -88,6 +94,17 @@ const hiddenModelNames = new Set([
 const DEFAULT_CHAT_PROVIDER = "ollama";
 const DEFAULT_CHAT_MODEL = "granite4.1:8b";
 const DEFAULT_CHAT_TEMPERATURE = 0.2;
+const DEFAULT_TOP_P = 0.9;
+const DEFAULT_TOP_K = 40;
+const TEMPERATURE_MIN = 0.0;
+const TEMPERATURE_MAX = 1.5;
+const TEMPERATURE_STEP = 0.1;
+const TOP_P_MIN = 0.0;
+const TOP_P_MAX = 1.0;
+const TOP_P_STEP = 0.05;
+const TOP_K_MIN = 1;
+const TOP_K_MAX = 200;
+const TOP_K_STEP = 1;
 const DEFAULT_CONVERSATION_WINDOW = 0;
 
 const chatState = {
@@ -101,6 +118,33 @@ const runsState = {
   runs: [],
   filteredRuns: [],
   loaded: false,
+};
+
+const fallbackGenerationOptions = {
+  temperature: {
+    default: DEFAULT_CHAT_TEMPERATURE,
+    min: TEMPERATURE_MIN,
+    max: TEMPERATURE_MAX,
+    step: TEMPERATURE_STEP,
+    presets: [
+      { value: 0.0, label: "Deterministic" },
+      { value: DEFAULT_CHAT_TEMPERATURE, label: "Technical default" },
+      { value: 0.7, label: "Balanced" },
+      { value: 1.0, label: "Exploratory" },
+    ],
+  },
+  top_p: {
+    default: DEFAULT_TOP_P,
+    min: TOP_P_MIN,
+    max: TOP_P_MAX,
+    step: TOP_P_STEP,
+  },
+  top_k: {
+    default: DEFAULT_TOP_K,
+    min: TOP_K_MIN,
+    max: TOP_K_MAX,
+    step: TOP_K_STEP,
+  },
 };
 function modelOptionKey(provider, model) {
   return `${provider || "ollama"}::${model || ""}`;
@@ -235,6 +279,41 @@ function numberOrNull(value) {
   }
   const numberValue = Number(value);
   return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function clampNumber(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function generationOptionOrFallback(optionName, candidate) {
+  const fallback = fallbackGenerationOptions[optionName];
+  if (!candidate || typeof candidate !== "object") {
+    return fallback;
+  }
+  return {
+    ...fallback,
+    ...candidate,
+  };
+}
+
+function normalizeTopPInputValue(options = null) {
+  const topPOptions = generationOptionOrFallback("top_p", options);
+  const rawValue = numberOrNull(elements.topPInput?.value);
+  const normalized = rawValue === null
+    ? topPOptions.default
+    : clampNumber(rawValue, topPOptions.min, topPOptions.max);
+  elements.topPInput.value = String(Number(normalized.toFixed(2)));
+  return normalized;
+}
+
+function normalizeTopKInputValue(options = null) {
+  const topKOptions = generationOptionOrFallback("top_k", options);
+  const rawValue = Number.parseInt(elements.topKInput?.value || "", 10);
+  const normalized = Number.isFinite(rawValue)
+    ? clampNumber(rawValue, topKOptions.min, topKOptions.max)
+    : topKOptions.default;
+  elements.topKInput.value = String(normalized);
+  return normalized;
 }
 
 function formatTemperature(value) {
@@ -419,9 +498,10 @@ function replaceModelOptions(items) {
 
 function replaceTemperatureOptions(temperature) {
   const currentValue = localStorage.getItem("locales.chatTemperature");
-  const presets = Array.isArray(temperature?.presets) && temperature.presets.length
-    ? temperature.presets
-    : [{ value: temperature?.default ?? 0.2, label: "Default" }];
+  const temperatureOptions = generationOptionOrFallback("temperature", temperature);
+  const presets = Array.isArray(temperatureOptions.presets) && temperatureOptions.presets.length
+    ? temperatureOptions.presets
+    : [{ value: temperatureOptions.default, label: "Default" }];
 
   elements.temperatureSelect.innerHTML = "";
   for (const preset of presets) {
@@ -431,10 +511,40 @@ function replaceTemperatureOptions(temperature) {
     elements.temperatureSelect.appendChild(option);
   }
 
-  const preferred = currentValue || Number(temperature?.default ?? 0.2).toFixed(1);
+  const preferred = currentValue || Number(temperatureOptions.default).toFixed(1);
   if (Array.from(elements.temperatureSelect.options).some((option) => option.value === preferred)) {
     elements.temperatureSelect.value = preferred;
   }
+}
+
+function applyTopPOptions(topP) {
+  const topPOptions = generationOptionOrFallback("top_p", topP);
+  elements.topPInput.min = String(topPOptions.min);
+  elements.topPInput.max = String(topPOptions.max);
+  elements.topPInput.step = String(topPOptions.step);
+
+  const savedValue = localStorage.getItem("locales.chatTopP");
+  if (savedValue !== null) {
+    elements.topPInput.value = savedValue;
+  } else {
+    elements.topPInput.value = String(topPOptions.default);
+  }
+  normalizeTopPInputValue(topPOptions);
+}
+
+function applyTopKOptions(topK) {
+  const topKOptions = generationOptionOrFallback("top_k", topK);
+  elements.topKInput.min = String(topKOptions.min);
+  elements.topKInput.max = String(topKOptions.max);
+  elements.topKInput.step = String(topKOptions.step);
+
+  const savedValue = localStorage.getItem("locales.chatTopK");
+  if (savedValue !== null) {
+    elements.topKInput.value = savedValue;
+  } else {
+    elements.topKInput.value = String(topKOptions.default);
+  }
+  normalizeTopKInputValue(topKOptions);
 }
 
 function replaceConversationOptions(conversation) {
@@ -473,16 +583,23 @@ async function loadChatModels() {
 
 async function loadChatOptions() {
   if (!backendBaseUrl()) {
-    replaceTemperatureOptions({ default: 0.2 });
+    replaceTemperatureOptions(fallbackGenerationOptions.temperature);
+    applyTopPOptions(fallbackGenerationOptions.top_p);
+    applyTopKOptions(fallbackGenerationOptions.top_k);
     replaceConversationOptions({ default: DEFAULT_CONVERSATION_WINDOW });
     return;
   }
   try {
     const { data } = await fetchJsonWithLatency("/api/chat/options");
-    replaceTemperatureOptions(data?.temperature);
+    const generationOptions = data?.generation;
+    replaceTemperatureOptions(generationOptions?.temperature ?? data?.temperature);
+    applyTopPOptions(generationOptions?.top_p);
+    applyTopKOptions(generationOptions?.top_k);
     replaceConversationOptions(data?.conversation);
   } catch {
-    replaceTemperatureOptions({ default: 0.2 });
+    replaceTemperatureOptions(fallbackGenerationOptions.temperature);
+    applyTopPOptions(fallbackGenerationOptions.top_p);
+    applyTopKOptions(fallbackGenerationOptions.top_k);
     replaceConversationOptions({ default: DEFAULT_CONVERSATION_WINDOW });
   }
 }
@@ -494,6 +611,8 @@ function clearInspection() {
   elements.chunksFound.textContent = "-";
   elements.providerModel.textContent = "-";
   elements.responseTemperature.textContent = "-";
+  elements.responseTopP.textContent = "-";
+  elements.responseTopK.textContent = "-";
   elements.traceId.textContent = "-";
   elements.chatLatency.textContent = "-";
   elements.warningsText.textContent = "-";
@@ -591,6 +710,8 @@ function renderChatResponse(data, latencyMs, useRag) {
   elements.chunksFound.textContent = String(chunks.length);
   elements.providerModel.textContent = `${valueOrDash(data?.provider)} / ${valueOrDash(data?.model)}`;
   elements.responseTemperature.textContent = formatTemperature(data?.temperature);
+  elements.responseTopP.textContent = formatFloat(data?.top_p, 2);
+  elements.responseTopK.textContent = metricOrNA(data?.top_k, (value) => Number(value).toFixed(0));
   elements.traceId.textContent = valueOrDash(traceId);
   elements.chatLatency.textContent = String(data?.latency_ms ?? latencyMs);
   elements.warningsText.textContent = warnings.length ? warnings.map((warning) => typeof warning === "string" ? warning : prettyJson(warning)).join("\n") : "-";
@@ -615,12 +736,16 @@ function renderChatResponse(data, latencyMs, useRag) {
 function buildChatPayload(message) {
   const selected = selectedProviderModel();
   const selectedTemperature = numberOrNull(elements.temperatureSelect.value);
+  const selectedTopP = normalizeTopPInputValue();
+  const selectedTopK = normalizeTopKInputValue();
   const selectedConversationWindow = Number.parseInt(elements.conversationWindowSelect.value || "0", 10);
   return {
     message,
     provider: selected.provider || DEFAULT_CHAT_PROVIDER,
     model: selected.model || DEFAULT_CHAT_MODEL,
     temperature: selectedTemperature === null ? DEFAULT_CHAT_TEMPERATURE : selectedTemperature,
+    top_p: selectedTopP,
+    top_k: selectedTopK,
     use_rag: elements.useRagInput.checked,
     conversation_id: ensureConversationId(),
     conversation_window: Number.isFinite(selectedConversationWindow) ? selectedConversationWindow : DEFAULT_CONVERSATION_WINDOW,
@@ -1100,6 +1225,8 @@ function renderRunDetail(detail) {
   elements.runDetailTraceId.textContent = valueOrDash(detail.trace_id);
   elements.runDetailProviderModel.textContent = `${valueOrDash(detail.provider)} / ${valueOrDash(detail.model)}`;
   elements.runDetailTemperature.textContent = formatTemperature(detail.temperature);
+  elements.runDetailTopP.textContent = formatFloat(detail.top_p, 2);
+  elements.runDetailTopK.textContent = metricOrNA(detail.top_k, (value) => Number(value).toFixed(0));
   elements.runDetailUseRag.textContent = valueOrDash(detail.use_rag);
   elements.runDetailLatency.textContent = metricOrNA(detail.latency_ms, formatMs);
   elements.runDetailTokensTotal.textContent = metricOrNA(detail.tokens_total, (value) => Number(value).toFixed(0));
@@ -1115,6 +1242,7 @@ function renderRunDetail(detail) {
     temperature: detail.temperature,
     max_tokens: detail.max_tokens,
     top_p: detail.top_p,
+    top_k: detail.top_k,
     generation_config: detail.generation_config,
     answer_mode: detail.answer_mode,
     warnings: detail.warnings || [],
@@ -1156,8 +1284,14 @@ async function openRunDetail(traceId) {
 function init() {
   ensureConversationId();
   const savedBackendUrl = localStorage.getItem("locales.backendUrl");
+  const savedTopP = localStorage.getItem("locales.chatTopP");
+  const savedTopK = localStorage.getItem("locales.chatTopK");
   if (savedBackendUrl) elements.backendUrl.value = savedBackendUrl;
+  if (savedTopP) elements.topPInput.value = savedTopP;
+  if (savedTopK) elements.topKInput.value = savedTopK;
   if (!elements.backendUrl.value && DEFAULT_BACKEND_URL) elements.backendUrl.value = DEFAULT_BACKEND_URL;
+  normalizeTopPInputValue();
+  normalizeTopKInputValue();
 
   updateBackendLinks();
   replaceModelOptions(fallbackModels);
@@ -1186,6 +1320,12 @@ function init() {
     localStorage.setItem("locales.chatModelKey", modelOptionKey(selected.provider, selected.model));
   });
   elements.temperatureSelect.addEventListener("change", () => localStorage.setItem("locales.chatTemperature", elements.temperatureSelect.value));
+  elements.topPInput.addEventListener("change", () => {
+    localStorage.setItem("locales.chatTopP", String(normalizeTopPInputValue()));
+  });
+  elements.topKInput.addEventListener("change", () => {
+    localStorage.setItem("locales.chatTopK", String(normalizeTopKInputValue()));
+  });
   elements.conversationWindowSelect.addEventListener("change", () => {
     localStorage.setItem("locales.chatConversationWindow", elements.conversationWindowSelect.value);
   });

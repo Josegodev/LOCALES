@@ -133,6 +133,7 @@ def ask_chat(
     max_tokens: int | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
+    top_k: int | None = None,
     use_rag: bool | None = None,
     system_prompt: str | None = None,
 ) -> dict:
@@ -145,6 +146,7 @@ def ask_chat(
             max_tokens=max_tokens,
             temperature=temperature,
             top_p=top_p,
+            top_k=top_k,
             use_rag=use_rag,
             system_prompt=system_prompt or CHAT_SYSTEM_PROMPT,
             settings_obj=settings,
@@ -155,6 +157,7 @@ def ask_chat(
         model=selected_model,
         temperature=temperature,
         top_p=top_p,
+        top_k=top_k,
         use_rag=use_rag,
         num_predict=max_tokens,
         system_prompt=system_prompt or CHAT_SYSTEM_PROMPT,

@@ -19,6 +19,7 @@ class ChatRunsContractTests(unittest.TestCase):
             "temperature": "0.2",
             "max_tokens": "128",
             "top_p": "0.9",
+            "top_k": "40",
             "status": "ok",
             "retrieval_status": "EVIDENCE_FOUND",
             "chunk_ids": ["1", 2],
@@ -47,6 +48,7 @@ class ChatRunsContractTests(unittest.TestCase):
         self.assertEqual(record.temperature, 0.2)
         self.assertEqual(record.max_tokens, 128)
         self.assertEqual(record.top_p, 0.9)
+        self.assertEqual(record.top_k, 40)
         self.assertEqual(record.chunk_ids, [1, 2])
         self.assertEqual(record.document_ids, [3, 4])
         self.assertEqual(record.source_filenames, ["doc.md"])

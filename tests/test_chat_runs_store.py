@@ -19,6 +19,8 @@ class ChatRunsStoreTests(unittest.TestCase):
                         "provider": "ollama",
                         "model": "granite4.1:8b",
                         "temperature": 0.2,
+                        "top_p": 0.9,
+                        "top_k": 40,
                         "use_rag": True,
                         "retrieval_status": "EVIDENCE_FOUND",
                         "status": "ok",
@@ -56,6 +58,8 @@ class ChatRunsStoreTests(unittest.TestCase):
         self.assertEqual(len(loaded.items), 2)
         self.assertEqual(loaded.items[0]["trace_id"], "trace-newer")
         normalized = loaded.items[1]
+        self.assertEqual(normalized["top_p"], 0.9)
+        self.assertEqual(normalized["top_k"], 40)
         self.assertEqual(normalized["tokens_input"], 12.0)
         self.assertEqual(normalized["tokens_output"], 24.0)
         self.assertEqual(normalized["tokens_total"], 36.0)

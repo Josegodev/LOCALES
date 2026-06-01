@@ -99,6 +99,7 @@ def ask_chat(
     model: str | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
+    top_k: int | None = None,
     use_rag: bool | None = None,
     num_predict: int | None = None,
     system_prompt: str | None = None,
@@ -127,6 +128,8 @@ def ask_chat(
     }
     if top_p is not None:
         payload["options"]["top_p"] = top_p
+    if top_k is not None:
+        payload["options"]["top_k"] = top_k
 
     try:
         response = requests_module.post(
@@ -178,6 +181,7 @@ def ask_chat(
         "temperature": selected_temperature,
         "max_tokens": selected_num_predict,
         "top_p": top_p,
+        "top_k": top_k,
         "temperature_ignored": False,
         "use_rag": True if use_rag is None else bool(use_rag),
         "answer": content.strip(),

@@ -9,8 +9,17 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 TEMPERATURE_DEFAULT = 0.2
 TEMPERATURE_MIN = 0.0
 TEMPERATURE_MAX = 1.5
+TEMPERATURE_STEP = 0.1
+TOP_P_DEFAULT = 0.9
 TOP_P_MIN = 0.0
 TOP_P_MAX = 1.0
+TOP_P_STEP = 0.05
+TOP_K_DEFAULT = 40
+TOP_K_MIN = 1
+TOP_K_MAX = 200
+TOP_K_STEP = 1
+RETRIEVAL_TOP_K_DEFAULT = 3
+RETRIEVAL_TOP_K_MAX = 10
 CONVERSATION_WINDOW_DEFAULT = 0
 CONVERSATION_WINDOW_MIN = 0
 CONVERSATION_WINDOW_MAX = 20
@@ -42,6 +51,19 @@ def normalize_top_p(value: Any) -> float:
         raise ValueError("top_p_invalid")
     if normalized < TOP_P_MIN or normalized > TOP_P_MAX:
         raise ValueError("top_p_invalid")
+    return normalized
+
+
+def normalize_top_k(value: Any, default: int = TOP_K_DEFAULT) -> int:
+    if value is None:
+        normalized = int(default)
+    elif isinstance(value, bool):
+        raise ValueError("top_k_invalid")
+    else:
+        normalized = int(value)
+
+    if normalized < TOP_K_MIN or normalized > TOP_K_MAX:
+        raise ValueError("top_k_invalid")
     return normalized
 
 
@@ -97,7 +119,7 @@ class ChatRequest(BaseModel):
     temperature: float | None = Field(default=None, validate_default=True)
     top_p: float | None = Field(default=None, validate_default=True)
     use_rag: bool | None = True
-    top_k: int | None = Field(default=3, ge=1, le=10)
+    top_k: int | None = Field(default=None, ge=TOP_K_MIN, le=TOP_K_MAX)
     trace_id: str | None = Field(default=None, min_length=32, max_length=36)
     user_id: int | None = None
     chat_id: int | None = None
@@ -158,6 +180,13 @@ class ChatRequest(BaseModel):
         if value is None:
             return None
         return normalize_top_p(value)
+
+    @field_validator("top_k")
+    @classmethod
+    def validate_top_k(cls, value: int | None) -> int | None:
+        if value is None:
+            return None
+        return normalize_top_k(value)
 
     @field_validator("allowed_source_filenames")
     @classmethod
@@ -267,6 +296,10 @@ class ChatTemperatureOptions(BaseModel):
     presets: list[ChatTemperaturePreset] = Field(default_factory=list)
 
 
+class ChatGenerationTemperatureOptions(ChatTemperatureOptions):
+    step: float
+
+
 class ChatConversationWindowPreset(BaseModel):
     value: int
     label: str
@@ -279,10 +312,31 @@ class ChatConversationWindowOptions(BaseModel):
     presets: list[ChatConversationWindowPreset] = Field(default_factory=list)
 
 
+class ChatGenerationFloatOptions(BaseModel):
+    default: float
+    min: float
+    max: float
+    step: float
+
+
+class ChatGenerationIntOptions(BaseModel):
+    default: int
+    min: int
+    max: int
+    step: int
+
+
+class ChatGenerationOptions(BaseModel):
+    temperature: ChatGenerationTemperatureOptions
+    top_p: ChatGenerationFloatOptions
+    top_k: ChatGenerationIntOptions
+
+
 class ChatOptionsResponse(BaseModel):
     status: str
     temperature: ChatTemperatureOptions
     conversation: ChatConversationWindowOptions
+    generation: ChatGenerationOptions
 
 
 class ErrorResponse(BaseModel):
@@ -305,6 +359,7 @@ class ChatRunResponse(BaseModel):
     temperature: float | None = None
     max_tokens: int | None = None
     top_p: float | None = None
+    top_k: int | None = None
     generation_config: dict[str, Any] | None = None
     status: str | None = None
     retrieval_status: str | None = None

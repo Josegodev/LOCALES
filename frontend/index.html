@@ -57,14 +57,52 @@ technical: -</pre>
         <section class="chat-panel" aria-label="Conversacion">
           <div id="chatMessages" class="chat-messages" aria-live="polite"></div>
           <form id="chatForm" class="composer">
+            <section class="generation-panel" aria-label="Parametros de generacion">
+              <div class="generation-panel-header">
+                <h2>Parametros de generacion</h2>
+                <p>Estos ajustes afectan al modelo. No cambian cuantos documentos recupera el RAG.</p>
+              </div>
+              <div class="generation-grid">
+                <label class="generation-field">
+                  <span>Temperature</span>
+                  <select id="temperatureSelect" aria-label="Temperatura">
+                    <option value="0.2">0,2</option>
+                  </select>
+                </label>
+                <label class="generation-field">
+                  <span>Top P</span>
+                  <input
+                    id="topPInput"
+                    type="number"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value="0.9"
+                    inputmode="decimal"
+                    aria-describedby="topPHelp"
+                  >
+                  <small id="topPHelp">Controla el porcentaje acumulado de opciones consideradas por el modelo.</small>
+                </label>
+                <label class="generation-field">
+                  <span>Top K generacion</span>
+                  <input
+                    id="topKInput"
+                    type="number"
+                    min="1"
+                    max="200"
+                    step="1"
+                    value="40"
+                    inputmode="numeric"
+                    aria-describedby="topKHelp"
+                  >
+                  <small id="topKHelp">Limita cuantas opciones considera el modelo al generar texto. No controla cuantos documentos recupera el RAG.</small>
+                </label>
+              </div>
+            </section>
             <div class="composer-controls">
               <label class="sr-only" for="modelSelect">Modelo</label>
               <select id="modelSelect" aria-label="Modelo">
                 <option value="" data-provider="ollama">Cargando modelos...</option>
-              </select>
-              <label class="sr-only" for="temperatureSelect">Temperatura</label>
-              <select id="temperatureSelect" aria-label="Temperatura">
-                <option value="0.2">0,2</option>
               </select>
               <label class="sr-only" for="conversationWindowSelect">Memoria conversacional</label>
               <select id="conversationWindowSelect" aria-label="Memoria conversacional">
@@ -100,6 +138,8 @@ technical: -</pre>
               <div><dt>chunks_found</dt><dd id="chunksFound">-</dd></div>
               <div><dt>provider/model</dt><dd id="providerModel">-</dd></div>
               <div><dt>temperature</dt><dd id="responseTemperature">-</dd></div>
+              <div><dt>top_p</dt><dd id="responseTopP">-</dd></div>
+              <div><dt>top_k_generacion</dt><dd id="responseTopK">-</dd></div>
               <div><dt>trace_id</dt><dd id="traceId">-</dd></div>
               <div><dt>latency_ms</dt><dd id="chatLatency">-</dd></div>
             </dl>
@@ -243,6 +283,8 @@ technical: -</pre>
         <div><dt>trace_id</dt><dd id="runDetailTraceId">n/a</dd></div>
         <div><dt>provider/model</dt><dd id="runDetailProviderModel">n/a</dd></div>
         <div><dt>temperature</dt><dd id="runDetailTemperature">n/a</dd></div>
+        <div><dt>top_p</dt><dd id="runDetailTopP">n/a</dd></div>
+        <div><dt>top_k_generacion</dt><dd id="runDetailTopK">n/a</dd></div>
         <div><dt>use_rag</dt><dd id="runDetailUseRag">n/a</dd></div>
         <div><dt>latency_ms</dt><dd id="runDetailLatency">n/a</dd></div>
         <div><dt>tokens_total</dt><dd id="runDetailTokensTotal">n/a</dd></div>

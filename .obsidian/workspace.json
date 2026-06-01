@@ -4,11 +4,11 @@
     "type": "split",
     "children": [
       {
-        "id": "6d83db4d10117681",
+        "id": "2e819cc74c412f86",
         "type": "tabs",
         "children": [
           {
-            "id": "36c554845d3274e4",
+            "id": "e414a752e7a65b82",
             "type": "leaf",
             "state": {
               "type": "graph",
@@ -176,22 +176,23 @@
       "bases:Crear nueva base": false
     }
   },
-  "active": "1e06e7f33a267c66",
+  "active": "e414a752e7a65b82",
   "lastOpenFiles": [
-    "CHAT_RUNS/chat_run_20260601T181934701199Z_8adee2cf66c044a08705d1b83ee98baf.json",
-    "CHAT_RUNS/chat_run_20260601T181158875082Z_4cc387b88b824ae78f7946b1825299cb.json",
-    "CHAT_RUNS/chat_run_20260601T181158780318Z_9fce769cb35849a4971918f479fe311f.json",
-    "CHAT_RUNS/chat_run_20260601T181158481830Z_fff990a57cda44dbadda41dd110d8cfc.json",
+    "CHAT_RUNS/chat_run_20260601T201146657227Z_ddc59496cca74735ac9e313a65e6b3ff.json",
+    "CHAT_RUNS/chat_run_20260601T200130498302Z_874866b566384b6caa6198d635b48977.json",
+    "CHAT_RUNS/chat_run_20260601T192838369429Z_12345678123456781234567812345678.json",
+    "CHAT_RUNS/chat_run_20260601T192838316149Z_12345678123456781234567812345678.json",
+    "CHAT_RUNS/chat_run_20260601T192838273009Z_12345678123456781234567812345678.json",
+    "CHAT_RUNS/chat_run_20260601T192838219935Z_12345678123456781234567812345678.json",
+    "CHAT_RUNS/chat_run_20260601T192838165892Z_12345678-1234-5678-1234-567812345678.json",
+    "CHAT_RUNS/chat_run_20260601T192837405293Z_c6489586ddac42febde9ca67f2cd896d.json",
+    "CHAT_RUNS/chat_run_20260601T192837310137Z_6a5bbdf0becc40d6a146889ed712da62.json",
+    "CHAT_RUNS/chat_run_20260601T192837014637Z_e2eb8ea4e0b3419986587e7b2f693199.json",
+    "CHAT_RUNS/chat_run_20260601T192836709859Z_a92ba92f6c944e9fae1631c2cad82f67.json",
+    "obsidian_runtime/01_RUNTIME_FLOW/UI_TO_RESPONSE.md",
     "docs/dev-docker.md",
-    "docker-compose.dev.yml",
-    "Dockerfile.frontend",
-    "Dockerfile.backend",
     "docs/GLOSSARY.md",
     "docs/python/app/main.md",
-    "CHAT_RUNS/chat_run_20260531T195057148301Z_c1f274c3397e47e9a7ece5c2df5eae4f.json",
-    "CHAT_RUNS/chat_run_20260531T195014822218Z_38d52e9b4675445aa5eb5f61f52ae96d.json",
-    "CHAT_RUNS/chat_run_20260531T194940339919Z_74f80efe8b6b4c44a7659b14c0c06b8c.json",
-    "CHAT_RUNS/chat_run_20260531T194300377171Z_1cae44da52b84e7d9288486f187c6e74.json",
     "obsidian_runtime/03_BACKEND_FILES/DOCUMENT_WRITER_FILE.md",
     "obsidian_runtime/03_BACKEND_FILES/AUTH_FILE.md",
     "obsidian_runtime/03_BACKEND_FILES/SCHEMAS_FILE.md",
@@ -212,7 +213,6 @@
     "obsidian_runtime/03_BACKEND_FILES/RUNTIME_BRIDGE.md",
     "obsidian_runtime/03_BACKEND_FILES/ROUTES_CHAT.md",
     "obsidian_runtime/99_GLOSSARY.md",
-    "obsidian_runtime/06_RUNBOOK/DEBUG_UI_BACKEND_FAILURE.md",
-    "obsidian_runtime/06_RUNBOOK/DEBUG_PROVIDER_FAILURE.md"
+    "obsidian_runtime/06_RUNBOOK/DEBUG_UI_BACKEND_FAILURE.md"
   ]
 }

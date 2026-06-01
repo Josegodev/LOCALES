@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.observability.logging import log_event
-from app.schemas import normalize_temperature, normalize_top_p
+from app.schemas import normalize_temperature, normalize_top_k, normalize_top_p
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -68,10 +68,20 @@ def _nullable_top_p(value: Any) -> float | None:
         return None
 
 
+def _nullable_top_k(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return normalize_top_k(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _normalized_generation_config(
     record: dict[str, Any],
     temperature: float | None,
     top_p: float | None,
+    top_k: int | None,
     max_tokens: int | None,
 ) -> dict[str, int | float] | None:
     raw_generation_config = record.get("generation_config")
@@ -83,6 +93,9 @@ def _normalized_generation_config(
         configured_top_p = _nullable_top_p(raw_generation_config.get("top_p"))
         if configured_top_p is not None:
             normalized_config["top_p"] = configured_top_p
+        configured_top_k = _nullable_top_k(raw_generation_config.get("top_k"))
+        if configured_top_k is not None:
+            normalized_config["top_k"] = configured_top_k
         configured_max_tokens = _nullable_int(raw_generation_config.get("max_tokens"))
         if configured_max_tokens is not None:
             normalized_config["max_tokens"] = configured_max_tokens
@@ -91,6 +104,8 @@ def _normalized_generation_config(
         normalized_config["temperature"] = temperature
     if top_p is not None and "top_p" not in normalized_config:
         normalized_config["top_p"] = top_p
+    if top_k is not None and "top_k" not in normalized_config:
+        normalized_config["top_k"] = top_k
     if max_tokens is not None and "max_tokens" not in normalized_config:
         normalized_config["max_tokens"] = max_tokens
 
@@ -212,6 +227,7 @@ class ChatRunRecord(BaseModel):
     temperature: float | None = None
     max_tokens: int | None = None
     top_p: float | None = None
+    top_k: int | None = None
     generation_config: dict[str, int | float] | None = None
     status: str
     retrieval_status: str | None = None
@@ -278,6 +294,9 @@ def normalize_chat_run_record(record: dict[str, Any]) -> ChatRunRecord:
     top_p = _nullable_top_p(record.get("top_p"))
     if top_p is None and isinstance(record.get("generation_config"), dict):
         top_p = _nullable_top_p(record["generation_config"].get("top_p"))
+    top_k = _nullable_top_k(record.get("top_k"))
+    if top_k is None and isinstance(record.get("generation_config"), dict):
+        top_k = _nullable_top_k(record["generation_config"].get("top_k"))
     max_tokens = _nullable_int(record.get("max_tokens"))
     if max_tokens is None and isinstance(record.get("generation_config"), dict):
         max_tokens = _nullable_int(record["generation_config"].get("max_tokens"))
@@ -297,7 +316,8 @@ def normalize_chat_run_record(record: dict[str, Any]) -> ChatRunRecord:
         "temperature": temperature,
         "max_tokens": max_tokens,
         "top_p": top_p,
-        "generation_config": _normalized_generation_config(record, temperature, top_p, max_tokens),
+        "top_k": top_k,
+        "generation_config": _normalized_generation_config(record, temperature, top_p, top_k, max_tokens),
         "status": _nullable_str(record.get("status")) or "error",
         "retrieval_status": _normalize_retrieval_status(record.get("retrieval_status")),
         "chunk_ids": _int_list(record.get("chunk_ids")),
@@ -492,10 +512,12 @@ def write_chat_run(**kwargs: Any) -> Path:
         temperature=_nullable_temperature(kwargs.get("temperature")),
         max_tokens=_nullable_int(kwargs.get("max_tokens")),
         top_p=_nullable_top_p(kwargs.get("top_p")),
+        top_k=_nullable_top_k(kwargs.get("top_k")),
         generation_config=_normalized_generation_config(
             kwargs,
             _nullable_temperature(kwargs.get("temperature")),
             _nullable_top_p(kwargs.get("top_p")),
+            _nullable_top_k(kwargs.get("top_k")),
             _nullable_int(kwargs.get("max_tokens")),
         ),
         status=kwargs.get("status") or "error",

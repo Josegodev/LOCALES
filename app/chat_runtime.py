@@ -48,7 +48,15 @@ from app.observability.chat_runs import list_chat_runs, save_chat_run
 from app.observability.logging import log_event
 from app.observability.trace import new_trace_id
 from app.rag_client import query_remote_rag
-from app.schemas import ChatRequest, ChatResponse, TEMPERATURE_DEFAULT
+from app.schemas import (
+    ChatRequest,
+    ChatResponse,
+    RETRIEVAL_TOP_K_DEFAULT,
+    RETRIEVAL_TOP_K_MAX,
+    TEMPERATURE_DEFAULT,
+    TOP_K_DEFAULT,
+    TOP_P_DEFAULT,
+)
 from app.tools.create_document import (
     CREATE_DOCUMENT_SYSTEM_PROMPT,
     build_create_document_request,
@@ -92,6 +100,24 @@ def _message_preview(text: str, limit: int = 200) -> str:
     if len(normalized) <= limit:
         return normalized
     return normalized[:limit].rstrip() + "..."
+
+
+def _resolve_generation_top_p(value: float | None) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    return TOP_P_DEFAULT
+
+
+def _resolve_generation_top_k(value: int | None) -> int:
+    if isinstance(value, int):
+        return value
+    return TOP_K_DEFAULT
+
+
+def _resolve_retrieval_top_k(value: int | None) -> int:
+    if not isinstance(value, int):
+        return RETRIEVAL_TOP_K_DEFAULT
+    return min(value, RETRIEVAL_TOP_K_MAX)
 
 
 def _conversation_runs_for_context(
@@ -432,6 +458,7 @@ def _persist_chat_run(
     temperature: float,
     max_tokens: int | None,
     top_p: float | None,
+    top_k: int | None,
     status: str,
     retrieval_status: str,
     chunk_ids: list[int],
@@ -494,12 +521,14 @@ def _persist_chat_run(
             "temperature": temperature,
             "max_tokens": max_tokens,
             "top_p": top_p,
+            "top_k": top_k,
             "generation_config": {
                 key: value
                 for key, value in {
                     "temperature": temperature,
                     "max_tokens": max_tokens,
                     "top_p": top_p,
+                    "top_k": top_k,
                 }.items()
                 if value is not None
             } or None,
@@ -562,6 +591,7 @@ def _run_create_document_command(
     model: str,
     temperature: float,
     top_p: float | None,
+    top_k: int | None,
     effective_max_tokens: int | None,
 ) -> tuple[ChatResponse, dict]:
     parsed_command = parse_chat_command(request.message)
@@ -594,6 +624,7 @@ def _run_create_document_command(
         max_tokens=request.max_tokens,
         temperature=temperature,
         top_p=top_p,
+        top_k=top_k,
         use_rag=False,
         system_prompt=CREATE_DOCUMENT_SYSTEM_PROMPT,
     )
@@ -666,6 +697,10 @@ def _run_create_document_command(
         model = model_name.strip()
     if isinstance(generation_result.get("temperature"), (int, float)):
         temperature = float(generation_result["temperature"])
+    if isinstance(generation_result.get("top_p"), (int, float)):
+        top_p = float(generation_result["top_p"])
+    if isinstance(generation_result.get("top_k"), int):
+        top_k = generation_result["top_k"]
     if isinstance(generation_result.get("max_tokens"), int):
         effective_max_tokens = generation_result["max_tokens"]
 
@@ -705,6 +740,8 @@ def _run_create_document_command(
         "provider": provider,
         "model": model,
         "temperature": temperature,
+        "top_p": top_p,
+        "top_k": top_k,
         "effective_max_tokens": effective_max_tokens,
         "tokens_input": generation_result.get("prompt_eval_count"),
         "tokens_output": generation_result.get("eval_count"),
@@ -763,7 +800,8 @@ def run_chat_request(
     provider = (request.provider or "ollama").strip().lower()
     model = request.model or ""
     temperature = request.temperature if isinstance(request.temperature, (int, float)) else TEMPERATURE_DEFAULT
-    top_p = request.top_p if isinstance(request.top_p, (int, float)) else None
+    top_p = _resolve_generation_top_p(request.top_p)
+    top_k = _resolve_generation_top_k(request.top_k)
     effective_max_tokens = request.max_tokens if isinstance(request.max_tokens, int) else settings_obj.max_tokens
     temperature_ignored = False
     use_rag = True if request.use_rag is None else bool(request.use_rag)
@@ -873,6 +911,7 @@ def run_chat_request(
                 model=model,
                 temperature=temperature,
                 top_p=top_p,
+                top_k=top_k,
                 effective_max_tokens=effective_max_tokens,
             )
             status = "ok"
@@ -884,6 +923,8 @@ def run_chat_request(
             provider = command_metadata["provider"]
             model = command_metadata["model"]
             temperature = command_metadata["temperature"]
+            top_p = command_metadata["top_p"]
+            top_k = command_metadata["top_k"]
             effective_max_tokens = command_metadata["effective_max_tokens"]
             llm_metrics["tokens_input"] = command_metadata["tokens_input"]
             llm_metrics["tokens_output"] = command_metadata["tokens_output"]
@@ -919,11 +960,11 @@ def run_chat_request(
         )
         if use_rag:
             retrieval_started_at = time.perf_counter()
-            top_k = request.top_k or 3
+            retrieval_top_k = _resolve_retrieval_top_k(request.top_k)
             if settings_obj.use_remote_rag:
                 remote_rag_kwargs = {
                     "query": request.message,
-                    "top_k": top_k,
+                    "top_k": retrieval_top_k,
                     "trace_id": trace_id,
                     "allowed_source_filenames": request.allowed_source_filenames,
                 }
@@ -938,7 +979,7 @@ def run_chat_request(
                 context = query_remote_rag_fn(**remote_rag_kwargs)
             else:
                 rag_kwargs = {
-                    "limit": top_k,
+                    "limit": retrieval_top_k,
                     "allowed_source_filenames": request.allowed_source_filenames,
                     "active_corpus": request.active_corpus,
                     "last_source_intent": request.last_source_intent,
@@ -1015,6 +1056,7 @@ def run_chat_request(
             max_tokens=request.max_tokens,
             temperature=temperature,
             top_p=top_p,
+            top_k=top_k,
             use_rag=llm_use_rag,
         )
         result["latency_ms"] = int((time.perf_counter() - llm_started_at) * 1000)
@@ -1047,6 +1089,8 @@ def run_chat_request(
             temperature = float(result["temperature"])
         if isinstance(result.get("top_p"), (int, float)):
             top_p = float(result["top_p"])
+        if isinstance(result.get("top_k"), int):
+            top_k = result["top_k"]
         if isinstance(result.get("max_tokens"), int):
             effective_max_tokens = result["max_tokens"]
         if isinstance(result.get("temperature_ignored"), bool):
@@ -1260,6 +1304,7 @@ def run_chat_request(
                     temperature=temperature,
                     max_tokens=effective_max_tokens,
                     top_p=top_p,
+                    top_k=top_k,
                     status=status,
                     retrieval_status=retrieval_status,
                     chunk_ids=trace_chunk_ids,
@@ -1326,6 +1371,7 @@ def run_chat_request(
             model=model,
             temperature=temperature,
             top_p=top_p,
+            top_k=top_k,
             max_tokens=effective_max_tokens,
             temperature_ignored=temperature_ignored,
             use_rag=use_rag,
