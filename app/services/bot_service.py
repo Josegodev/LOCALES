@@ -142,6 +142,10 @@ def _message_command(text: str) -> str:
     return "chat"
 
 
+def _safe_int_field(value: object) -> int | None:
+    return value if isinstance(value, int) else None
+
+
 def _safe_token_rate(count: int | None, duration_ns: int | None) -> float | None:
     if not isinstance(count, int) or not isinstance(duration_ns, int):
         return None
@@ -154,26 +158,13 @@ def _chat_trace_metadata(result: dict | None) -> dict:
     if not isinstance(result, dict):
         return {}
 
-    prompt_eval_count = result.get("prompt_eval_count")
-    eval_count = result.get("eval_count")
-    prompt_eval_duration = result.get("prompt_eval_duration")
-    eval_duration = result.get("eval_duration")
-    total_duration = result.get("total_duration")
-    load_duration = result.get("load_duration")
+    prompt_eval_count = _safe_int_field(result.get("prompt_eval_count"))
+    eval_count = _safe_int_field(result.get("eval_count"))
+    prompt_eval_duration = _safe_int_field(result.get("prompt_eval_duration"))
+    eval_duration = _safe_int_field(result.get("eval_duration"))
+    total_duration = _safe_int_field(result.get("total_duration"))
+    load_duration = _safe_int_field(result.get("load_duration"))
     chunk_ids = result.get("chunk_ids")
-
-    if not isinstance(prompt_eval_count, int):
-        prompt_eval_count = None
-    if not isinstance(eval_count, int):
-        eval_count = None
-    if not isinstance(prompt_eval_duration, int):
-        prompt_eval_duration = None
-    if not isinstance(eval_duration, int):
-        eval_duration = None
-    if not isinstance(total_duration, int):
-        total_duration = None
-    if not isinstance(load_duration, int):
-        load_duration = None
     if not isinstance(chunk_ids, list) or not all(isinstance(item, int) for item in chunk_ids):
         chunk_ids = []
     temperature = result.get("temperature")

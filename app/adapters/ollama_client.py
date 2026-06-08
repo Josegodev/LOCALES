@@ -17,6 +17,10 @@ class OllamaClientError(LLMClientError):
     pass
 
 
+def _safe_int_field(value: object) -> int | None:
+    return value if isinstance(value, int) else None
+
+
 def _api_chat_url(settings_obj=settings) -> str:
     return f"{settings_obj.ollama_api_base_url()}/api/chat"
 
@@ -176,12 +180,12 @@ def ask_chat(
         response_model = selected_model
 
     metrics = {
-        "prompt_eval_count": data.get("prompt_eval_count") if isinstance(data.get("prompt_eval_count"), int) else None,
-        "eval_count": data.get("eval_count") if isinstance(data.get("eval_count"), int) else None,
-        "prompt_eval_duration": data.get("prompt_eval_duration") if isinstance(data.get("prompt_eval_duration"), int) else None,
-        "eval_duration": data.get("eval_duration") if isinstance(data.get("eval_duration"), int) else None,
-        "total_duration": data.get("total_duration") if isinstance(data.get("total_duration"), int) else None,
-        "load_duration": data.get("load_duration") if isinstance(data.get("load_duration"), int) else None,
+        "prompt_eval_count": _safe_int_field(data.get("prompt_eval_count")),
+        "eval_count": _safe_int_field(data.get("eval_count")),
+        "prompt_eval_duration": _safe_int_field(data.get("prompt_eval_duration")),
+        "eval_duration": _safe_int_field(data.get("eval_duration")),
+        "total_duration": _safe_int_field(data.get("total_duration")),
+        "load_duration": _safe_int_field(data.get("load_duration")),
     }
 
     return {

@@ -4,17 +4,17 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-def _validate_trace_id(value: str) -> str:
-    trace_id = value.strip()
+def validate_uuid_field(value: str, *, error_label: str = "trace_id_invalid") -> str:
+    cleaned = value.strip()
     try:
-        parsed = uuid.UUID(trace_id)
+        parsed = uuid.UUID(cleaned)
     except ValueError as exc:
-        raise ValueError("trace_id_invalid") from exc
+        raise ValueError(error_label) from exc
 
-    if trace_id not in {parsed.hex, str(parsed)}:
-        raise ValueError("trace_id_invalid")
+    if cleaned not in {parsed.hex, str(parsed)}:
+        raise ValueError(error_label)
 
-    return trace_id
+    return cleaned
 
 
 class TraceContext(BaseModel):
@@ -27,7 +27,7 @@ class TraceContext(BaseModel):
     @field_validator("trace_id")
     @classmethod
     def validate_trace_id(cls, value: str) -> str:
-        return _validate_trace_id(value)
+        return validate_uuid_field(value, error_label="trace_id_invalid")
 
 
 class TelegramMessage(BaseModel):

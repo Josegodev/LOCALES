@@ -4,13 +4,7 @@ import traceback
 import requests
 
 from app.config import settings
-
-
-class LLMError(Exception):
-    def __init__(self, code: str, message: str):
-        self.code = code
-        self.message = message
-        super().__init__(message)
+from app.llm_errors import LLMClientError as LLMError
 
 
 def ask_lmstudio(
@@ -54,15 +48,15 @@ def ask_lmstudio(
             json=payload,
             timeout=settings.lmstudio_timeout_seconds,
         )
-    except requests.exceptions.ConnectionError:
+    except requests.exceptions.ConnectionError as exc:
         traceback.print_exc()
-        raise LLMError("LMSTUDIO_UNAVAILABLE", "LM Studio no está disponible.")
-    except requests.exceptions.Timeout:
+        raise LLMError("LMSTUDIO_UNAVAILABLE", "LM Studio no está disponible.") from exc
+    except requests.exceptions.Timeout as exc:
         traceback.print_exc()
-        raise LLMError("TIMEOUT", "LM Studio ha agotado el tiempo de respuesta.")
+        raise LLMError("TIMEOUT", "LM Studio ha agotado el tiempo de respuesta.") from exc
     except requests.exceptions.RequestException as exc:
         traceback.print_exc()
-        raise LLMError("HTTP_ERROR", str(exc))
+        raise LLMError("HTTP_ERROR", str(exc)) from exc
 
     latency_ms = int((time.perf_counter() - start) * 1000)
 
