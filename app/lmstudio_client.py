@@ -1,9 +1,9 @@
 import time
 import json
-import traceback
 import requests
 
 from app.config import settings
+from app.observability import log_event
 
 
 class LLMError(Exception):
@@ -41,36 +41,26 @@ def ask_lmstudio(
 
     url = f"{settings.lmstudio_v1_base_url()}/chat/completions"
 
-    print("LM Studio URL:", url, flush=True)
-    print(
-        "LM Studio payload:",
-        json.dumps(payload, ensure_ascii=False),
-        flush=True,
-    )
-
     try:
         response = requests.post(
             url,
             json=payload,
             timeout=settings.lmstudio_timeout_seconds,
         )
-    except requests.exceptions.ConnectionError:
-        traceback.print_exc()
-        raise LLMError("LMSTUDIO_UNAVAILABLE", "LM Studio no está disponible.")
-    except requests.exceptions.Timeout:
-        traceback.print_exc()
-        raise LLMError("TIMEOUT", "LM Studio ha agotado el tiempo de respuesta.")
+    except requests.exceptions.ConnectionError as exc:
+        log_event(component="lmstudio", event="lmstudio.connection_error", status="error", error=str(exc))
+        raise LLMError("LMSTUDIO_UNAVAILABLE", "LM Studio no está disponible.") from exc
+    except requests.exceptions.Timeout as exc:
+        log_event(component="lmstudio", event="lmstudio.timeout", status="error", error=str(exc))
+        raise LLMError("TIMEOUT", "LM Studio ha agotado el tiempo de respuesta.") from exc
     except requests.exceptions.RequestException as exc:
-        traceback.print_exc()
-        raise LLMError("HTTP_ERROR", str(exc))
+        log_event(component="lmstudio", event="lmstudio.request_error", status="error", error=str(exc))
+        raise LLMError("HTTP_ERROR", "Error de conexión con LM Studio.") from exc
 
     latency_ms = int((time.perf_counter() - start) * 1000)
 
-    print("LM Studio status:", response.status_code, flush=True)
-    print("LM Studio body:", response.text, flush=True)
-
     if response.status_code != 200:
-        traceback.print_stack()
+        log_event(component="lmstudio", event="lmstudio.http_error", status="error", http_status=response.status_code)
         raise LLMError(
             "LMSTUDIO_HTTP_ERROR",
             f"LM Studio devolvió HTTP {response.status_code}: {response.text[:300]}",
@@ -81,17 +71,18 @@ def ask_lmstudio(
         choice = data["choices"][0]
         message_payload = choice["message"]
         answer = message_payload["content"]
-    except Exception:
-        traceback.print_exc()
-        raise LLMError("INVALID_RESPONSE", "Respuesta inválida de LM Studio.")
+    except Exception as exc:
+        log_event(component="lmstudio", event="lmstudio.invalid_response", status="error")
+        raise LLMError("INVALID_RESPONSE", "Respuesta inválida de LM Studio.") from exc
 
     if not isinstance(answer, str) or not answer.strip():
-        print(
-            "LM Studio parsed response:",
-            json.dumps(data, ensure_ascii=False),
-            flush=True,
+        log_event(
+            component="lmstudio",
+            event="lmstudio.empty_response",
+            status="error",
+            model=data.get("model"),
+            finish_reason=choice.get("finish_reason"),
         )
-        traceback.print_stack()
         raise LLMError(
             "EMPTY_RESPONSE",
             (
