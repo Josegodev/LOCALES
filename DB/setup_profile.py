@@ -1,12 +1,6 @@
 import argparse
 from db_store import create_model_profile
-
-
-DEFAULT_SYSTEM_PROMPT = (
-    "Responde de forma técnica, directa y verificable. "
-    "No afirmes que algo se ha guardado en memoria. "
-    "La memoria persistente la controla un sistema externo."
-)
+from defaults import DEFAULT_SYSTEM_PROMPT
 
 
 def main() -> None:

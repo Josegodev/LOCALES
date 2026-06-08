@@ -1,9 +1,10 @@
 import math
-import uuid
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.contracts import validate_uuid_field
 
 
 class ChatRequest(BaseModel):
@@ -22,17 +23,7 @@ class ChatRequest(BaseModel):
     def validate_trace_id(cls, value: str | None) -> str | None:
         if value is None:
             return value
-
-        trace_id = value.strip()
-        try:
-            parsed = uuid.UUID(trace_id)
-        except ValueError as exc:
-            raise ValueError("trace_id_invalid") from exc
-
-        if trace_id not in {parsed.hex, str(parsed)}:
-            raise ValueError("trace_id_invalid")
-
-        return trace_id
+        return validate_uuid_field(value, error_label="trace_id_invalid")
 
     @field_validator("temperature")
     @classmethod
@@ -77,16 +68,7 @@ class CreateDocumentRequest(BaseModel):
     @field_validator("request_id")
     @classmethod
     def validate_request_id(cls, value: str) -> str:
-        request_id = value.strip()
-        try:
-            parsed = uuid.UUID(request_id)
-        except ValueError as exc:
-            raise ValueError("request_id_invalid") from exc
-
-        if request_id not in {parsed.hex, str(parsed)}:
-            raise ValueError("request_id_invalid")
-
-        return request_id
+        return validate_uuid_field(value, error_label="request_id_invalid")
 
     @field_validator("filename")
     @classmethod
