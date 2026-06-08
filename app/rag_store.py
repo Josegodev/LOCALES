@@ -1,8 +1,11 @@
+import logging
 import sqlite3
 from pathlib import Path
 
 
 DB_PATH = Path("chunks/document_chunks.sqlite")
+
+logger = logging.getLogger("locales")
 
 
 def search_chunks(query: str, limit: int = 3) -> list[dict]:
@@ -20,7 +23,13 @@ def search_chunks(query: str, limit: int = 3) -> list[dict]:
 
     results = []
 
-    with sqlite3.connect(DB_PATH) as conn:
+    try:
+        conn = sqlite3.connect(DB_PATH)
+    except sqlite3.Error as exc:
+        logger.warning("rag_store.search_chunks: cannot open DB %s: %s", DB_PATH, exc)
+        return []
+
+    try:
         conn.row_factory = sqlite3.Row
 
         for term in terms:
@@ -32,6 +41,11 @@ def search_chunks(query: str, limit: int = 3) -> list[dict]:
                     1 for t in terms if t in item["text"].lower()
                 )
                 results.append(item)
+    except sqlite3.Error as exc:
+        logger.warning("rag_store.search_chunks: query failed: %s", exc)
+        return []
+    finally:
+        conn.close()
 
     dedup = {}
     for item in results:

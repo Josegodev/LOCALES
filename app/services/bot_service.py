@@ -680,7 +680,13 @@ def main_loop(
                     handle_message_fn(update["message"])
         except KeyboardInterrupt:
             break
-        except Exception:
-            pass
+        except Exception as exc:
+            log_event(
+                component="telegram.main_loop",
+                event="telegram.main_loop.error",
+                status="error",
+                reason=exc.__class__.__name__,
+                message=str(exc)[:500],
+            )
 
         time.sleep(sleep_seconds)

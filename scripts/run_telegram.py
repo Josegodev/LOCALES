@@ -224,11 +224,30 @@ def ask_fastapi(
         if value is not None:
             payload[key] = value
 
-    response = requests.post(
-        f"{FASTAPI_URL}/chat",
-        json=payload,
-        timeout=90,
-    )
+    try:
+        response = requests.post(
+            f"{FASTAPI_URL}/chat",
+            json=payload,
+            timeout=90,
+        )
+    except requests.exceptions.ConnectionError as exc:
+        raise backend_client.BackendClientError(
+            code="backend_unavailable",
+            message="No se pudo conectar al backend",
+            status_code=503,
+        ) from exc
+    except requests.exceptions.Timeout as exc:
+        raise backend_client.BackendClientError(
+            code="backend_timeout",
+            message="El backend no respondió a tiempo",
+            status_code=504,
+        ) from exc
+    except requests.exceptions.RequestException as exc:
+        raise backend_client.BackendClientError(
+            code="backend_network_error",
+            message=str(exc)[:500],
+            status_code=502,
+        ) from exc
 
     if response.status_code >= 400:
         error = backend_client.BackendClientError(
