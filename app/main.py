@@ -252,6 +252,17 @@ def chat(request: ChatRequest) -> ChatResponse:
                 "message": "No se pudo generar respuesta del modelo.",
             },
         )
+    except Exception as exc:
+        error_code = exc.__class__.__name__
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "trace_id": trace_id,
+                "status": "error",
+                "code": "chat_internal_error",
+                "message": str(exc)[:500],
+            },
+        )
     finally:
         log_event(
             component="fastapi.chat",

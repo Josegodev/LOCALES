@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from document_context import build_document_prompt
@@ -63,7 +63,26 @@ def document_chat(request: DocumentChatRequest) -> dict[str, Any]:
             "answer": "NO_EVIDENCE_FOR_ANSWER",
         }
 
-    answer = ask_lmstudio(context["prompt"])
+    try:
+        answer = ask_lmstudio(context["prompt"])
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "status": "error",
+                "code": "lmstudio_error",
+                "message": str(exc)[:500],
+            },
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "status": "error",
+                "code": "document_chat_internal_error",
+                "message": str(exc)[:500],
+            },
+        ) from exc
 
     return {
         "status": "ok",

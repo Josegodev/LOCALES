@@ -31,11 +31,30 @@ def create_document(
     base_url: str = FASTAPI_URL,
     timeout_seconds: int = 20,
 ) -> dict:
-    response = requests_module.post(
-        f"{base_url}/documents",
-        json=request.model_dump(),
-        timeout=timeout_seconds,
-    )
+    try:
+        response = requests_module.post(
+            f"{base_url}/documents",
+            json=request.model_dump(),
+            timeout=timeout_seconds,
+        )
+    except requests.exceptions.ConnectionError as exc:
+        raise BackendClientError(
+            code="backend_unavailable",
+            message="No se pudo conectar al backend",
+            status_code=503,
+        ) from exc
+    except requests.exceptions.Timeout as exc:
+        raise BackendClientError(
+            code="backend_timeout",
+            message="El backend no respondió a tiempo",
+            status_code=504,
+        ) from exc
+    except requests.exceptions.RequestException as exc:
+        raise BackendClientError(
+            code="backend_network_error",
+            message=str(exc)[:500],
+            status_code=502,
+        ) from exc
 
     if response.status_code >= 400:
         raise BackendClientError(
@@ -82,11 +101,30 @@ def ask_chat(
         if value is not None:
             payload[key] = value
 
-    response = requests_module.post(
-        f"{base_url}/chat",
-        json=payload,
-        timeout=timeout_seconds,
-    )
+    try:
+        response = requests_module.post(
+            f"{base_url}/chat",
+            json=payload,
+            timeout=timeout_seconds,
+        )
+    except requests.exceptions.ConnectionError as exc:
+        raise BackendClientError(
+            code="backend_unavailable",
+            message="No se pudo conectar al backend",
+            status_code=503,
+        ) from exc
+    except requests.exceptions.Timeout as exc:
+        raise BackendClientError(
+            code="backend_timeout",
+            message="El backend no respondió a tiempo",
+            status_code=504,
+        ) from exc
+    except requests.exceptions.RequestException as exc:
+        raise BackendClientError(
+            code="backend_network_error",
+            message=str(exc)[:500],
+            status_code=502,
+        ) from exc
 
     if response.status_code >= 400:
         raise BackendClientError(

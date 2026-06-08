@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 import sqlite3
 from pathlib import Path
 
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "documents.sqlite"
+
+logger = logging.getLogger("locales")
 
 
 def normalize_terms(query: str) -> list[str]:
@@ -32,7 +35,12 @@ def search_chunks(query: str, limit: int = 5) -> list[dict]:
     if not terms:
         return []
 
-    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn = sqlite3.connect(DB_PATH)
+    except sqlite3.Error as exc:
+        logger.warning("search_chunks: cannot open DB %s: %s", DB_PATH, exc)
+        return []
+
     conn.row_factory = sqlite3.Row
 
     try:
@@ -71,6 +79,9 @@ def search_chunks(query: str, limit: int = 5) -> list[dict]:
 
         return ranked[:limit]
 
+    except sqlite3.Error as exc:
+        logger.warning("search_chunks: query failed: %s", exc)
+        return []
     finally:
         conn.close()
 

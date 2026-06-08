@@ -27,14 +27,28 @@ def ask_lmstudio(prompt: str, model: str = DEFAULT_MODEL, timeout: int = 120) ->
         "stream": False,
     }
 
-    response = requests.post(
-        LMSTUDIO_URL,
-        json=payload,
-        timeout=timeout,
-    )
+    try:
+        response = requests.post(
+            LMSTUDIO_URL,
+            json=payload,
+            timeout=timeout,
+        )
+    except requests.exceptions.ConnectionError as exc:
+        raise RuntimeError("LM Studio no está disponible") from exc
+    except requests.exceptions.Timeout as exc:
+        raise RuntimeError("LM Studio ha agotado el tiempo de respuesta") from exc
+    except requests.exceptions.RequestException as exc:
+        raise RuntimeError(f"Error de red al conectar con LM Studio: {exc}") from exc
 
-    response.raise_for_status()
-    data = response.json()
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"LM Studio devolvió HTTP {response.status_code}: {response.text[:300]}"
+        )
+
+    try:
+        data = response.json()
+    except ValueError as exc:
+        raise RuntimeError(f"Respuesta no JSON de LM Studio: {response.text[:300]}") from exc
 
     try:
         return data["choices"][0]["message"]["content"]
