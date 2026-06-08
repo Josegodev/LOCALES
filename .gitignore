@@ -49,3 +49,8 @@ logs/telegram_runs/*.jsonl
 # Eval artifacts
 evals/runs/*.json
 
+# Chat run data (may contain user prompts/responses)
+CHAT_RUNS/
+data/chat_runs.jsonl
+data/chat_traces.jsonl
+

@@ -303,37 +303,38 @@ class LocalesHardeningAuditTests(unittest.TestCase):
     def test_chat_endpoint_returns_chunk_ids_without_breaking_response_validation(self):
         client = TestClient(app)
 
-        with patch(
-            "app.main.build_document_prompt",
-            return_value={
-                "status": "EVIDENCE_FOUND",
-                "prompt": "context prompt",
-                "chunks": [
-                    {"id": 346, "text": "NUCLEO es un runtime local."},
-                    {"id": 206, "text": "Usa herramientas registradas."},
-                    {"id": 262, "text": "La política controla la ejecución."},
-                ],
-            },
-        ):
+        with patch.dict(os.environ, {"TELEGRAM_ALLOWED_USER_IDS": "6490442655"}):
             with patch(
-                "app.main.ask_chat",
+                "app.main.build_document_prompt",
                 return_value={
-                    "status": "ok",
-                    "provider": "ollama",
-                    "model": "granite4.1:8b",
-                    "temperature": 0.2,
-                    "answer": "NUCLEO es un runtime local con política explícita.",
+                    "status": "EVIDENCE_FOUND",
+                    "prompt": "context prompt",
+                    "chunks": [
+                        {"id": 346, "text": "NUCLEO es un runtime local."},
+                        {"id": 206, "text": "Usa herramientas registradas."},
+                        {"id": 262, "text": "La política controla la ejecución."},
+                    ],
                 },
             ):
-                response = client.post(
-                    "/chat",
-                    json={
-                        "message": "Busca evidencia sobre que es nucleo",
-                        "trace_id": REQUEST_ID,
-                        "chat_id": 6490442655,
-                        "user_id": 6490442655,
+                with patch(
+                    "app.main.ask_chat",
+                    return_value={
+                        "status": "ok",
+                        "provider": "ollama",
+                        "model": "granite4.1:8b",
+                        "temperature": 0.2,
+                        "answer": "NUCLEO es un runtime local con política explícita.",
                     },
-                )
+                ):
+                    response = client.post(
+                        "/chat",
+                        json={
+                            "message": "Busca evidencia sobre que es nucleo",
+                            "trace_id": REQUEST_ID,
+                            "chat_id": 6490442655,
+                            "user_id": 6490442655,
+                        },
+                    )
 
         self.assertEqual(response.status_code, 200)
         body = response.json()

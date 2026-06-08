@@ -330,7 +330,7 @@ def chat(request: ChatRequest) -> dict[str, Any]:
                 "slug": profile["slug"],
                 "prompt_id": ids["prompt_id"],
                 "output_id": ids["output_id"],
-                "error": str(exc),
+                "error": "Error interno al procesar la solicitud.",
             },
         ) from exc
 

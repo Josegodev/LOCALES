@@ -134,13 +134,20 @@ def create_document_endpoint(request: CreateDocumentRequest) -> DocumentCreateRe
     except Exception as e:
         status = "error"
         reason = "document_write_internal_error"
+        log_event(
+            component="fastapi.documents",
+            event="fastapi.documents.internal_error",
+            trace_id=request.request_id,
+            error_type=type(e).__name__,
+            error_detail=str(e),
+        )
         raise HTTPException(
             status_code=500,
             detail={
                 "request_id": request.request_id,
                 "status": "error",
                 "code": "document_write_internal_error",
-                "message": str(e),
+                "message": "Error interno al crear el documento.",
             },
         )
     finally:
@@ -159,6 +166,16 @@ def create_document_endpoint(request: CreateDocumentRequest) -> DocumentCreateRe
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest) -> ChatResponse:
+    if request.user_id is not None and not is_telegram_user_allowed(request.user_id):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "status": "error",
+                "code": "telegram_user_not_allowed",
+                "message": "usuario Telegram no autorizado",
+            },
+        )
+
     trace_id = request.trace_id or new_trace_id()
     started_at = time.perf_counter()
     status = "error"
